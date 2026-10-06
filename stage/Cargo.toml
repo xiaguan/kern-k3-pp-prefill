@@ -1,0 +1,16 @@
+[package]
+name = "k3-stage"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Run one Kimi-K3 pipeline stage manifest over one prefill chunk on kern"
+publish = false
+
+[[bin]]
+name = "k3_stage"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+kern-manifest = { git = "https://github.com/pegainfer-project/kern", rev = "b43bb5a680d6fc92f969a7881e1ceca98c301607" }
+kern-runtime = { git = "https://github.com/pegainfer-project/kern", rev = "b43bb5a680d6fc92f969a7881e1ceca98c301607" }

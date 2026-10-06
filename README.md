@@ -20,6 +20,12 @@ TP4/EP4 tray prefill.
 - [`prebuilt/`](prebuilt/): the cubins with no source recipe here (TRT-LLM gen
   batched GEMM and FMHA), FlashKDA, and the routing build. Licenses and
   origins are in [`prebuilt/README.md`](prebuilt/README.md).
+- [`scripts/gen_stage.py`](scripts/gen_stage.py): the generator of the
+  manifests. With `k3_moe_bmm.py`, `flashinfer_moe_routing_abi.py` and
+  `pinned.py` it is the only code that changes kern's generation; see
+  [Provenance](#provenance).
+- [`stage/`](stage/): `k3_stage`, which runs one stage on the kern runtime.
+  kern is a git dependency pinned to the same commit.
 - [`validation/`](validation/): the scripts that checked the stages against
   SGLang PP4.
 
@@ -46,23 +52,27 @@ router top-k, and kern's combine finishes the layer. This is the path SGLang's
 
 ### Other splits
 
-The manifests are generator output. Generate any split (PP8, PP16, or an
-uneven one) from kern's `k3-pp-stage` branch:
+The manifests are generator output; any split (PP8, PP16, uneven) comes from
+the same command. It needs a kern checkout at the pinned commit and the
+kern-kernels index:
 
 ```sh
-KERN_INDEX_DIR=<kern-kernels index> python3 tools/gen_k3.py \
-    --layers 23:46 --ranks 1 --chunk 8192 --max-ctx 16384 > k3-pruned-pp4-l23-46.json
+KERN=<kern checkout @ b43bb5a> KERN_INDEX_DIR=<kern-kernels>/index \
+  python3 scripts/gen_stage.py --layers 23:46 --ranks 1 --chunk 8192 --max-ctx 16384 \
+  > manifests/k3-pruned-pp4-l23-46.json
 ```
 
-Add `--experts 896` for the full checkpoint.
+Add `--experts 896` for the full checkpoint. Regenerating the four manifests
+here reproduces them byte for byte.
 
 ### Running a stage
 
-kern's `crates/kern-run/examples/k3_stage.rs` runs one stage over one chunk.
-The boundary tensors come from files and go back to files:
+`stage/` runs one stage over one chunk. The boundary tensors come from files
+and go back to files:
 
 ```sh
-k3_stage --manifest manifests/k3-pruned-pp4-l23-46.json --weights <kimi-k3-pruned-75pct> \
+cargo build --release --manifest-path stage/Cargo.toml
+stage/target/release/k3_stage --manifest manifests/k3-pruned-pp4-l23-46.json --weights <kimi-k3-pruned-75pct> \
     --hidden-in hidden.bf16 --blocks-in blocks.bf16 --out <dir> [--gpu 0] [--iters 3]
 ```
 
@@ -144,6 +154,38 @@ The check verifies that:
 
 CI runs it on every push.
 
+## Provenance
+
+kern is used as published, at commit
+[`b43bb5a680d6fc92f969a7881e1ceca98c301607`](https://github.com/pegainfer-project/kern/tree/b43bb5a680d6fc92f969a7881e1ceca98c301607):
+the runtime (through `stage/`) and the generator's helpers (through `KERN`).
+Nothing in kern is changed.
+
+The files this repository forks from that commit:
+
+| Here | kern | Change |
+|---|---|---|
+| `scripts/gen_stage.py` | `tools/gen_k3.py` | `--layers A:B` stages; the EP1 prefill MoE on the batched GEMMs; `--experts 896`; modules pinned here are taken from `kernels.toml` |
+| `scripts/k3_moe_bmm.py` | `tools/k3_moe_bmm.py` | the expert count; FlashInfer routing when one rank holds every expert |
+| `stage/src/main.rs` | (new) | |
+| `source/k3_router_argmax.cu` | `tools/kernels-src/k3_router_argmax.cu` | `-DEXPERTS` (default 224; the 224 build is byte-identical to kern's) |
+
+The other files in `source/` are copied unchanged from `tools/kernels-src/` and
+`tools/flash-kda/` at that commit. kern's sources keep their
+[Apache-2.0 license](source/LICENSE). FlashKDA keeps its
+[MIT license](source/flash-kda/LICENSE), and FlashInfer its
+[Apache-2.0 license](source/flashinfer-moe-routing/LICENSE). Kernel hashes are
+cross-checked against the private
+[kern-kernels](https://github.com/xiaguan/kern-kernels) index.
+
+The two cubins that are not in that index or in the HF blob store are both
+built from this repository:
+- `flashinfer_moe_routing`;
+- `k3_router_argmax+EXPERTS=896`.
+
+`scripts/build.py` makes both. Use `build/` as the kern cache, or upload the
+blobs, to run the manifests.
+
 ## Validation scripts
 
 - `validation/kcap/` is an SGLang plugin (`SGLANG_PLUGINS=kcap`, the
@@ -154,4 +196,4 @@ CI runs it on every push.
 - `run_iso.sh` and `run_chain.sh` run kern's stages.
 - `compare.py`, `blocks.py` and `band.py` do the comparison.
 
-Paths come from the environment: `MODEL`, `OUT`, `DATA`, `WEIGHTS`, `K3_STAGE`.
+Paths come from the environment: `MODEL`, `OUT`, `DATA`, `WEIGHTS`, and `K3_STAGE` (the binary `stage/` builds).

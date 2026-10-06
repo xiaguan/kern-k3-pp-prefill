@@ -3,7 +3,7 @@
 set -uo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 data=${DATA:?the run root (ids.i64, sglang/ dumps)}
-bin=${K3_STAGE:?kern's k3_stage example binary}
+bin=${K3_STAGE:?the k3_stage binary (stage/)}
 w=${WEIGHTS:?the pruned K3 checkpoint dir}
 mkdir -p $data/kern/${TAG:-iso} $data/logs
 g=0
