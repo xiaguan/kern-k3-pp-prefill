@@ -1,0 +1,96 @@
+[kernels."bmm_Bfloat16_MxE2m1MxE4m3_Fp32_Ab32_Bb32_t128x128x256u2_s4_et128x64_m256x128x32_c2x1x1_rM_TN_transOut_schPd2x1x2x3_biasFp32M_bN_rgTma_clmp_dynB_sm100f"]
+sha256 = "820c5022ded989438c60a7c42122876ac936c4adcc6f01352d63f80c54b4aa5d"
+prebuilt = "prebuilt/bmm_Bfloat16_MxE2m1MxE4m3_Fp32_Ab32_Bb32_t128x128x256u2_s4_et128x64_m256x128x32_c2x1x1_rM_TN_transOut_schPd2x1x2x3_biasFp32M_bN_rgTma_clmp_dynB_sm100f.cubin"
+upstream = "flashinfer-cubin 0.6.18, cubins/8ec29a98612c3670f9f28825d1ed19f09496073b/batched_gemm-fa419f4-31ee4e5, TLLM_GEN_EXPORT_VERSION 7.0.4.0.4.0"
+
+[kernels."bmm_MxE4m3_MxE2m1MxE4m3_Fp32_Ab32_Bb32_Cb32_t128x128x256u2_s4x4x4x4x1x4_et128x32_m256x128x32_c2x1x1_rM_TN_transOut_schPd2x1x2x3_biasFp32M_fCp_bN_ldgsts_ldgstsSf_rgTma_clmp_siTuGlu_lbW4_lsfbW4_dynB_sm100f"]
+sha256 = "84075cb7dbd6887692cade23a8e7ec958af4fed12270a2f4cf8b5cf7aeda3bbe"
+prebuilt = "prebuilt/bmm_MxE4m3_MxE2m1MxE4m3_Fp32_Ab32_Bb32_Cb32_t128x128x256u2_s4x4x4x4x1x4_et128x32_m256x128x32_c2x1x1_rM_TN_transOut_schPd2x1x2x3_biasFp32M_fCp_bN_ldgsts_ldgstsSf_rgTma_clmp_siTuGlu_lbW4_lsfbW4_dynB_sm100f.cubin"
+upstream = "flashinfer-cubin 0.6.18, cubins/8ec29a98612c3670f9f28825d1ed19f09496073b/batched_gemm-fa419f4-31ee4e5, TLLM_GEN_EXPORT_VERSION 7.0.4.0.4.0"
+
+[kernels."copy_rows"]
+sha256 = "f301274a5957faac2f0891ea9d6e80e0dabdb56ee4c14c3795e836f6bf31fb54"
+source = "source/copy_rows.cu"
+
+[kernels."embedding"]
+sha256 = "868e93ae6e46e36a11c56af1fae49aeff9fcdfdc79f64ca99475a309e721e9e7"
+source = "source/embedding.cu"
+
+[kernels."flash_kda_d128"]
+sha256 = "34b83d875a418f63d14daf73984c1b8de0d1616250915a7d7e4810f327ce3617"
+prebuilt = "prebuilt/flash_kda_d128.cubin"
+source = "source/flash-kda/kern_flash_kda.cu"
+build = "source/flash-kda/build.sh"
+
+[kernels."flashinfer_moe_routing"]
+sha256 = "d797b1d2edad680ecc0578d4d8a57d5f1a6a364bbb3acd7ecd4d6270c6be4ae0"
+prebuilt = "prebuilt/flashinfer_moe_routing.cubin"
+source = "source/flashinfer-moe-routing/kern_moe_routing.cu"
+build = "source/flashinfer-moe-routing/build.sh"
+
+[kernels."k3_kda_out_gate"]
+sha256 = "740b4ceb2d8de833c2c56d4e09ce565dcddcd54d921e34440e104716865ca9c4"
+source = "source/k3_kda_out_gate.cu"
+
+[kernels."k3_land"]
+sha256 = "2cd68c79bf3243f37d2f1406880060f610b4028f9e843bb356ea8ef0a0352fcc"
+source = "source/k3_land.cu"
+
+[kernels."k3_mla_prep"]
+sha256 = "2b244a6333a73248b64291e27cd0d5d3198a5ce5e2d275c6c819a2183d468eb5"
+source = "source/k3_mla_prep.cu"
+
+[kernels."k3_mla_v2"]
+sha256 = "436c9ebb766141276fd52d431f238f3f5d92ed1d9359d39372208c2c72503a16"
+source = "source/k3_mla_v2.cu"
+
+[kernels."k3_moe_prefill"]
+sha256 = "6b4d144e735a4b08d29bf8d6e302107a4d1396a6967b0b6d342fe263ff6c8bca"
+source = "source/k3_moe_prefill.cu"
+
+[kernels."k3_prefill"]
+sha256 = "eac5d5cef8d504f7141281177fb934b5df522a963cc18df0ffa4f7a662d7817c"
+source = "source/k3_prefill.cu"
+
+[kernels."k3_residual"]
+sha256 = "d5d5d1fb3dda907822d99520b611fa77cab05bf11f165a1aa0d5e43d07cca8c8"
+source = "source/k3_residual.cu"
+
+[kernels."k3_residual+LAND_BF16=1"]
+sha256 = "1bb60d2f33b04d70d6866b50d12a67340e33cf0f1c555c9da92494dd5c98f254"
+source = "source/k3_residual.cu"
+defines = { LAND_BF16 = 1 }
+
+[kernels."k3_router_argmax"]
+sha256 = "e3b8395c90e502b7afd4e844a57d060c682c7ab060a361befb9cbf4e61034b5a"
+source = "source/k3_router_argmax.cu"
+
+[kernels."k3_router_argmax+EXPERTS=896"]
+sha256 = "3f47d404b663c232aca9889047e618d24c9a03789f354ee949e4afa02247d121"
+source = "source/k3_router_argmax.cu"
+defines = { EXPERTS = 896 }
+
+[kernels."k3_span_gather"]
+sha256 = "ad6dd834a1778b1d48674f587df9f3728b4bcb3544dee9389df8d401bfa5a3fa"
+source = "source/k3_span_gather.cu"
+
+[kernels."k3_span_state"]
+sha256 = "a1b9e40e420f4bcd4cd542006dd171dbcde299d6912b3a1b9ff5b04d8c171ffd"
+source = "source/k3_span_state.cu"
+
+[kernels."k3_weight_prep"]
+sha256 = "a874bd671bfeb90103a3a5330876e062b5583c752b88e1eadb4e84050c18bf02"
+source = "source/k3_weight_prep.cu"
+
+[kernels."sigmoid_mul"]
+sha256 = "2b0745de4fc623437cce41fee177d7980239326796dca33d4faa7046f6f10ffa"
+source = "source/sigmoid_mul.cu"
+
+[kernels."trtllm_fmha_ctx_h192_v128"]
+sha256 = "240811d976c01e4a9bee00041d98343f6f9254fefae598df46a97ff07c7df508"
+prebuilt = "prebuilt/trtllm_fmha_ctx_h192_v128.cubin"
+upstream = "flashinfer-cubin 0.6.18, bundle 2d6a5a029eefcc388ec0ceb87efb55d8bcce5c3c, fmha/trtllm-gen/fmhaSm103aKernel_QkvBfloat16OBfloat16HQk192HV128SeparateQkvCausalVarSeqQ256Kv128PersistentContext.cubin"
+
+[kernels."weight_prep"]
+sha256 = "040f51b01c421b9c69a2090034ff1bc4741e40c02f5ea52bd04a3e62e5c1af4d"
+source = "source/weight_prep.cu"

@@ -1,0 +1,2 @@
+[sglang.srt.plugins]
+kcap = kcap:register
