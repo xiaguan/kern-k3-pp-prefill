@@ -1271,7 +1271,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         "model": f"{CHECKPOINTS[experts]}/" + (f"l{first}-{end}" if stage else f"{end}l") + f"/ep{ranks}"
                  + (f"-tp{tp}" if tp > 1 else "")
                  + ("-prefill" if chunk else ""),
-        "vars": {T: {"max": t_max}, "seqs": {"max": seqs_max}, R: {"max": rows_max},
+        "vars": {T: {"max": t_max, "axis": "rows"}, "seqs": {"max": seqs_max, "axis": "groups"},
+                 R: {"max": rows_max, "axis": "tray"},
                  **({SP: {"max": span_max}} if span_max else {}), **({CTX: {"max": max_ctx}} if chunk else {})},
         **({} if per_layer and all(n == 1 for n in groups.values()) else {"topology": {"groups": groups}}),
         "states": states,
