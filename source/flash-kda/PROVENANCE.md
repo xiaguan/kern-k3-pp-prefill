@@ -18,8 +18,11 @@ layout kern's decode kernel `k3_kda_core` keeps in the KDA line.
 - `csrc/smxx/utils.cuh`, `fwd_kernel1.cuh`, `fwd_kernel2.cuh` (unmodified)
 - `csrc/smxx/fwd_launch.cu` — **modified**: the explicit-instantiation list at
   the bottom is trimmed from 14 variants to the one kern launches
-  (`<128, true, true, true, false>`). Everything above the marker is upstream
-  verbatim.
+  (`<128, true, true, true, false>`), or with `-DKERN_VARLEN` the varlen one
+  (`<128, true, true, true, true>`, `flash_kda_d128_varlen`, the packed
+  prefill: `cu_seqlens` splits the rows, upstream's own varlen path, with
+  its `build_tile_prefix` kernel). `build.sh` passes `KERN_DEFINES` through.
+  Everything above the marker is upstream verbatim.
 
 Not vendored: the PyTorch binding (`csrc/flash_kda.cpp`), the Python package,
 tests, benchmarks, the CUTLASS submodule. `kern_flash_kda.cu` is kern's own

@@ -22,6 +22,13 @@ prebuilt = "prebuilt/flash_kda_d128.cubin"
 source = "source/flash-kda/kern_flash_kda.cu"
 build = "source/flash-kda/build.sh"
 
+[kernels."flash_kda_d128_varlen"]
+sha256 = "751d1f12b73863328877fa69595a8ac4436b985905460f374ab34d6a672c5575"
+prebuilt = "prebuilt/flash_kda_d128_varlen.cubin"
+source = "source/flash-kda/kern_flash_kda.cu"
+build = "source/flash-kda/build.sh"
+defines = { KERN_VARLEN = 1 }
+
 [kernels."flashinfer_moe_routing"]
 sha256 = "d797b1d2edad680ecc0578d4d8a57d5f1a6a364bbb3acd7ecd4d6270c6be4ae0"
 prebuilt = "prebuilt/flashinfer_moe_routing.cubin"

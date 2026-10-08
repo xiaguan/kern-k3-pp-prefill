@@ -9,7 +9,7 @@ out="${1:?out.cubin}"
 nvcc="${NVCC:-nvcc}"
 arch="${KERN_SM:-sm_103a}"
 : "${CUTLASS_INCLUDE:?set CUTLASS_INCLUDE to a CUTLASS include directory}"
-"$nvcc" -cubin -O3 -std=c++17 -arch="$arch" \
+"$nvcc" -cubin -O3 -std=c++17 -arch="$arch" ${KERN_DEFINES:-} \
   --expt-relaxed-constexpr --expt-extended-lambda --use_fast_math \
   -I"$here" -I"$here/csrc" -I"$here/csrc/smxx" -I"$CUTLASS_INCLUDE" \
   -o "$out" "$here/kern_flash_kda.cu"
