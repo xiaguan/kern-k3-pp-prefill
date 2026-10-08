@@ -62,8 +62,25 @@ KERN=<kern checkout @ b43bb5a> KERN_INDEX_DIR=<kern-kernels>/index \
   > manifests/k3-pruned-pp4-l23-46.json
 ```
 
-Add `--experts 896` for the full checkpoint. Regenerating the four manifests
-here reproduces them byte for byte.
+Add `--experts 896` for the full checkpoint. The four manifests were
+generated at the pinned commit; their module hashes have since followed the
+sources, which gained the packed kernels. The generator now emits the
+`derive` program, so its output needs a kern with
+[#43](https://github.com/pegainfer-project/kern/pull/43).
+
+### Packed prefill and `kern cut`
+
+- `--state-per-layer` gives every layer its own KV or KDA state, so
+  `kern cut` can split one whole-model prefill manifest into stages that
+  carry only their own layers' states.
+- `--pack N` makes the prefill ragged: up to N sequences per call, back to
+  back, split by `cu_seqlens`. The KDA layers use FlashKDA's varlen build
+  with per-sequence conv windows and states. The MLA layers run the TRT-LLM
+  gen context FMHA batched over the sequences. The head reads each
+  sequence's last row.
+
+Serving the cut stages, packed or not, needs kern's pipeline server
+([pegainfer-project/kern#44](https://github.com/pegainfer-project/kern/pull/44)).
 
 ### Running a stage
 
@@ -122,8 +139,11 @@ including the 896-expert router top-k (`k3_router_argmax+EXPERTS=896`).
 `gen_k3.py --experts 896` generates its stages.
 
 They are not published here yet. A PP8 stage holds about 188 GB of mxfp4
-experts. kern loads the checkpoint's tensors and then shuffles them into the
-GEMMs' layout, so both copies would sit in the 288 GB of one GB300 at once.
+experts, too much to keep the checkpoint's tensors and their shuffled copy
+in the 288 GB of one GB300 at once. The generator therefore binds the raw
+experts as `source` tensors and shuffles them in a `derive` program, which
+kern runs while the weights load
+([pegainfer-project/kern#43](https://github.com/pegainfer-project/kern/pull/43)).
 
 ## Build the kernels
 
@@ -156,10 +176,11 @@ CI runs it on every push.
 
 ## Provenance
 
-kern is used as published, at commit
+The four manifests and `stage/` use kern as published, at commit
 [`b43bb5a680d6fc92f969a7881e1ceca98c301607`](https://github.com/pegainfer-project/kern/tree/b43bb5a680d6fc92f969a7881e1ceca98c301607):
 the runtime (through `stage/`) and the generator's helpers (through `KERN`).
-Nothing in kern is changed.
+The generator's current output needs the derive program
+([#43](https://github.com/pegainfer-project/kern/pull/43)).
 
 The files this repository forks from that commit:
 
@@ -169,6 +190,9 @@ The files this repository forks from that commit:
 | `scripts/k3_moe_bmm.py` | `tools/k3_moe_bmm.py` | the expert count; FlashInfer routing when one rank holds every expert |
 | `stage/src/main.rs` | (new) | |
 | `source/k3_router_argmax.cu` | `tools/kernels-src/k3_router_argmax.cu` | `-DEXPERTS` (default 224; the 224 build is byte-identical to kern's) |
+| `source/k3_span_gather.cu`, `k3_span_state.cu`, `k3_mla_v2.cu`, `k3_prefill.cu`, `copy_rows.cu` | `tools/kernels-src/` | varlen kernels for `--pack` appended; the existing kernels are unchanged |
+| `source/flash-kda/` | `tools/flash-kda/` | the `-DKERN_VARLEN` instantiation (see its `PROVENANCE.md`) |
+| `scripts/varlen_abi.py` | (new) | the varlen FlashKDA and batched FMHA launches |
 
 The other files in `source/` are copied unchanged from `tools/kernels-src/` and
 `tools/flash-kda/` at that commit. kern's sources keep their
