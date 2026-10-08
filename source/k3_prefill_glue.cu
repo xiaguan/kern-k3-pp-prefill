@@ -15,19 +15,26 @@
 //                                       nb, snapshot, B)
 //         the ABIs and math of k3_residual.cu's K1a and K1b (-DLAND_BF16).
 //   [K1d] kern_k3g_land_add2_attnres_rms(p1, p2, prefix2, hidden, two, blocks, sw, gamma, normed, nb, B)
-//         K1c then K1a without a snapshot: hidden = bf16(prefix2 + bf16(p1) + (two ? bf16(p2) : 0)),
-//         written, then normed = rms(attnres(blocks, hidden, nb), gamma). The next layer's
-//         residual mix reads the hidden it just made from registers.
+//         K1c then K1a without a snapshot: hidden = bf16(prefix2 + p1 + (two ? p2 : 0)), written,
+//         then normed = rms(attnres(blocks, hidden, nb), gamma). The next layer's residual mix
+//         reads the hidden it just made from registers.
 //     grid (B, 1, 1)   block (224, 1, 1)   smem 0 dynamic
+//
+//   [K1c] kern_k3g_land_add2(p1, p2, prefix2, hidden, two, B)
+//         K1c alone, before a snapshot layer and at a stage's end.
+//     grid (B, 4, 1)   block (224, 1, 1)
+//
+// A chunk's GEMMs land their own outputs (cuBLASLt with a bf16 D), so p1, p2
+// and the activations' gate | up arrive as the bf16 values K1c and K7 round
+// their f32 partials to first; those roundings are gone, the rest is K1c's.
+//
+//   [K7]  kern_k3g_situ(p, act, n, B)
+//         k3_land.cu's kern_k3_land_situ on a landed [B, 2n] gate | up.
+//     grid (B, ceil(n / 2048), 1)   block (256, 1, 1): 8 columns a thread.
 //
 //   [K6]  kern_k3g_router_topk(S, bias, rs, idx, wts, B)
 //         the ABI and math of k3_router_argmax.cu's router top-k.
 //     grid (ceil(B / 4), 1, 1)   block (128, 1, 1): one warp per row.
-//
-//   kern_k3g_land_quant(const f32* p, u8* q, u8* sf, int rows, int cols)
-//         K6's landing of the latent (x = bf16(p)) and k3_moe_prefill.cu's
-//         kern_k3_moe_quant of x, in one pass.
-//     grid (ceil(rows * cols / 32 / 256), 1, 1)   block (256, 1, 1)
 //
 //   kern_k3g_finalize_rms(fc2, exp2perm, wts, gamma, out, T, cols)
 //         k3_moe_prefill.cu's kern_k3_moe_finalize, its bf16 row then
@@ -46,8 +53,6 @@
 // 8h..8h+8: its squares serially, a warp butterfly, then the 32 warp slots
 // (the ones past the row zero) by another.
 #include <cuda_bf16.h>
-#include <cuda_fp8.h>
-#include <cstdint>
 
 typedef __nv_bfloat16 bf16_t;
 typedef __nv_bfloat162 bf162_t;
@@ -319,8 +324,37 @@ extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_land_add_attn
 }
 
 // ---------------------------------------------------------------- K1d
+// hidden = bf16(prefix2 + p1 (+ p2)) for one vector, K1c's sum order.
+__device__ __forceinline__ V8 add2(const bf16_t* __restrict__ p1, const bf16_t* __restrict__ p2,
+                                   const bf16_t* __restrict__ prefix2, int two, size_t off) {
+  const V8 a = ldv(p1 + off), pr = ldv(prefix2 + off);
+  V8 c, o;
+  if (two) c = ldv(p2 + off);
+#pragma unroll
+  for (int j = 0; j < 4; ++j) {
+    const float2 rf = bf2f(pr.w[j]), l1 = bf2f(a.w[j]);
+    float x = rf.x + l1.x, y = rf.y + l1.y;
+    if (two) {
+      const float2 l2 = bf2f(c.w[j]);
+      x += l2.x;
+      y += l2.y;
+    }
+    o.w[j] = f2bf(make_float2(x, y));
+  }
+  return o;
+}
+
+extern "C" __global__ void __launch_bounds__(RTHREADS) kern_k3g_land_add2(
+    const bf16_t* __restrict__ p1, const bf16_t* __restrict__ p2, const bf16_t* __restrict__ prefix2,
+    bf16_t* __restrict__ hidden, int two, int B) {
+  const int b = blockIdx.x;
+  if (b >= B) return;
+  const size_t off = (size_t)b * KH + (blockIdx.y * RTHREADS + threadIdx.x) * 8;
+  stv(hidden + off, add2(p1, p2, prefix2, two, off));
+}
+
 extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_land_add2_attnres_rms(
-    const float* __restrict__ p1, const float* __restrict__ p2, const bf16_t* __restrict__ prefix2,
+    const bf16_t* __restrict__ p1, const bf16_t* __restrict__ p2, const bf16_t* __restrict__ prefix2,
     bf16_t* __restrict__ hidden, int two, const bf16_t* __restrict__ blocks, const float* __restrict__ sw,
     const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int nb, int B) {
   __shared__ RowSmem s;
@@ -333,29 +367,7 @@ extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_land_add2_att
 #pragma unroll
   for (int k = 0; k < RGROUPS; ++k) {
     const size_t off = (size_t)b * KH + (t + k * RTHREADS) * 8;
-    const float4* q1 = (const float4*)(p1 + off);
-    const float4 a1 = q1[0], b1 = q1[1];
-    const float f1[8] = {a1.x, a1.y, a1.z, a1.w, b1.x, b1.y, b1.z, b1.w};
-    float f2[8];
-    if (two) {
-      const float4* q2 = (const float4*)(p2 + off);
-      const float4 a2 = q2[0], b2 = q2[1];
-      f2[0] = a2.x; f2[1] = a2.y; f2[2] = a2.z; f2[3] = a2.w;
-      f2[4] = b2.x; f2[5] = b2.y; f2[6] = b2.z; f2[7] = b2.w;
-    }
-    const V8 pr = ldv(prefix2 + off);
-#pragma unroll
-    for (int j = 0; j < 4; ++j) {
-      const float2 rf = bf2f(pr.w[j]);
-      const float2 l1 = bf2f(f2bf(make_float2(f1[2 * j], f1[2 * j + 1])));
-      float x = rf.x + l1.x, y = rf.y + l1.y;
-      if (two) {
-        const float2 l2 = bf2f(f2bf(make_float2(f2[2 * j], f2[2 * j + 1])));
-        x += l2.x;
-        y += l2.y;
-      }
-      pv[k].w[j] = f2bf(make_float2(x, y));
-    }
+    pv[k] = add2(p1, p2, prefix2, two, off);
     stv(hidden + off, pv[k]);
   }
 
@@ -435,37 +447,6 @@ extern "C" __global__ void __launch_bounds__(128) kern_k3g_router_topk(
 }
 
 // ---------------------------------------------------------------- MoE
-extern "C" __global__ void kern_k3g_land_quant(const float* __restrict__ p, uint8_t* __restrict__ q,
-                                               uint8_t* __restrict__ sf, int rows, int cols) {
-  const long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
-  if (i >= (long long)rows * cols / 32) return;
-  const float4* src = reinterpret_cast<const float4*>(p + i * 32);
-  float v[32];
-  float amax = 0.f;
-#pragma unroll
-  for (int j = 0; j < 8; ++j) {
-    const float4 a = src[j];
-    const bf162_t h[2] = {__floats2bfloat162_rn(a.x, a.y), __floats2bfloat162_rn(a.z, a.w)};
-#pragma unroll
-    for (int l = 0; l < 2; ++l) {
-      const float2 f = __bfloat1622float2(h[l]);
-      v[j * 4 + l * 2] = f.x;
-      v[j * 4 + l * 2 + 1] = f.y;
-      amax = fmaxf(amax, fmaxf(fabsf(f.x), fabsf(f.y)));
-    }
-  }
-  int e = amax > 0.f ? (int)ceilf(log2f(amax / 448.f)) : 0;
-  e = min(max(e, -127), 127);
-  const float s = exp2f((float)-e);
-  sf[i] = (uint8_t)(e + 127);
-  uint8_t b[32];
-#pragma unroll
-  for (int j = 0; j < 32; ++j) b[j] = __nv_cvt_float_to_fp8(v[j] * s, __NV_SATFINITE, __NV_E4M3);
-  uint4* dst = reinterpret_cast<uint4*>(q + i * 32);
-  dst[0] = *reinterpret_cast<const uint4*>(b);
-  dst[1] = *reinterpret_cast<const uint4*>(b + 16);
-}
-
 extern "C" __global__ void __launch_bounds__(1024) kern_k3g_finalize_rms(
     const bf16_t* __restrict__ fc2, const int* __restrict__ exp2perm, const float* __restrict__ wts,
     const bf16_t* __restrict__ gamma, bf16_t* __restrict__ out, int T, int cols) {
@@ -518,4 +499,34 @@ extern "C" __global__ void __launch_bounds__(1024) kern_k3g_finalize_rms(
     ov[l] = __hmul2(__floats2bfloat162_rn(f.x * rs, f.y * rs), g[l]);
   }
   reinterpret_cast<uint4*>(out + (long long)t * cols)[h] = o;
+}
+
+// ---------------------------------------------------------------- K7
+__device__ __forceinline__ float tanh_approx(float x) {
+  float r;
+  asm("tanh.approx.f32 %0, %1;" : "=f"(r) : "f"(x));
+  return r;
+}
+
+// k3_land.cu's situ_f on operands already landed
+__device__ __forceinline__ float situ(float g, float u) {
+  const float a = 4.0f * tanh_approx(g * 0.25f);
+  const float s = __frcp_rn(1.0f + __expf(-g));
+  const float c = 25.0f * tanh_approx(u * 0.04f);
+  return (a * s) * c;
+}
+
+extern "C" __global__ void __launch_bounds__(256) kern_k3g_situ(const bf16_t* __restrict__ p, bf16_t* __restrict__ act,
+                                                                 int n, int B) {
+  const int b = blockIdx.x;
+  const int j = (blockIdx.y * blockDim.x + threadIdx.x) * 8;
+  if (b >= B || j >= n) return;
+  const V8 g = ldv(p + (size_t)b * 2 * n + j), u = ldv(p + (size_t)b * 2 * n + n + j);
+  V8 o;
+#pragma unroll
+  for (int k = 0; k < 4; ++k) {
+    const float2 gf = bf2f(g.w[k]), uf = bf2f(u.w[k]);
+    o.w[k] = f2bf(make_float2(situ(gf.x, uf.x), situ(gf.y, uf.y)));
+  }
+  stv(act + (size_t)b * n + j, o);
 }

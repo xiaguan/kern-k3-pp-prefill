@@ -60,7 +60,7 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
     runs over `quant_rows` rows and the combine writes `out_rows` rows (expressions). `steps` lists the
     calls of one layer."""
     v1, v2 = variants(names)
-    # The latent's landing + quant and the combine + latent norm (source/k3_prefill_glue.cu).
+    # The combine + latent norm (source/k3_prefill_glue.cu).
     pglue = module(PGLUE, **({"EXPERTS": experts} if experts != 224 else {}))
     tile = v1.tags["tile"][1]
     assert v2.tags["tile"][1] == tile, "both GEMMs read one set of CTA tables"
@@ -91,9 +91,8 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
     }
     ops = {
         "moe_quant": {
-            "params": ["in buffer<f32>", "out buffer<u8>", "out buffer<u8>", "i32", "i32"],
-            "impl": {"launches": [glue("kern_k3g_land_quant", [{"ceil_div": [{"mul": [quant_rows, H // 32]}, 256]}, 1, 1],
-                                       mod=pglue)]},
+            "params": ["in buffer<bf16>", "out buffer<u8>", "out buffer<u8>", "i32", "i32"],
+            "impl": {"launches": [glue("kern_k3_moe_quant", [{"ceil_div": [{"mul": [quant_rows, H // 32]}, 256]}, 1, 1])]},
         },
         **({"moe_routing": flashinfer_moe_routing.op(module(ROUTING), experts, tokens, tokens_max, tile)}
            if whole else {

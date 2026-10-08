@@ -400,6 +400,12 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     # A chunk's residual stream and router top-k run k3_prefill_glue.cu's
     # many-rows-per-SM forms of the decode kernels (bit for bit the same values).
     glue_defs = {"EXPERTS": experts} if experts != 224 else None
+    # A chunk's projections land in their GEMM's epilogue (cuBLASLt, bf16 D):
+    # the KDA's qkvg | wsm, the latent, the MLPs' gate | up and down. Their
+    # readers take the landed rows (-DPARTIAL_BF16); a decode step keeps the
+    # f32 partials its tray sums.
+    part = "bf16" if chunk else "f32"
+    part_defs = {**(kda_defs or {}), "PARTIAL_BF16": 1} if chunk else kda_defs
 
     def residual(entry, glue_entry, defines=None):
         if chunk:
@@ -448,13 +454,15 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         }} if chunk else {}),
         # A layer's closing landing add fused into the next layer's mix and norm.
         **({"land_add2_attnres_rms": {
-            "params": ["in buffer<f32>", "in buffer<f32>", "in buffer<bf16>", "out buffer<bf16>", "i32",
+            "params": ["in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32",
                        "in buffer<bf16>", "in buffer<f32>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32"],
             "impl": {"launches": [residual(None, "kern_k3g_land_add2_attnres_rms")]},
         }} if chunk else {}),
         "land_add2": {
-            "params": ["in buffer<f32>", "in buffer<f32>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32"],
-            "impl": {"launches": [launch("k3_residual", "kern_k3_land_add2", var=RV)]},
+            "params": [f"in buffer<{part}>", f"in buffer<{part}>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32"],
+            "impl": {"launches": [launch("k3_prefill_glue", "kern_k3g_land_add2", grid=[RV, 4, 1], block=[224, 1, 1],
+                                         defines=glue_defs) if chunk else
+                                  launch("k3_residual", "kern_k3_land_add2", var=RV)]},
         },
         **({
         # K2 / K3 KDA
@@ -508,20 +516,20 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                 "impl": {"launches": [{"entry": "extern:cublaslt_bf16_tn"}]},
             },
             "span_gather": {
-                "params": ["in buffer<f32>", "in buffer<f32>", "inout state", "in buffer<i32>", "i64", "in buffer<f32>",
-                           "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>",
-                           "out buffer<bf16>", "in buffer<i32>", "i32"],
+                "params": [f"in buffer<{part}>", "in buffer<f32>", "inout state", "in buffer<i32>", "i64",
+                           f"in buffer<{part}>", "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>",
+                           "out buffer<bf16>", "out buffer<bf16>", "in buffer<i32>", "i32"],
                 "impl": {"launches": [launch("k3_span_gather", "kern_k3_span_gather",
                                              grid=[inner_l // 512, 4, {"ceil_div": [SV, 8]}], block=[128, 1, 1],
-                                             defines=kda_defs)]},
+                                             defines=part_defs)]},
             },
             "flash_kda": flash_kda_abi.op(hl, run_max, module(flash_kda_abi.MODULE), span=SV),
             # A chunk's every row is the span, so its gate is the layer output's only writer.
             "kda_out_gate": {
-                "params": ["in buffer<bf16>", "in buffer<f32>", "in buffer<f32>",
+                "params": ["in buffer<bf16>", f"in buffer<{part}>", "in buffer<f32>",
                            "out buffer<bf16>" if chunk else "inout buffer<bf16>", "in buffer<i32>", "i32"],
                 "impl": {"launches": [launch("k3_kda_out_gate", "kern_k3_kda_out_gate", grid=[SV, hl // 4, 1],
-                                             block=[128, 1, 1], defines=kda_defs)]},
+                                             block=[128, 1, 1], defines=part_defs)]},
             },
         } if run_max else {}),
         **({
@@ -606,15 +614,15 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                                          block=[128, 1, 1], defines=kda_defs)]}}
         ops["span_state_load"], ops["span_state_store"] = state_op("in"), state_op("inout")
         ops["span_gather"] = {
-            "params": ["in buffer<f32>", "in buffer<f32>", "inout state", "in buffer<i32>", "i64", "in buffer<f32>",
+            "params": ["in buffer<bf16>", "in buffer<f32>", "inout state", "in buffer<i32>", "i64", "in buffer<bf16>",
                        "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>",
                        "out buffer<bf16>", "in buffer<i64>", "i32", "i32"],
             "impl": {"launches": [
                 launch("k3_span_gather", "kern_k3_span_gather_varlen", grid=[inner_l // 512, 4, {"ceil_div": [SV, 8]}],
-                       block=[128, 1, 1], defines=kda_defs),
+                       block=[128, 1, 1], defines=part_defs),
                 launch("k3_span_gather", "kern_k3_span_window", grid=[inner_l // 512, 3, "seqs"], block=[128, 1, 1],
-                       defines=kda_defs,
-                       params=["in buffer<f32>", "inout state", "in buffer<i32>", "i64", "in buffer<i64>"],
+                       defines=part_defs,
+                       params=["in buffer<bf16>", "inout state", "in buffer<i32>", "i64", "in buffer<i64>"],
                        args=[{"param": 0}, {"param": 2}, {"param": 3}, {"param": 4}, {"param": 11}]),
             ]},
         }
@@ -717,11 +725,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         return name
 
     def situ_op(n):
-        name = f"land_situ_n{n}"
+        name = f"situ_n{n}" if chunk else f"land_situ_n{n}"
         if name not in ops:
             ops[name] = {
-                "params": ["in buffer<f32>", "out buffer<bf16>", "i32", "i32"],
-                "impl": {"launches": [launch("k3_land", "kern_k3_land_situ", grid=per_row(n), block=[256, 1, 1], var=RV)]},
+                "params": [f"in buffer<{part}>", "out buffer<bf16>", "i32", "i32"],
+                "impl": {"launches": [launch("k3_prefill_glue", "kern_k3g_situ", grid=[RV, -(-n // 2048), 1],
+                                             block=[256, 1, 1], defines=glue_defs) if chunk else
+                                      launch("k3_land", "kern_k3_land_situ", grid=per_row(n), block=[256, 1, 1],
+                                             var=RV)]},
             }
         return name
 
@@ -871,8 +882,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         # The all-gather lays every rank's `own_max` rows in rank order.
         work("normed_all", H, var=tp * own_max)
         work("attn_own", H, var=own_max)
-    work("kda_partial", fused_l, "f32", var=KV)
-    work("wsm_partial", WSM, "f32", var=KV)
+    work("kda_partial", fused_l, part, var=KV)
+    work("wsm_partial", WSM, part, var=KV)
     if decode:
         for n in ["conv_q", "conv_k", "conv_v"]:
             work(n, inner_l, var=KV)
@@ -916,11 +927,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     work("router_partial", experts, "f32", var=OV)
     work("topk_idx", TOPK, "i32", var=OV)
     work("topk_weight", TOPK, "f32", var=OV)
-    work("latent_partial", LATENT, "f32", var=OV)
-    # The batched GEMMs' quant lands the latent's partial itself, and a lone
-    # rank's combine writes the normed row straight away.
-    if not bmm:
-        work("latent", LATENT, var=OV)
+    if not chunk:
+        work("latent_partial", LATENT, "f32", var=OV)
+    work("latent", LATENT, var=OV)
+    # A lone rank's combine writes the normed row straight away.
     if not bmm or coll:
         work("routed_latent", LATENT, var=OV)
     if bmm:
@@ -933,12 +943,12 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         work("topk_weight_all", TOPK, "f32", var=tp * own_max)
         work("moe_partial", LATENT, var=tp * own_max)
     work("routed_latent_norm", LATENT, var=RW)
-    work("routed_partial", H, "f32", var=RW)
-    work("shared_partial", 2 * sh_l, "f32", var=RW)
+    work("routed_partial", H, part, var=RW)
+    work("shared_partial", 2 * sh_l, part, var=RW)
     work("shared_act", sh_l, var=RW)
-    work("shared_partial2", H, "f32", var=RW)
+    work("shared_partial2", H, part, var=RW)
     if 0 in layers:
-        work("dense_partial", 2 * dn_l, "f32", var=RW)
+        work("dense_partial", 2 * dn_l, part, var=RW)
         work("dense_act", dn_l, var=RW)
     if tray:
         work("mlp_all", H, "f32", var=R)
@@ -957,6 +967,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     def gemm(label, a, w, c, n, k, ldc=None, m=B):
         """c[m, ldc] (cols 0..n from c's offset) = a[m, k] @ w[n, k]^T, f32."""
         step(label, "gemm_f32", a, w, c, m, i32(n), i32(k), i32(ldc or n))
+
+    def proj(label, a, w, c, n, k, m=B):
+        """A projection whose readers land it: in a chunk the GEMM lands it (bf16), else f32."""
+        step(label, "gemm_bf16" if chunk else "gemm_f32", a, w, c, m, i32(n), i32(k), i32(n))
 
     def land(label, p, o, n, off, ldc):
         step(label, land_op(n), p, o, i32(n), i32(off), i32(ldc), OB)
@@ -1137,8 +1151,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                 line = b("kda.line_index", kda_k * (seqs_max if packed else rows_max) * 4)
                 kda_k += 1
                 KB = {"var": KV}
-                gemm(L + "qkvg", normed_all, w("wbig"), b("kda_partial"), fused_l, H, m=KB)
-                gemm(L + "wsm", normed_all, w("wsm"), b("wsm_partial"), WSM, H, m=KB)
+                proj(L + "qkvg", normed_all, w("wbig"), b("kda_partial"), fused_l, H, m=KB)
+                proj(L + "wsm", normed_all, w("wsm"), b("wsm_partial"), WSM, H, m=KB)
                 if chunk:
                     span_kda(L, w, line, KB, S, kda_of(i))
                     span_out_gate(L, w, S)
@@ -1178,22 +1192,23 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
             # replicated there: its input is a row of `routed_latent_norm`, and
             # a K-split would need a rank-dependent offset into it.
             if i == 0:
-                gemm(L + "wgu", b("normed"), w("wgu"), b("dense_partial"), 2 * dn_l, H, m=RB)
+                proj(L + "wgu", b("normed"), w("wgu"), b("dense_partial"), 2 * dn_l, H, m=RB)
                 land_situ(L + "situ", b("dense_partial"), b("dense_act"), dn_l, RB)
-                gemm(L + "w_dn", b("dense_act"), w("w_dn"), b("routed_partial"), H, dn_l, m=RB)
+                proj(L + "w_dn", b("dense_act"), w("w_dn"), b("routed_partial"), H, dn_l, m=RB)
                 mlp = reduced(L + "reduce_mlp", b("routed_partial"), b("mlp_all")) if tray else b("routed_partial")
                 closing = (L + "hidden", mlp, mlp, 0)
             else:
                 gemm(L + "router", b("normed"), w("w_router"), b("router_partial"), experts, H, m=OB)
                 step(L + "topk", "router_topk", b("router_partial"), w("bias"), w("rs"), b("topk_idx"), b("topk_weight"),
                      OB)
-                gemm(L + "lat_down", b("normed"), w("w_lat_down"), b("latent_partial"), LATENT, H, m=OB)
-                if not bmm:
+                if chunk:
+                    proj(L + "lat_down", b("normed"), w("w_lat_down"), b("latent"), LATENT, H, m=OB)
+                else:
+                    gemm(L + "lat_down", b("normed"), w("w_lat_down"), b("latent_partial"), LATENT, H, m=OB)
                     land(L + "latent", b("latent_partial"), b("latent"), LATENT, 0, LATENT)
                 if coll:
                     # every rank's rows of the fp8 latent and the routing, in rank order
-                    step(L + "moe_quant", "moe_quant", b("latent_partial"), b("latent_q"), b("latent_sf"), OB,
-                         i32(LATENT))
+                    step(L + "moe_quant", "moe_quant", b("latent"), b("latent_q"), b("latent_sf"), OB, i32(LATENT))
                     for n, dt, width in (("latent_q", "u8", LATENT), ("latent_sf", "u8", LATENT // 32),
                                          ("topk_idx", "i32", TOPK), ("topk_weight", "f32", TOPK)):
                         step(L + "gather_" + n, f"nccl_allgather_{dt}", b(n), b(n + "_all"), {"expr": {"mul": [OG, width]}})
@@ -1202,8 +1217,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                                             w("moe.alpha"), w("moe.beta"), b("moe_partial"), {"rank": "ep"}, label=L))
                     own_rows(L + "scatter_moe", b("moe_partial"), b("routed_latent"), LATENT)
                 elif bmm:
-                    step(L + "moe_quant", "moe_quant", b("latent_partial"), b("latent_q"), b("latent_sf"), OB,
-                         i32(LATENT))
+                    step(L + "moe_quant", "moe_quant", b("latent"), b("latent_q"), b("latent_sf"), OB, i32(LATENT))
                     # the combine lands its row and norms it (lat_norm) in one pass
                     prog.extend(bp["steps"](b("latent_q"), b("latent_sf"), b("topk_idx"), b("topk_weight"),
                                             w("moe.w13s"), w("moe.w13_sfs"), w("moe.w2s"), w("moe.w2_sfs"),
@@ -1216,10 +1230,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                     routed = (gathered(L + "gather_moe", b("routed_latent"), b("routed_latent_all"), "bf16",
                                        LATENT * 2) if tray else b("routed_latent"))
                     step(L + "lat_norm", "rms", routed, w("gamma_lat"), b("routed_latent_norm"), i32(LATENT), RB)
-                gemm(L + "lat_up", b("routed_latent_norm"), w("w_lat_up"), b("routed_partial"), H, LATENT, m=RB)
-                gemm(L + "wsh", b("normed"), w("wsh"), b("shared_partial"), 2 * sh_l, H, m=RB)
+                proj(L + "lat_up", b("routed_latent_norm"), w("w_lat_up"), b("routed_partial"), H, LATENT, m=RB)
+                proj(L + "wsh", b("normed"), w("wsh"), b("shared_partial"), 2 * sh_l, H, m=RB)
                 land_situ(L + "shared_situ", b("shared_partial"), b("shared_act"), sh_l, RB)
-                gemm(L + "sh_down", b("shared_act"), w("sh_down"), b("shared_partial2"), H, sh_l, m=RB)
+                proj(L + "sh_down", b("shared_act"), w("sh_down"), b("shared_partial2"), H, sh_l, m=RB)
                 shared = reduced(L + "reduce_mlp", b("shared_partial2"), b("mlp_all")) if tray else b("shared_partial2")
                 closing = (L + "hidden", b("routed_partial"), shared, 1)
             if not chunk:

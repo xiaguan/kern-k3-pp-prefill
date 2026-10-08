@@ -276,7 +276,7 @@
    "kind": "workspace"
   },
   "kda_partial": {
-   "dtype": "f32",
+   "dtype": "bf16",
    "shape": [
     "tokens",
     49152
@@ -284,7 +284,7 @@
    "kind": "workspace"
   },
   "wsm_partial": {
-   "dtype": "f32",
+   "dtype": "bf16",
    "shape": [
     "tokens",
     256
@@ -536,8 +536,8 @@
    ],
    "kind": "workspace"
   },
-  "latent_partial": {
-   "dtype": "f32",
+  "latent": {
+   "dtype": "bf16",
    "shape": [
     8192,
     3584
@@ -569,7 +569,7 @@
    "kind": "workspace"
   },
   "routed_partial": {
-   "dtype": "f32",
+   "dtype": "bf16",
    "shape": [
     8192,
     7168
@@ -577,7 +577,7 @@
    "kind": "workspace"
   },
   "shared_partial": {
-   "dtype": "f32",
+   "dtype": "bf16",
    "shape": [
     8192,
     12288
@@ -593,7 +593,7 @@
    "kind": "workspace"
   },
   "shared_partial2": {
-   "dtype": "f32",
+   "dtype": "bf16",
    "shape": [
     8192,
     7168
@@ -268510,13 +268510,9 @@
    "source": "hf:Pegainfer/kern-kernels/blobs/d797b1d2edad680ecc0578d4d8a57d5f1a6a364bbb3acd7ecd4d6270c6be4ae0",
    "sha256": "d797b1d2edad680ecc0578d4d8a57d5f1a6a364bbb3acd7ecd4d6270c6be4ae0"
   },
-  "k3_kda_out_gate": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/837b8261348b9b238eb9cedfce4e176142c62e91be99cc33ad8ac476a6a5f54c",
-   "sha256": "837b8261348b9b238eb9cedfce4e176142c62e91be99cc33ad8ac476a6a5f54c"
-  },
-  "k3_land": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/2cd68c79bf3243f37d2f1406880060f610b4028f9e843bb356ea8ef0a0352fcc",
-   "sha256": "2cd68c79bf3243f37d2f1406880060f610b4028f9e843bb356ea8ef0a0352fcc"
+  "k3_kda_out_gate+PARTIAL_BF16=1": {
+   "source": "hf:Pegainfer/kern-kernels/blobs/663f5bb6b841d32049e549d801611132a3c157bdcabfcf20edd5aa0028200da8",
+   "sha256": "663f5bb6b841d32049e549d801611132a3c157bdcabfcf20edd5aa0028200da8"
   },
   "k3_mla_prep": {
    "source": "hf:Pegainfer/kern-kernels/blobs/2b244a6333a73248b64291e27cd0d5d3198a5ce5e2d275c6c819a2183d468eb5",
@@ -268535,20 +268531,16 @@
    "sha256": "c3c33eaf60000c313ba839258a54b2748e0483439e3f3068fc3dfa84a60adf2c"
   },
   "k3_prefill_glue": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/77cbc19817b3cb4f4cf7a9c558fb4e9a65a1a9e9b4cb9c77a3ca021ccd0fd5ef",
-   "sha256": "77cbc19817b3cb4f4cf7a9c558fb4e9a65a1a9e9b4cb9c77a3ca021ccd0fd5ef"
-  },
-  "k3_residual": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/d5d5d1fb3dda907822d99520b611fa77cab05bf11f165a1aa0d5e43d07cca8c8",
-   "sha256": "d5d5d1fb3dda907822d99520b611fa77cab05bf11f165a1aa0d5e43d07cca8c8"
+   "source": "hf:Pegainfer/kern-kernels/blobs/dd27dcf6d62d41fc30fffdec4f0cdf9840104e3ca16972e90936ff253332ef1e",
+   "sha256": "dd27dcf6d62d41fc30fffdec4f0cdf9840104e3ca16972e90936ff253332ef1e"
   },
   "k3_router_argmax": {
    "source": "hf:Pegainfer/kern-kernels/blobs/e3b8395c90e502b7afd4e844a57d060c682c7ab060a361befb9cbf4e61034b5a",
    "sha256": "e3b8395c90e502b7afd4e844a57d060c682c7ab060a361befb9cbf4e61034b5a"
   },
-  "k3_span_gather": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/f9039b0e0aa0ba0140b60f0e0fbde391b6580205607b40fbaf9348057667d652",
-   "sha256": "f9039b0e0aa0ba0140b60f0e0fbde391b6580205607b40fbaf9348057667d652"
+  "k3_span_gather+PARTIAL_BF16=1": {
+   "source": "hf:Pegainfer/kern-kernels/blobs/94b9525ba655d1b4fdd03cd2373e7c007af1a5a9502c74c220d97f2421566522",
+   "sha256": "94b9525ba655d1b4fdd03cd2373e7c007af1a5a9502c74c220d97f2421566522"
   },
   "k3_span_state": {
    "source": "hf:Pegainfer/kern-kernels/blobs/c55c411c7ec3b992b324078683897a8f71f6760ce2e3978730db300c0fa57d7b",
@@ -268606,13 +268598,44 @@
     "out buffer<f32>",
     "i32",
     "i32",
-    "i32",
     "i32"
    ],
    "impl": {
     "launches": [
      {
-      "entry": "extern:cublas_bf16_tn_f32"
+      "entry": "extern:cublas_bf16_tn_f32",
+      "params": [
+       "in buffer<bf16>",
+       "in buffer<bf16>",
+       "out buffer<f32>",
+       "i32",
+       "i32",
+       "i32",
+       "i32"
+      ],
+      "args": [
+       {
+        "param": 0
+       },
+       {
+        "param": 1
+       },
+       {
+        "param": 2
+       },
+       {
+        "param": 3
+       },
+       {
+        "param": 4
+       },
+       {
+        "i32": 7168
+       },
+       {
+        "param": 5
+       }
+      ]
      }
     ]
    }
@@ -268681,8 +268704,8 @@
   },
   "land_add2_attnres_rms": {
    "params": [
-    "in buffer<f32>",
-    "in buffer<f32>",
+    "in buffer<bf16>",
+    "in buffer<bf16>",
     "in buffer<bf16>",
     "out buffer<bf16>",
     "in buffer<bf16>",
@@ -268698,8 +268721,8 @@
       "module": "k3_prefill_glue",
       "entry": "kern_k3g_land_add2_attnres_rms",
       "params": [
-       "in buffer<f32>",
-       "in buffer<f32>",
+       "in buffer<bf16>",
+       "in buffer<bf16>",
        "in buffer<bf16>",
        "out buffer<bf16>",
        "i32",
@@ -268761,8 +268784,8 @@
   },
   "land_add2": {
    "params": [
-    "in buffer<f32>",
-    "in buffer<f32>",
+    "in buffer<bf16>",
+    "in buffer<bf16>",
     "in buffer<bf16>",
     "out buffer<bf16>",
     "i32"
@@ -268770,24 +268793,24 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_residual",
-      "entry": "kern_k3_land_add2",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_land_add2",
       "params": [
-       "in buffer<f32>",
-       "in buffer<f32>",
+       "in buffer<bf16>",
+       "in buffer<bf16>",
        "in buffer<bf16>",
        "out buffer<bf16>",
        "i32",
        "i32"
       ],
       "block": [
-       1024,
+       224,
        1,
        1
       ],
       "grid": [
        "tokens",
-       1,
+       4,
        1
       ],
       "args": [
@@ -268942,11 +268965,11 @@
   },
   "span_gather": {
    "params": [
-    "in buffer<f32>",
+    "in buffer<bf16>",
     "in buffer<f32>",
     "inout state",
     "in buffer<i32>",
-    "in buffer<f32>",
+    "in buffer<bf16>",
     "out buffer<bf16>",
     "out buffer<bf16>",
     "out buffer<bf16>",
@@ -268958,15 +268981,15 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_span_gather",
+      "module": "k3_span_gather+PARTIAL_BF16=1",
       "entry": "kern_k3_span_gather",
       "params": [
-       "in buffer<f32>",
+       "in buffer<bf16>",
        "in buffer<f32>",
        "inout state",
        "in buffer<i32>",
        "i64",
-       "in buffer<f32>",
+       "in buffer<bf16>",
        "out buffer<bf16>",
        "out buffer<bf16>",
        "out buffer<bf16>",
@@ -269871,7 +269894,7 @@
   "kda_out_gate": {
    "params": [
     "in buffer<bf16>",
-    "in buffer<f32>",
+    "in buffer<bf16>",
     "in buffer<f32>",
     "out buffer<bf16>",
     "in buffer<i32>",
@@ -269880,7 +269903,7 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_kda_out_gate",
+      "module": "k3_kda_out_gate+PARTIAL_BF16=1",
       "entry": "kern_k3_kda_out_gate",
       "block": [
        128,
@@ -270565,7 +270588,7 @@
   },
   "moe_quant": {
    "params": [
-    "in buffer<f32>",
+    "in buffer<bf16>",
     "out buffer<u8>",
     "out buffer<u8>",
     "i32"
@@ -270573,10 +270596,10 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_prefill_glue",
-      "entry": "kern_k3g_land_quant",
+      "module": "k3_moe_prefill",
+      "entry": "kern_k3_moe_quant",
       "params": [
-       "in buffer<f32>",
+       "in buffer<bf16>",
        "out buffer<u8>",
        "out buffer<u8>",
        "i32",
@@ -271511,19 +271534,19 @@
     ]
    }
   },
-  "land_situ_n6144": {
+  "situ_n6144": {
    "params": [
-    "in buffer<f32>",
+    "in buffer<bf16>",
     "out buffer<bf16>",
     "i32"
    ],
    "impl": {
     "launches": [
      {
-      "module": "k3_land",
-      "entry": "kern_k3_land_situ",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_situ",
       "params": [
-       "in buffer<f32>",
+       "in buffer<bf16>",
        "out buffer<bf16>",
        "i32",
        "i32"
@@ -271535,7 +271558,7 @@
       ],
       "grid": [
        "tokens",
-       6,
+       3,
        1
       ],
       "args": [
@@ -272027,7 +272050,7 @@
     },
     {
      "label": "l69.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -272054,7 +272077,7 @@
     },
     {
      "label": "l69.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -272348,9 +272371,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -272381,7 +272401,7 @@
     },
     {
      "label": "l69.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -272390,7 +272410,7 @@
        "buf": "layers.69.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -272411,7 +272431,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -272558,7 +272578,7 @@
     },
     {
      "label": "l69.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -272585,7 +272605,7 @@
     },
     {
      "label": "l69.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -272612,7 +272632,7 @@
     },
     {
      "label": "l69.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -272627,7 +272647,7 @@
     },
     {
      "label": "l69.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -272690,7 +272710,7 @@
     },
     {
      "label": "l70.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -272717,7 +272737,7 @@
     },
     {
      "label": "l70.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -273014,9 +273034,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -273047,7 +273064,7 @@
     },
     {
      "label": "l70.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -273056,7 +273073,7 @@
        "buf": "layers.70.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -273077,7 +273094,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -273224,7 +273241,7 @@
     },
     {
      "label": "l70.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -273251,7 +273268,7 @@
     },
     {
      "label": "l70.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -273278,7 +273295,7 @@
     },
     {
      "label": "l70.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -273293,7 +273310,7 @@
     },
     {
      "label": "l70.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -273372,9 +273389,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -273645,9 +273659,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -273678,7 +273689,7 @@
     },
     {
      "label": "l71.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -273687,7 +273698,7 @@
        "buf": "layers.71.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -273708,7 +273719,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -273855,7 +273866,7 @@
     },
     {
      "label": "l71.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -273882,7 +273893,7 @@
     },
     {
      "label": "l71.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -273909,7 +273920,7 @@
     },
     {
      "label": "l71.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -273924,7 +273935,7 @@
     },
     {
      "label": "l71.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -274002,7 +274013,7 @@
     },
     {
      "label": "l72.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -274029,7 +274040,7 @@
     },
     {
      "label": "l72.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -274326,9 +274337,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -274359,7 +274367,7 @@
     },
     {
      "label": "l72.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -274368,7 +274376,7 @@
        "buf": "layers.72.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -274389,7 +274397,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -274536,7 +274544,7 @@
     },
     {
      "label": "l72.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -274563,7 +274571,7 @@
     },
     {
      "label": "l72.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -274590,7 +274598,7 @@
     },
     {
      "label": "l72.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -274605,7 +274613,7 @@
     },
     {
      "label": "l72.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -274668,7 +274676,7 @@
     },
     {
      "label": "l73.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -274695,7 +274703,7 @@
     },
     {
      "label": "l73.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -274992,9 +275000,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -275025,7 +275030,7 @@
     },
     {
      "label": "l73.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -275034,7 +275039,7 @@
        "buf": "layers.73.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -275055,7 +275060,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -275202,7 +275207,7 @@
     },
     {
      "label": "l73.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -275229,7 +275234,7 @@
     },
     {
      "label": "l73.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -275256,7 +275261,7 @@
     },
     {
      "label": "l73.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -275271,7 +275276,7 @@
     },
     {
      "label": "l73.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -275334,7 +275339,7 @@
     },
     {
      "label": "l74.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -275361,7 +275366,7 @@
     },
     {
      "label": "l74.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -275658,9 +275663,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -275691,7 +275693,7 @@
     },
     {
      "label": "l74.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -275700,7 +275702,7 @@
        "buf": "layers.74.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -275721,7 +275723,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -275868,7 +275870,7 @@
     },
     {
      "label": "l74.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -275895,7 +275897,7 @@
     },
     {
      "label": "l74.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -275922,7 +275924,7 @@
     },
     {
      "label": "l74.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -275937,7 +275939,7 @@
     },
     {
      "label": "l74.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -276016,9 +276018,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -276289,9 +276288,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -276322,7 +276318,7 @@
     },
     {
      "label": "l75.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -276331,7 +276327,7 @@
        "buf": "layers.75.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -276352,7 +276348,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -276499,7 +276495,7 @@
     },
     {
      "label": "l75.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -276526,7 +276522,7 @@
     },
     {
      "label": "l75.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -276553,7 +276549,7 @@
     },
     {
      "label": "l75.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -276568,7 +276564,7 @@
     },
     {
      "label": "l75.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -276631,7 +276627,7 @@
     },
     {
      "label": "l76.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -276658,7 +276654,7 @@
     },
     {
      "label": "l76.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -276955,9 +276951,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -276988,7 +276981,7 @@
     },
     {
      "label": "l76.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -276997,7 +276990,7 @@
        "buf": "layers.76.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -277018,7 +277011,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -277165,7 +277158,7 @@
     },
     {
      "label": "l76.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -277192,7 +277185,7 @@
     },
     {
      "label": "l76.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -277219,7 +277212,7 @@
     },
     {
      "label": "l76.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -277234,7 +277227,7 @@
     },
     {
      "label": "l76.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -277297,7 +277290,7 @@
     },
     {
      "label": "l77.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -277324,7 +277317,7 @@
     },
     {
      "label": "l77.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -277621,9 +277614,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -277654,7 +277644,7 @@
     },
     {
      "label": "l77.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -277663,7 +277653,7 @@
        "buf": "layers.77.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -277684,7 +277674,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -277831,7 +277821,7 @@
     },
     {
      "label": "l77.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -277858,7 +277848,7 @@
     },
     {
      "label": "l77.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -277885,7 +277875,7 @@
     },
     {
      "label": "l77.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -277900,7 +277890,7 @@
     },
     {
      "label": "l77.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -277963,7 +277953,7 @@
     },
     {
      "label": "l78.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -277990,7 +277980,7 @@
     },
     {
      "label": "l78.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -278287,9 +278277,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -278320,7 +278307,7 @@
     },
     {
      "label": "l78.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -278329,7 +278316,7 @@
        "buf": "layers.78.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -278350,7 +278337,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -278497,7 +278484,7 @@
     },
     {
      "label": "l78.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -278524,7 +278511,7 @@
     },
     {
      "label": "l78.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -278551,7 +278538,7 @@
     },
     {
      "label": "l78.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -278566,7 +278553,7 @@
     },
     {
      "label": "l78.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -278645,9 +278632,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -278918,9 +278902,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -278951,7 +278932,7 @@
     },
     {
      "label": "l79.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -278960,7 +278941,7 @@
        "buf": "layers.79.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -278981,7 +278962,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -279128,7 +279109,7 @@
     },
     {
      "label": "l79.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -279155,7 +279136,7 @@
     },
     {
      "label": "l79.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -279182,7 +279163,7 @@
     },
     {
      "label": "l79.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -279197,7 +279178,7 @@
     },
     {
      "label": "l79.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -279260,7 +279241,7 @@
     },
     {
      "label": "l80.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -279287,7 +279268,7 @@
     },
     {
      "label": "l80.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -279584,9 +279565,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -279617,7 +279595,7 @@
     },
     {
      "label": "l80.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -279626,7 +279604,7 @@
        "buf": "layers.80.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -279647,7 +279625,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -279794,7 +279772,7 @@
     },
     {
      "label": "l80.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -279821,7 +279799,7 @@
     },
     {
      "label": "l80.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -279848,7 +279826,7 @@
     },
     {
      "label": "l80.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -279863,7 +279841,7 @@
     },
     {
      "label": "l80.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -279926,7 +279904,7 @@
     },
     {
      "label": "l81.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -279953,7 +279931,7 @@
     },
     {
      "label": "l81.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -280250,9 +280228,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -280283,7 +280258,7 @@
     },
     {
      "label": "l81.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -280292,7 +280267,7 @@
        "buf": "layers.81.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -280313,7 +280288,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -280460,7 +280435,7 @@
     },
     {
      "label": "l81.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -280487,7 +280462,7 @@
     },
     {
      "label": "l81.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -280514,7 +280489,7 @@
     },
     {
      "label": "l81.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -280529,7 +280504,7 @@
     },
     {
      "label": "l81.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -280592,7 +280567,7 @@
     },
     {
      "label": "l82.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -280619,7 +280594,7 @@
     },
     {
      "label": "l82.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -280916,9 +280891,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -280949,7 +280921,7 @@
     },
     {
      "label": "l82.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -280958,7 +280930,7 @@
        "buf": "layers.82.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -280979,7 +280951,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -281126,7 +281098,7 @@
     },
     {
      "label": "l82.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -281153,7 +281125,7 @@
     },
     {
      "label": "l82.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -281180,7 +281152,7 @@
     },
     {
      "label": "l82.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -281195,7 +281167,7 @@
     },
     {
      "label": "l82.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -281274,9 +281246,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -281547,9 +281516,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -281580,7 +281546,7 @@
     },
     {
      "label": "l83.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -281589,7 +281555,7 @@
        "buf": "layers.83.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -281610,7 +281576,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -281757,7 +281723,7 @@
     },
     {
      "label": "l83.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -281784,7 +281750,7 @@
     },
     {
      "label": "l83.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -281811,7 +281777,7 @@
     },
     {
      "label": "l83.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -281826,7 +281792,7 @@
     },
     {
      "label": "l83.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -281904,7 +281870,7 @@
     },
     {
      "label": "l84.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -281931,7 +281897,7 @@
     },
     {
      "label": "l84.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -282228,9 +282194,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -282261,7 +282224,7 @@
     },
     {
      "label": "l84.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -282270,7 +282233,7 @@
        "buf": "layers.84.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -282291,7 +282254,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -282438,7 +282401,7 @@
     },
     {
      "label": "l84.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -282465,7 +282428,7 @@
     },
     {
      "label": "l84.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -282492,7 +282455,7 @@
     },
     {
      "label": "l84.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -282507,7 +282470,7 @@
     },
     {
      "label": "l84.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -282570,7 +282533,7 @@
     },
     {
      "label": "l85.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -282597,7 +282560,7 @@
     },
     {
      "label": "l85.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -282894,9 +282857,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -282927,7 +282887,7 @@
     },
     {
      "label": "l85.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -282936,7 +282896,7 @@
        "buf": "layers.85.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -282957,7 +282917,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -283104,7 +283064,7 @@
     },
     {
      "label": "l85.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -283131,7 +283091,7 @@
     },
     {
      "label": "l85.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -283158,7 +283118,7 @@
     },
     {
      "label": "l85.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -283173,7 +283133,7 @@
     },
     {
      "label": "l85.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -283236,7 +283196,7 @@
     },
     {
      "label": "l86.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -283263,7 +283223,7 @@
     },
     {
      "label": "l86.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -283560,9 +283520,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -283593,7 +283550,7 @@
     },
     {
      "label": "l86.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -283602,7 +283559,7 @@
        "buf": "layers.86.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -283623,7 +283580,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -283770,7 +283727,7 @@
     },
     {
      "label": "l86.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -283797,7 +283754,7 @@
     },
     {
      "label": "l86.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -283824,7 +283781,7 @@
     },
     {
      "label": "l86.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -283839,7 +283796,7 @@
     },
     {
      "label": "l86.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -283918,9 +283875,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -284191,9 +284145,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -284224,7 +284175,7 @@
     },
     {
      "label": "l87.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -284233,7 +284184,7 @@
        "buf": "layers.87.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -284254,7 +284205,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -284401,7 +284352,7 @@
     },
     {
      "label": "l87.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -284428,7 +284379,7 @@
     },
     {
      "label": "l87.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -284455,7 +284406,7 @@
     },
     {
      "label": "l87.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -284470,7 +284421,7 @@
     },
     {
      "label": "l87.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -284533,7 +284484,7 @@
     },
     {
      "label": "l88.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -284560,7 +284511,7 @@
     },
     {
      "label": "l88.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -284857,9 +284808,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -284890,7 +284838,7 @@
     },
     {
      "label": "l88.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -284899,7 +284847,7 @@
        "buf": "layers.88.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -284920,7 +284868,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -285067,7 +285015,7 @@
     },
     {
      "label": "l88.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -285094,7 +285042,7 @@
     },
     {
      "label": "l88.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -285121,7 +285069,7 @@
     },
     {
      "label": "l88.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -285136,7 +285084,7 @@
     },
     {
      "label": "l88.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -285199,7 +285147,7 @@
     },
     {
      "label": "l89.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -285226,7 +285174,7 @@
     },
     {
      "label": "l89.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -285523,9 +285471,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -285556,7 +285501,7 @@
     },
     {
      "label": "l89.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -285565,7 +285510,7 @@
        "buf": "layers.89.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -285586,7 +285531,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -285733,7 +285678,7 @@
     },
     {
      "label": "l89.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -285760,7 +285705,7 @@
     },
     {
      "label": "l89.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -285787,7 +285732,7 @@
     },
     {
      "label": "l89.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -285802,7 +285747,7 @@
     },
     {
      "label": "l89.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -285865,7 +285810,7 @@
     },
     {
      "label": "l90.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -285892,7 +285837,7 @@
     },
     {
      "label": "l90.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -286189,9 +286134,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -286222,7 +286164,7 @@
     },
     {
      "label": "l90.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -286231,7 +286173,7 @@
        "buf": "layers.90.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -286252,7 +286194,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -286399,7 +286341,7 @@
     },
     {
      "label": "l90.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -286426,7 +286368,7 @@
     },
     {
      "label": "l90.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -286453,7 +286395,7 @@
     },
     {
      "label": "l90.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -286468,7 +286410,7 @@
     },
     {
      "label": "l90.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -286547,9 +286489,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -286820,9 +286759,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -286853,7 +286789,7 @@
     },
     {
      "label": "l91.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -286862,7 +286798,7 @@
        "buf": "layers.91.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -286883,7 +286819,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -287030,7 +286966,7 @@
     },
     {
      "label": "l91.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -287057,7 +286993,7 @@
     },
     {
      "label": "l91.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -287084,7 +287020,7 @@
     },
     {
      "label": "l91.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -287099,7 +287035,7 @@
     },
     {
      "label": "l91.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -287178,9 +287114,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -287451,9 +287384,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -287484,7 +287414,7 @@
     },
     {
      "label": "l92.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -287493,7 +287423,7 @@
        "buf": "layers.92.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -287514,7 +287444,7 @@
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "buf": "latent_q"
@@ -287661,7 +287591,7 @@
     },
     {
      "label": "l92.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -287688,7 +287618,7 @@
     },
     {
      "label": "l92.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -287715,7 +287645,7 @@
     },
     {
      "label": "l92.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -287730,7 +287660,7 @@
     },
     {
      "label": "l92.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -287824,9 +287754,6 @@
       },
       {
        "i32": 163840
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 163840

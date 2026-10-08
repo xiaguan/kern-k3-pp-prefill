@@ -6,7 +6,8 @@
 //
 //   extern "C" __global__ void kern_k3_kda_out_gate(
 //       const bf16* attn,          // [span, INNER]
-//       const float* gate_partial, // [rows, KDA_FUSED]  band 3 only, rows at..at+span
+//       const part* gate_partial,  // [rows, KDA_FUSED]  band 3 only, rows at..at+span; f32, or bf16
+//                                  // with -DPARTIAL_BF16 (then the landing below is exact)
 //       const float* gamma_o,      // [128]
 //       bf16* gated,               // [rows, INNER]  rows at..at+span written
 //       const int* span_at,        // [1]  the span's first batch row
@@ -36,8 +37,15 @@
 
 typedef __nv_bfloat16 bf16;
 
+// -DPARTIAL_BF16: the gate arrives landed (a bf16 GEMM output).
+#ifdef PARTIAL_BF16
+typedef bf16 part_t;
+#else
+typedef float part_t;
+#endif
+
 extern "C" __global__ __launch_bounds__(128) void kern_k3_kda_out_gate(
-    const bf16* __restrict__ attn, const float* __restrict__ gate_partial, const float* __restrict__ gamma_o,
+    const bf16* __restrict__ attn, const part_t* __restrict__ gate_partial, const float* __restrict__ gamma_o,
     bf16* __restrict__ gated, const int* __restrict__ span_at, int span) {
   const int i = blockIdx.x, h = blockIdx.y * 4 + (threadIdx.x >> 5), lane = threadIdx.x & 31, d = lane * 4;
   const int b = span_at[0] + i;
@@ -61,8 +69,22 @@ extern "C" __global__ __launch_bounds__(128) void kern_k3_kda_out_gate(
                     __shfl_sync(0xffffffffu, w, 16) + __shfl_sync(0xffffffffu, w, 24);
   const float r = rsqrtf(tot * (1.0f / 128.0f) + K11_RMS_EPS);
   const float4 go = *(const float4*)(gamma_o + d);
-  const float4 gp = *(const float4*)(gate_partial + (size_t)b * K11_KDA_FUSED + 3 * K11_INNER + (size_t)h * 128 + d);
-  const float gam[4] = {go.x, go.y, go.z, go.w}, gpart[4] = {gp.x, gp.y, gp.z, gp.w};
+  const part_t* gp = gate_partial + (size_t)b * K11_KDA_FUSED + 3 * K11_INNER + (size_t)h * 128 + d;
+  const float gam[4] = {go.x, go.y, go.z, go.w};
+  float gpart[4];
+#ifdef PARTIAL_BF16
+  const uint2 graw = *(const uint2*)gp;
+  const __nv_bfloat162* g2 = (const __nv_bfloat162*)&graw;
+#pragma unroll
+  for (int j = 0; j < 2; ++j) {
+    const float2 f = __bfloat1622float2(g2[j]);
+    gpart[2 * j] = f.x;
+    gpart[2 * j + 1] = f.y;
+  }
+#else
+  const float4 g4 = *(const float4*)gp;
+  gpart[0] = g4.x; gpart[1] = g4.y; gpart[2] = g4.z; gpart[3] = g4.w;
+#endif
   bf16 out[4];
 #pragma unroll
   for (int j = 0; j < 4; ++j) {

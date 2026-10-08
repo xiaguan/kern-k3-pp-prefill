@@ -185,15 +185,14 @@ The files this repository forks from that commit:
 
 | Here | kern | Change |
 |---|---|---|
-| `scripts/gen_stage.py` | `tools/gen_k3.py` | `--layers A:B` stages; the EP1 prefill MoE on the batched GEMMs; `--experts 896`; modules pinned here are taken from `kernels.toml` |
+| `scripts/gen_stage.py` | `tools/gen_k3.py` | `--layers A:B` stages; the EP1 prefill MoE on the batched GEMMs; `--experts 896`; modules pinned here are taken from `kernels.toml`; a chunk's projections land in bf16 straight from cuBLASLt |
 | `scripts/k3_moe_bmm.py` | `tools/k3_moe_bmm.py` | the expert count; FlashInfer routing when one rank holds every expert |
 | `stage/src/main.rs` | (new) | |
 | `source/k3_router_argmax.cu` | `tools/kernels-src/k3_router_argmax.cu` | `-DEXPERTS` (default 224; the 224 build is byte-identical to kern's) |
 | `source/k3_span_state.cu`, `k3_mla_v2.cu`, `k3_prefill.cu`, `copy_rows.cu` | `tools/kernels-src/` | varlen kernels for `--pack` appended; the existing kernels are unchanged |
-| `source/k3_span_gather.cu` | `tools/kernels-src/` | the varlen kernels; a block issues all its rows' loads before the first is used (same values) |
-| `source/k3_kda_out_gate.cu` | `tools/kernels-src/` | a warp per head, the same reduction tree (same values) |
-| `source/k3_moe_prefill.cu` | `tools/kernels-src/` | the quant lands the f32 latent itself; `kern_k3_moe_finalize_rms`, the combine with the latent norm |
-| `source/k3_prefill_glue.cu` | (new) | the residual stream and router top-k laid out for a chunk's rows, the closing landing add fused into the next layer's mix |
+| `source/k3_span_gather.cu` | `tools/kernels-src/` | the varlen kernels; a block issues all its rows' loads before the first is used (same values); `-DPARTIAL_BF16` reads projections landed in bf16 |
+| `source/k3_kda_out_gate.cu` | `tools/kernels-src/` | a warp per head, the same reduction tree (same values); `-DPARTIAL_BF16` reads the gate landed in bf16 |
+| `source/k3_prefill_glue.cu` | (new) | the residual stream, router top-k, MoE combine with the latent norm and SiTU laid out for a chunk's rows; the closing landing add fused into the next layer's mix |
 | `source/flash-kda/` | `tools/flash-kda/` | the `-DKERN_VARLEN` instantiation (see its `PROVENANCE.md`) |
 | `scripts/varlen_abi.py` | (new) | the varlen FlashKDA and batched FMHA launches |
 
@@ -210,7 +209,7 @@ built from this repository:
 - `flashinfer_moe_routing`;
 - `k3_router_argmax+EXPERTS=896`;
 - `k3_prefill_glue` and `k3_prefill_glue+EXPERTS=896`;
-- `k3_span_gather`, `k3_kda_out_gate` and `k3_moe_prefill`.
+- `k3_span_gather`, `k3_kda_out_gate` and their `+PARTIAL_BF16=1` builds.
 
 `scripts/build.py` makes them. Use `build/` as the kern cache, or upload the
 blobs, to run the manifests.
