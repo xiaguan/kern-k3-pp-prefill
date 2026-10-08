@@ -152,3 +152,123 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather(
     }
   }
 }
+
+// `kern_k3_span_gather_varlen`: the same for a packed call, rows
+// [cu_seqlens[j], cu_seqlens[j + 1]) sequence j's, each with its own window
+// (line_index[j]). Rows read only their own sequence's taps; the windows are
+// left untouched here and advanced by `kern_k3_span_window` afterwards, so
+// every block reads the old ones.
+//
+//   kern_k3_span_gather_varlen(partial, cw, kda_base, line_index, line_bytes, wsm_partial,
+//                              span_q, span_k, span_v, span_beta, span_flow,
+//                              const long long* cu_seqlens, int nseq, int span);
+//   grid (INNER/512, 4, ceil(span/8))   block 128
+__device__ __forceinline__ int k9_seq_of(const long long* cu, int nseq, int i) {
+  int j = 0;
+  while (j + 1 < nseq && cu[j + 1] <= i) ++j;
+  return j;
+}
+
+__device__ __forceinline__ bf16* k9_win(void* kda_base, const int* line_index, long long line_bytes, int j, int s) {
+  return (bf16*)((char*)kda_base + (long long)line_index[j] * line_bytes + K9_REC_BYTES + (long long)s * K9_WIN_BYTES);
+}
+
+// x_i of sequence row i (bos the sequence's first row): its window before bos.
+__device__ __forceinline__ void k9_input_seq(const float* __restrict__ partial, const bf16* win, int bos, int s, int c,
+                                             int i, float* x) {
+  if (i < bos) {
+    k9_unpack(*(const uint2*)(win + (size_t)(i - bos + 3) * K9_INNER + c), x);
+  } else {
+    k9_input(partial, win, s, c, i, x);
+  }
+}
+
+extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_varlen(
+    const float* __restrict__ partial,
+    const float* __restrict__ cw,
+    void* __restrict__ kda_base,
+    const int* __restrict__ line_index,
+    long long line_bytes,
+    const float* __restrict__ wsm_partial,
+    bf16* __restrict__ span_q, bf16* __restrict__ span_k, bf16* __restrict__ span_v,
+    bf16* __restrict__ span_beta,
+    bf16* __restrict__ span_flow,
+    const long long* __restrict__ cu_seqlens,
+    int nseq,
+    int span) {
+  const int row0 = blockIdx.z * K9_ROWS;
+  if (blockIdx.y == 3) {
+    const int i = row0 + (threadIdx.x >> 4), k = threadIdx.x & 15;
+    if (i >= span) return;
+    const float* row = wsm_partial + (size_t)i * K9_WSM;
+    for (int h = k; h < HEADS; h += 16) span_beta[(size_t)h * span + i] = __float2bfloat16(row[h]);
+    bf16 f[8];
+#pragma unroll
+    for (int j = 0; j < 8; ++j) f[j] = __float2bfloat16(row[K9_WSM_FA + k * 8 + j]);
+    *(uint4*)(span_flow + (size_t)i * 128 + k * 8) = *(const uint4*)f;
+    return;
+  }
+  const int rows = min(K9_ROWS, span - row0);
+  if (rows <= 0) return;
+  const int s = blockIdx.y;
+  const int c = (int)(blockIdx.x * K9_BLOCK + threadIdx.x) * K9_VEC;
+  bf16* __restrict__ out = s == 0 ? span_q : s == 1 ? span_k : span_v;
+  const float* __restrict__ w = cw + (size_t)s * 4 * K9_INNER + c;
+  const float4 w0 = *(const float4*)(w), w1 = *(const float4*)(w + K9_INNER),
+               w2 = *(const float4*)(w + 2 * K9_INNER), w3 = *(const float4*)(w + 3 * K9_INNER);
+  const float wt[4][K9_VEC] = {{w0.x, w0.y, w0.z, w0.w}, {w1.x, w1.y, w1.z, w1.w},
+                               {w2.x, w2.y, w2.z, w2.w}, {w3.x, w3.y, w3.z, w3.w}};
+  int j = k9_seq_of(cu_seqlens, nseq, row0);
+  int bos = (int)cu_seqlens[j];
+  const bf16* win = k9_win(kda_base, line_index, line_bytes, j, s);
+  float t0[K9_VEC], t1[K9_VEC], t2[K9_VEC], x[K9_VEC];
+  k9_input_seq(partial, win, bos, s, c, row0 - 3, t0);
+  k9_input_seq(partial, win, bos, s, c, row0 - 2, t1);
+  k9_input_seq(partial, win, bos, s, c, row0 - 1, t2);
+  for (int r = 0; r < rows; ++r) {
+    const int i = row0 + r;
+    if (j + 1 < nseq && i == cu_seqlens[j + 1]) {
+      ++j;
+      bos = i;
+      win = k9_win(kda_base, line_index, line_bytes, j, s);
+      k9_input_seq(partial, win, bos, s, c, i - 3, t0);
+      k9_input_seq(partial, win, bos, s, c, i - 2, t1);
+      k9_input_seq(partial, win, bos, s, c, i - 1, t2);
+    }
+    k9_input(partial, win, s, c, i, x);
+    bf16 o[K9_VEC];
+#pragma unroll
+    for (int k = 0; k < K9_VEC; ++k) {
+      const float y = t0[k] * wt[0][k] + t1[k] * wt[1][k] + t2[k] * wt[2][k] + x[k] * wt[3][k];
+      o[k] = __float2bfloat16(k9_silu_bf16(y));
+      t0[k] = t1[k];
+      t1[k] = t2[k];
+      t2[k] = x[k];
+    }
+    *(uint2*)(out + (size_t)i * K9_INNER + c) = *(const uint2*)o;
+  }
+}
+
+// `kern_k3_span_window`: sequence j's window after a packed call, its last
+// three inputs (the old window filling in for a sequence shorter than three).
+// Each thread reads its three values before writing them, and no other
+// thread touches its columns of its sequence's window.
+//
+//   kern_k3_span_window(partial, kda_base, line_index, line_bytes, const long long* cu_seqlens);
+//   grid (INNER/512, 3, nseq)   block 128
+extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_window(
+    const float* __restrict__ partial, void* __restrict__ kda_base, const int* __restrict__ line_index,
+    long long line_bytes, const long long* __restrict__ cu_seqlens) {
+  const int s = blockIdx.y, j = blockIdx.z;
+  const int c = (int)(blockIdx.x * K9_BLOCK + threadIdx.x) * K9_VEC;
+  const int bos = (int)cu_seqlens[j], len = (int)(cu_seqlens[j + 1] - cu_seqlens[j]);
+  if (len <= 0) return;
+  bf16* win = k9_win(kda_base, line_index, line_bytes, j, s);
+  float nt[3][K9_VEC];
+  for (int t = 0; t < 3; ++t) k9_input_seq(partial, win, bos, s, c, bos + len - 3 + t, nt[t]);
+  for (int t = 0; t < 3; ++t) {
+    bf16 o[K9_VEC];
+    k9_pack(nt[t], o);
+    *(uint2*)(win + (size_t)t * K9_INNER + c) = *(const uint2*)o;
+  }
+}
