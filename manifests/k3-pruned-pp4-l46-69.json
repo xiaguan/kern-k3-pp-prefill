@@ -468,22 +468,6 @@
    ],
    "kind": "workspace"
   },
-  "latent": {
-   "dtype": "bf16",
-   "shape": [
-    8192,
-    3584
-   ],
-   "kind": "workspace"
-  },
-  "routed_latent": {
-   "dtype": "bf16",
-   "shape": [
-    8192,
-    3584
-   ],
-   "kind": "workspace"
-  },
   "latent_q": {
    "dtype": "u8",
    "shape": [
@@ -900,7 +884,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -4500,7 +4484,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -8100,7 +8084,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -9908,7 +9892,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -12005,7 +11989,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -15605,7 +15589,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -19205,7 +19189,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -21013,7 +20997,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -23190,7 +23174,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -26790,7 +26774,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -30390,7 +30374,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -32198,7 +32182,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -34375,7 +34359,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -37975,7 +37959,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -41575,7 +41559,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -43383,7 +43367,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -45560,7 +45544,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -49160,7 +49144,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -52760,7 +52744,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -54568,7 +54552,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -56665,7 +56649,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -60265,7 +60249,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -63865,7 +63849,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -65673,7 +65657,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -67850,7 +67834,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -71450,7 +71434,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -75050,7 +75034,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -76858,7 +76842,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -79035,7 +79019,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -82635,7 +82619,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -86235,7 +86219,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -88043,7 +88027,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -90220,7 +90204,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -93820,7 +93804,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -97420,7 +97404,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -99228,7 +99212,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -101325,7 +101309,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -104925,7 +104909,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -108525,7 +108509,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -110333,7 +110317,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -112510,7 +112494,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -116110,7 +116094,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -119710,7 +119694,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -121518,7 +121502,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -123695,7 +123679,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -127295,7 +127279,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -130895,7 +130879,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -132703,7 +132687,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -134880,7 +134864,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -138480,7 +138464,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -142080,7 +142064,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -143888,7 +143872,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -145985,7 +145969,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -149585,7 +149569,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -153185,7 +153169,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -154993,7 +154977,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -157170,7 +157154,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -160770,7 +160754,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -164370,7 +164354,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -166178,7 +166162,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -168355,7 +168339,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -171955,7 +171939,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -175555,7 +175539,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -177363,7 +177347,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -179540,7 +179524,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -183140,7 +183124,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -186740,7 +186724,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -188548,7 +188532,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -190645,7 +190629,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -194245,7 +194229,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -197845,7 +197829,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -199653,7 +199637,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -201830,7 +201814,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -205430,7 +205414,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -209030,7 +209014,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -210838,7 +210822,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -213015,7 +212999,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -216615,7 +216599,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -220215,7 +220199,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -222023,7 +222007,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -224200,7 +224184,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -227800,7 +227784,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -231400,7 +231384,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -233208,7 +233192,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -235305,7 +235289,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -238905,7 +238889,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -242505,7 +242489,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -244313,7 +244297,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -246490,7 +246474,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -250090,7 +250074,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -253690,7 +253674,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -255498,7 +255482,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -257338,8 +257322,8 @@
    "sha256": "d797b1d2edad680ecc0578d4d8a57d5f1a6a364bbb3acd7ecd4d6270c6be4ae0"
   },
   "k3_kda_out_gate": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/740b4ceb2d8de833c2c56d4e09ce565dcddcd54d921e34440e104716865ca9c4",
-   "sha256": "740b4ceb2d8de833c2c56d4e09ce565dcddcd54d921e34440e104716865ca9c4"
+   "source": "hf:Pegainfer/kern-kernels/blobs/837b8261348b9b238eb9cedfce4e176142c62e91be99cc33ad8ac476a6a5f54c",
+   "sha256": "837b8261348b9b238eb9cedfce4e176142c62e91be99cc33ad8ac476a6a5f54c"
   },
   "k3_land": {
    "source": "hf:Pegainfer/kern-kernels/blobs/2cd68c79bf3243f37d2f1406880060f610b4028f9e843bb356ea8ef0a0352fcc",
@@ -257361,21 +257345,17 @@
    "source": "hf:Pegainfer/kern-kernels/blobs/c3c33eaf60000c313ba839258a54b2748e0483439e3f3068fc3dfa84a60adf2c",
    "sha256": "c3c33eaf60000c313ba839258a54b2748e0483439e3f3068fc3dfa84a60adf2c"
   },
+  "k3_prefill_glue": {
+   "source": "hf:Pegainfer/kern-kernels/blobs/77cbc19817b3cb4f4cf7a9c558fb4e9a65a1a9e9b4cb9c77a3ca021ccd0fd5ef",
+   "sha256": "77cbc19817b3cb4f4cf7a9c558fb4e9a65a1a9e9b4cb9c77a3ca021ccd0fd5ef"
+  },
   "k3_residual": {
    "source": "hf:Pegainfer/kern-kernels/blobs/d5d5d1fb3dda907822d99520b611fa77cab05bf11f165a1aa0d5e43d07cca8c8",
    "sha256": "d5d5d1fb3dda907822d99520b611fa77cab05bf11f165a1aa0d5e43d07cca8c8"
   },
-  "k3_residual+LAND_BF16=1": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/1bb60d2f33b04d70d6866b50d12a67340e33cf0f1c555c9da92494dd5c98f254",
-   "sha256": "1bb60d2f33b04d70d6866b50d12a67340e33cf0f1c555c9da92494dd5c98f254"
-  },
-  "k3_router_argmax": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/e3b8395c90e502b7afd4e844a57d060c682c7ab060a361befb9cbf4e61034b5a",
-   "sha256": "e3b8395c90e502b7afd4e844a57d060c682c7ab060a361befb9cbf4e61034b5a"
-  },
   "k3_span_gather": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/55a7dfc9a4a0cef1fb10e4919d49099c6796e25fcfde2e2fb5b3f8ca62c495ad",
-   "sha256": "55a7dfc9a4a0cef1fb10e4919d49099c6796e25fcfde2e2fb5b3f8ca62c495ad"
+   "source": "hf:Pegainfer/kern-kernels/blobs/f9039b0e0aa0ba0140b60f0e0fbde391b6580205607b40fbaf9348057667d652",
+   "sha256": "f9039b0e0aa0ba0140b60f0e0fbde391b6580205607b40fbaf9348057667d652"
   },
   "k3_span_state": {
    "source": "hf:Pegainfer/kern-kernels/blobs/c55c411c7ec3b992b324078683897a8f71f6760ce2e3978730db300c0fa57d7b",
@@ -257458,10 +257438,10 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_residual",
-      "entry": "kern_k3_attnres_rms",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_attnres_rms",
       "block": [
-       1024,
+       224,
        1,
        1
       ],
@@ -257490,10 +257470,10 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_residual+LAND_BF16=1",
-      "entry": "kern_k3_land_add_attnres_rms",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_land_add_attnres_rms",
       "block": [
-       1024,
+       224,
        1,
        1
       ],
@@ -257501,6 +257481,86 @@
        "tokens",
        1,
        1
+      ]
+     }
+    ]
+   }
+  },
+  "land_add2_attnres_rms": {
+   "params": [
+    "in buffer<f32>",
+    "in buffer<f32>",
+    "in buffer<bf16>",
+    "out buffer<bf16>",
+    "in buffer<bf16>",
+    "in buffer<f32>",
+    "in buffer<bf16>",
+    "out buffer<bf16>",
+    "i32",
+    "i32"
+   ],
+   "impl": {
+    "launches": [
+     {
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_land_add2_attnres_rms",
+      "params": [
+       "in buffer<f32>",
+       "in buffer<f32>",
+       "in buffer<bf16>",
+       "out buffer<bf16>",
+       "i32",
+       "in buffer<bf16>",
+       "in buffer<f32>",
+       "in buffer<bf16>",
+       "out buffer<bf16>",
+       "i32",
+       "i32"
+      ],
+      "block": [
+       224,
+       1,
+       1
+      ],
+      "grid": [
+       "tokens",
+       1,
+       1
+      ],
+      "args": [
+       {
+        "param": 0
+       },
+       {
+        "param": 1
+       },
+       {
+        "param": 2
+       },
+       {
+        "param": 3
+       },
+       {
+        "i32": 1
+       },
+       {
+        "param": 4
+       },
+       {
+        "param": 5
+       },
+       {
+        "param": 6
+       },
+       {
+        "param": 7
+       },
+       {
+        "param": 8
+       },
+       {
+        "param": 9
+       }
       ]
      }
     ]
@@ -258636,7 +258696,7 @@
       ],
       "grid": [
        "tokens",
-       96,
+       24,
        1
       ]
      }
@@ -259146,67 +259206,22 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_router_argmax",
-      "entry": "kern_k3_router_topk",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_router_topk",
       "block": [
-       256,
+       128,
        1,
        1
       ],
       "grid": [
-       "tokens",
+       {
+        "ceil_div": [
+         "tokens",
+         4
+        ]
+       },
        1,
        1
-      ]
-     }
-    ]
-   }
-  },
-  "rms": {
-   "params": [
-    "in buffer<bf16>",
-    "in buffer<bf16>",
-    "out buffer<bf16>",
-    "i32"
-   ],
-   "impl": {
-    "launches": [
-     {
-      "module": "k3_land",
-      "entry": "kern_k3_rms",
-      "params": [
-       "in buffer<bf16>",
-       "in buffer<bf16>",
-       "out buffer<bf16>",
-       "i32",
-       "i32"
-      ],
-      "block": [
-       1024,
-       1,
-       1
-      ],
-      "grid": [
-       "tokens",
-       1,
-       1
-      ],
-      "args": [
-       {
-        "param": 0
-       },
-       {
-        "param": 1
-       },
-       {
-        "param": 2
-       },
-       {
-        "i32": 3584
-       },
-       {
-        "param": 3
-       }
       ]
      }
     ]
@@ -259214,7 +259229,7 @@
   },
   "moe_quant": {
    "params": [
-    "in buffer<bf16>",
+    "in buffer<f32>",
     "out buffer<u8>",
     "out buffer<u8>",
     "i32"
@@ -259222,10 +259237,10 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_moe_prefill",
-      "entry": "kern_k3_moe_quant",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_land_quant",
       "params": [
-       "in buffer<bf16>",
+       "in buffer<f32>",
        "out buffer<u8>",
        "out buffer<u8>",
        "i32",
@@ -260095,29 +260110,31 @@
     ]
    }
   },
-  "moe_finalize": {
+  "moe_finalize_rms": {
    "params": [
     "in buffer<bf16>",
     "in buffer<i32>",
     "in buffer<f32>",
+    "in buffer<bf16>",
     "out buffer<bf16>",
     "i32"
    ],
    "impl": {
     "launches": [
      {
-      "module": "k3_moe_prefill",
-      "entry": "kern_k3_moe_finalize",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_finalize_rms",
       "params": [
        "in buffer<bf16>",
        "in buffer<i32>",
        "in buffer<f32>",
+       "in buffer<bf16>",
        "out buffer<bf16>",
        "i32",
        "i32"
       ],
       "block": [
-       256,
+       448,
        1,
        1
       ],
@@ -260148,60 +260165,10 @@
         "param": 4
        },
        {
-        "i32": 3584
-       }
-      ]
-     }
-    ]
-   }
-  },
-  "land_n3584": {
-   "params": [
-    "in buffer<f32>",
-    "out buffer<bf16>",
-    "i32"
-   ],
-   "impl": {
-    "launches": [
-     {
-      "module": "k3_land",
-      "entry": "kern_k3_land",
-      "params": [
-       "in buffer<f32>",
-       "out buffer<bf16>",
-       "i32",
-       "i32",
-       "i32",
-       "i32"
-      ],
-      "block": [
-       1024,
-       1,
-       1
-      ],
-      "grid": [
-       "tokens",
-       4,
-       1
-      ],
-      "args": [
-       {
-        "param": 0
-       },
-       {
-        "param": 1
+        "param": 5
        },
        {
         "i32": 3584
-       },
-       {
-        "i32": 0
-       },
-       {
-        "i32": 3584
-       },
-       {
-        "param": 2
        }
       ]
      }
@@ -260226,7 +260193,7 @@
        "i32"
       ],
       "block": [
-       1024,
+       256,
        1,
        1
       ],
@@ -260436,6 +260403,86 @@
     ]
    }
   },
+  "fill_f32": {
+   "params": [
+    "out buffer<f32>",
+    "f32"
+   ],
+   "impl": {
+    "launches": [
+     {
+      "module": "weight_prep",
+      "entry": "kern_fill_f32",
+      "params": [
+       "out buffer<f32>",
+       "i32",
+       "f32"
+      ],
+      "block": [
+       256,
+       1,
+       1
+      ],
+      "grid": [
+       1,
+       1,
+       1
+      ],
+      "args": [
+       {
+        "param": 0
+       },
+       {
+        "i32": 224
+       },
+       {
+        "param": 1
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "k3_kvb_aug": {
+   "params": [
+    "in buffer<bf16>",
+    "out buffer<bf16>"
+   ],
+   "impl": {
+    "launches": [
+     {
+      "module": "k3_weight_prep",
+      "entry": "kern_k3_kvb_aug",
+      "params": [
+       "in buffer<bf16>",
+       "out buffer<bf16>",
+       "i32"
+      ],
+      "block": [
+       256,
+       1,
+       1
+      ],
+      "grid": [
+       69120,
+       1,
+       1
+      ],
+      "args": [
+       {
+        "param": 0
+       },
+       {
+        "param": 1
+       },
+       {
+        "i32": 17694720
+       }
+      ]
+     }
+    ]
+   }
+  },
   "k3_moe_w_shuffle": {
    "params": [
     "in buffer<u8>",
@@ -260540,86 +260587,6 @@
        },
        {
         "param": 4
-       }
-      ]
-     }
-    ]
-   }
-  },
-  "fill_f32": {
-   "params": [
-    "out buffer<f32>",
-    "f32"
-   ],
-   "impl": {
-    "launches": [
-     {
-      "module": "weight_prep",
-      "entry": "kern_fill_f32",
-      "params": [
-       "out buffer<f32>",
-       "i32",
-       "f32"
-      ],
-      "block": [
-       256,
-       1,
-       1
-      ],
-      "grid": [
-       1,
-       1,
-       1
-      ],
-      "args": [
-       {
-        "param": 0
-       },
-       {
-        "i32": 224
-       },
-       {
-        "param": 1
-       }
-      ]
-     }
-    ]
-   }
-  },
-  "k3_kvb_aug": {
-   "params": [
-    "in buffer<bf16>",
-    "out buffer<bf16>"
-   ],
-   "impl": {
-    "launches": [
-     {
-      "module": "k3_weight_prep",
-      "entry": "kern_k3_kvb_aug",
-      "params": [
-       "in buffer<bf16>",
-       "out buffer<bf16>",
-       "i32"
-      ],
-      "block": [
-       256,
-       1,
-       1
-      ],
-      "grid": [
-       69120,
-       1,
-       1
-      ],
-      "args": [
-       {
-        "param": 0
-       },
-       {
-        "param": 1
-       },
-       {
-        "i32": 17694720
        }
       ]
      }
@@ -261104,26 +261071,11 @@
      ]
     },
     {
-     "label": "l46.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l46.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -261246,7 +261198,7 @@
     },
     {
      "label": "l46.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -261256,21 +261208,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l46.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.46.gamma_lat"
@@ -261380,8 +261317,8 @@
      ]
     },
     {
-     "label": "l46.hidden",
-     "op": "land_add2",
+     "label": "l47.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -261392,18 +261329,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l47.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -261421,9 +261346,6 @@
       },
       {
        "i32": 4
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -261780,26 +261702,11 @@
      ]
     },
     {
-     "label": "l47.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l47.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -261922,7 +261829,7 @@
     },
     {
      "label": "l47.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -261932,21 +261839,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l47.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.47.gamma_lat"
@@ -262491,26 +262383,11 @@
      ]
     },
     {
-     "label": "l48.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l48.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -262633,7 +262510,7 @@
     },
     {
      "label": "l48.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -262643,21 +262520,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l48.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.48.gamma_lat"
@@ -262767,8 +262629,8 @@
      ]
     },
     {
-     "label": "l48.hidden",
-     "op": "land_add2",
+     "label": "l49.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -262779,18 +262641,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l49.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -262808,9 +262658,6 @@
       },
       {
        "i32": 5
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -263202,26 +263049,11 @@
      ]
     },
     {
-     "label": "l49.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l49.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -263344,7 +263176,7 @@
     },
     {
      "label": "l49.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -263354,21 +263186,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l49.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.49.gamma_lat"
@@ -263478,8 +263295,8 @@
      ]
     },
     {
-     "label": "l49.hidden",
-     "op": "land_add2",
+     "label": "l50.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -263490,18 +263307,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l50.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -263519,9 +263324,6 @@
       },
       {
        "i32": 5
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -263913,26 +263715,11 @@
      ]
     },
     {
-     "label": "l50.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l50.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -264055,7 +263842,7 @@
     },
     {
      "label": "l50.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -264065,21 +263852,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l50.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.50.gamma_lat"
@@ -264189,8 +263961,8 @@
      ]
     },
     {
-     "label": "l50.hidden",
-     "op": "land_add2",
+     "label": "l51.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -264201,18 +263973,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l51.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -264230,9 +263990,6 @@
       },
       {
        "i32": 5
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -264589,26 +264346,11 @@
      ]
     },
     {
-     "label": "l51.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l51.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -264731,7 +264473,7 @@
     },
     {
      "label": "l51.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -264741,21 +264483,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l51.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.51.gamma_lat"
@@ -264865,8 +264592,8 @@
      ]
     },
     {
-     "label": "l51.hidden",
-     "op": "land_add2",
+     "label": "l52.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -264877,18 +264604,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l52.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -264906,9 +264621,6 @@
       },
       {
        "i32": 5
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -265300,26 +265012,11 @@
      ]
     },
     {
-     "label": "l52.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l52.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -265442,7 +265139,7 @@
     },
     {
      "label": "l52.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -265452,21 +265149,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l52.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.52.gamma_lat"
@@ -265576,8 +265258,8 @@
      ]
     },
     {
-     "label": "l52.hidden",
-     "op": "land_add2",
+     "label": "l53.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -265588,18 +265270,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l53.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -265617,9 +265287,6 @@
       },
       {
        "i32": 5
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -266011,26 +265678,11 @@
      ]
     },
     {
-     "label": "l53.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l53.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -266153,7 +265805,7 @@
     },
     {
      "label": "l53.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -266163,21 +265815,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l53.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.53.gamma_lat"
@@ -266287,8 +265924,8 @@
      ]
     },
     {
-     "label": "l53.hidden",
-     "op": "land_add2",
+     "label": "l54.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -266299,18 +265936,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l54.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -266328,9 +265953,6 @@
       },
       {
        "i32": 5
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -266722,26 +266344,11 @@
      ]
     },
     {
-     "label": "l54.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l54.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -266864,7 +266471,7 @@
     },
     {
      "label": "l54.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -266874,21 +266481,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l54.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.54.gamma_lat"
@@ -266998,8 +266590,8 @@
      ]
     },
     {
-     "label": "l54.hidden",
-     "op": "land_add2",
+     "label": "l55.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -267010,18 +266602,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l55.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -267039,9 +266619,6 @@
       },
       {
        "i32": 5
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -267398,26 +266975,11 @@
      ]
     },
     {
-     "label": "l55.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l55.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -267540,7 +267102,7 @@
     },
     {
      "label": "l55.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -267550,21 +267112,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l55.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.55.gamma_lat"
@@ -267674,8 +267221,8 @@
      ]
     },
     {
-     "label": "l55.hidden",
-     "op": "land_add2",
+     "label": "l56.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -267686,18 +267233,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l56.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -267715,9 +267250,6 @@
       },
       {
        "i32": 5
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -268109,26 +267641,11 @@
      ]
     },
     {
-     "label": "l56.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l56.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -268251,7 +267768,7 @@
     },
     {
      "label": "l56.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -268261,21 +267778,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l56.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.56.gamma_lat"
@@ -268385,8 +267887,8 @@
      ]
     },
     {
-     "label": "l56.hidden",
-     "op": "land_add2",
+     "label": "l57.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -268397,18 +267899,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l57.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -268426,9 +267916,6 @@
       },
       {
        "i32": 5
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -268820,26 +268307,11 @@
      ]
     },
     {
-     "label": "l57.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l57.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -268962,7 +268434,7 @@
     },
     {
      "label": "l57.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -268972,21 +268444,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l57.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.57.gamma_lat"
@@ -269096,8 +268553,8 @@
      ]
     },
     {
-     "label": "l57.hidden",
-     "op": "land_add2",
+     "label": "l58.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -269108,18 +268565,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l58.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -269137,9 +268582,6 @@
       },
       {
        "i32": 5
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -269531,26 +268973,11 @@
      ]
     },
     {
-     "label": "l58.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l58.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -269673,7 +269100,7 @@
     },
     {
      "label": "l58.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -269683,21 +269110,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l58.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.58.gamma_lat"
@@ -269807,8 +269219,8 @@
      ]
     },
     {
-     "label": "l58.hidden",
-     "op": "land_add2",
+     "label": "l59.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -269819,18 +269231,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l59.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -269848,9 +269248,6 @@
       },
       {
        "i32": 5
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -270207,26 +269604,11 @@
      ]
     },
     {
-     "label": "l59.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l59.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -270349,7 +269731,7 @@
     },
     {
      "label": "l59.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -270359,21 +269741,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l59.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.59.gamma_lat"
@@ -270918,26 +270285,11 @@
      ]
     },
     {
-     "label": "l60.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l60.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -271060,7 +270412,7 @@
     },
     {
      "label": "l60.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -271070,21 +270422,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l60.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.60.gamma_lat"
@@ -271194,8 +270531,8 @@
      ]
     },
     {
-     "label": "l60.hidden",
-     "op": "land_add2",
+     "label": "l61.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -271206,18 +270543,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l61.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -271235,9 +270560,6 @@
       },
       {
        "i32": 6
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -271629,26 +270951,11 @@
      ]
     },
     {
-     "label": "l61.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l61.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -271771,7 +271078,7 @@
     },
     {
      "label": "l61.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -271781,21 +271088,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l61.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.61.gamma_lat"
@@ -271905,8 +271197,8 @@
      ]
     },
     {
-     "label": "l61.hidden",
-     "op": "land_add2",
+     "label": "l62.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -271917,18 +271209,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l62.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -271946,9 +271226,6 @@
       },
       {
        "i32": 6
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -272340,26 +271617,11 @@
      ]
     },
     {
-     "label": "l62.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l62.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -272482,7 +271744,7 @@
     },
     {
      "label": "l62.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -272492,21 +271754,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l62.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.62.gamma_lat"
@@ -272616,8 +271863,8 @@
      ]
     },
     {
-     "label": "l62.hidden",
-     "op": "land_add2",
+     "label": "l63.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -272628,18 +271875,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l63.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -272657,9 +271892,6 @@
       },
       {
        "i32": 6
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -273016,26 +272248,11 @@
      ]
     },
     {
-     "label": "l63.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l63.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -273158,7 +272375,7 @@
     },
     {
      "label": "l63.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -273168,21 +272385,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l63.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.63.gamma_lat"
@@ -273292,8 +272494,8 @@
      ]
     },
     {
-     "label": "l63.hidden",
-     "op": "land_add2",
+     "label": "l64.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -273304,18 +272506,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l64.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -273333,9 +272523,6 @@
       },
       {
        "i32": 6
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -273727,26 +272914,11 @@
      ]
     },
     {
-     "label": "l64.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l64.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -273869,7 +273041,7 @@
     },
     {
      "label": "l64.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -273879,21 +273051,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l64.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.64.gamma_lat"
@@ -274003,8 +273160,8 @@
      ]
     },
     {
-     "label": "l64.hidden",
-     "op": "land_add2",
+     "label": "l65.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -274015,18 +273172,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l65.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -274044,9 +273189,6 @@
       },
       {
        "i32": 6
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -274438,26 +273580,11 @@
      ]
     },
     {
-     "label": "l65.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l65.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -274580,7 +273707,7 @@
     },
     {
      "label": "l65.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -274590,21 +273717,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l65.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.65.gamma_lat"
@@ -274714,8 +273826,8 @@
      ]
     },
     {
-     "label": "l65.hidden",
-     "op": "land_add2",
+     "label": "l66.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -274726,18 +273838,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l66.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -274755,9 +273855,6 @@
       },
       {
        "i32": 6
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -275149,26 +274246,11 @@
      ]
     },
     {
-     "label": "l66.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l66.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -275291,7 +274373,7 @@
     },
     {
      "label": "l66.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -275301,21 +274383,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l66.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.66.gamma_lat"
@@ -275425,8 +274492,8 @@
      ]
     },
     {
-     "label": "l66.hidden",
-     "op": "land_add2",
+     "label": "l67.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -275437,18 +274504,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l67.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -275466,9 +274521,6 @@
       },
       {
        "i32": 6
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -275825,26 +274877,11 @@
      ]
     },
     {
-     "label": "l67.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l67.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -275967,7 +275004,7 @@
     },
     {
      "label": "l67.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -275977,21 +275014,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l67.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.67.gamma_lat"
@@ -276101,8 +275123,8 @@
      ]
     },
     {
-     "label": "l67.hidden",
-     "op": "land_add2",
+     "label": "l68.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -276113,18 +275135,6 @@
       {
        "buf": "prefix2"
       },
-      {
-       "buf": "hidden"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l68.res_in",
-     "op": "attnres_rms",
-     "args": [
       {
        "buf": "hidden"
       },
@@ -276142,9 +275152,6 @@
       },
       {
        "i32": 6
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -276536,26 +275543,11 @@
      ]
     },
     {
-     "label": "l68.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
      "label": "l68.moe_quant",
      "op": "moe_quant",
      "args": [
       {
-       "buf": "latent"
+       "buf": "latent_partial"
       },
       {
        "buf": "latent_q"
@@ -276678,7 +275670,7 @@
     },
     {
      "label": "l68.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -276688,21 +275680,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l68.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.68.gamma_lat"
@@ -276910,7 +275887,2021 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.5",
+     "label": "load.fill_f32.5",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.46.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.6",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.46.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.7",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.47.sw_attn.norm"
+      },
+      {
+       "buf": "layers.47.sw_attn.proj"
+      },
+      {
+       "buf": "layers.47.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.8",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.47.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.47.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.47.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_kvb_aug.9",
+     "op": "k3_kvb_aug",
+     "args": [
+      {
+       "buf": "layers.47.w_kv_b"
+      },
+      {
+       "buf": "layers.47.w_aug"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.10",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.47.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.11",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.47.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.12",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.47.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.13",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.48.sw_attn.norm"
+      },
+      {
+       "buf": "layers.48.sw_attn.proj"
+      },
+      {
+       "buf": "layers.48.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.14",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.48.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.48.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.48.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.15",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.48.wsm.b"
+      },
+      {
+       "buf": "layers.48.wsm.f_a"
+      },
+      {
+       "buf": "layers.48.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.16",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.48.cw.q"
+      },
+      {
+       "buf": "layers.48.cw.k"
+      },
+      {
+       "buf": "layers.48.cw.v"
+      },
+      {
+       "buf": "layers.48.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.17",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.48.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.18",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.48.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.19",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.48.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.20",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.49.sw_attn.norm"
+      },
+      {
+       "buf": "layers.49.sw_attn.proj"
+      },
+      {
+       "buf": "layers.49.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.21",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.49.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.49.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.49.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.22",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.49.wsm.b"
+      },
+      {
+       "buf": "layers.49.wsm.f_a"
+      },
+      {
+       "buf": "layers.49.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.23",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.49.cw.q"
+      },
+      {
+       "buf": "layers.49.cw.k"
+      },
+      {
+       "buf": "layers.49.cw.v"
+      },
+      {
+       "buf": "layers.49.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.24",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.49.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.25",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.49.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.26",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.49.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.27",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.50.sw_attn.norm"
+      },
+      {
+       "buf": "layers.50.sw_attn.proj"
+      },
+      {
+       "buf": "layers.50.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.28",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.50.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.50.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.50.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.29",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.50.wsm.b"
+      },
+      {
+       "buf": "layers.50.wsm.f_a"
+      },
+      {
+       "buf": "layers.50.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.30",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.50.cw.q"
+      },
+      {
+       "buf": "layers.50.cw.k"
+      },
+      {
+       "buf": "layers.50.cw.v"
+      },
+      {
+       "buf": "layers.50.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.31",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.50.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.32",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.50.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.33",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.50.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.34",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.51.sw_attn.norm"
+      },
+      {
+       "buf": "layers.51.sw_attn.proj"
+      },
+      {
+       "buf": "layers.51.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.35",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.51.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.51.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.51.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_kvb_aug.36",
+     "op": "k3_kvb_aug",
+     "args": [
+      {
+       "buf": "layers.51.w_kv_b"
+      },
+      {
+       "buf": "layers.51.w_aug"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.37",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.51.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.38",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.51.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.39",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.51.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.40",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.52.sw_attn.norm"
+      },
+      {
+       "buf": "layers.52.sw_attn.proj"
+      },
+      {
+       "buf": "layers.52.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.41",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.52.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.52.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.52.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.42",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.52.wsm.b"
+      },
+      {
+       "buf": "layers.52.wsm.f_a"
+      },
+      {
+       "buf": "layers.52.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.43",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.52.cw.q"
+      },
+      {
+       "buf": "layers.52.cw.k"
+      },
+      {
+       "buf": "layers.52.cw.v"
+      },
+      {
+       "buf": "layers.52.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.44",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.52.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.45",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.52.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.46",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.52.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.47",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.53.sw_attn.norm"
+      },
+      {
+       "buf": "layers.53.sw_attn.proj"
+      },
+      {
+       "buf": "layers.53.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.48",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.53.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.53.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.53.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.49",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.53.wsm.b"
+      },
+      {
+       "buf": "layers.53.wsm.f_a"
+      },
+      {
+       "buf": "layers.53.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.50",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.53.cw.q"
+      },
+      {
+       "buf": "layers.53.cw.k"
+      },
+      {
+       "buf": "layers.53.cw.v"
+      },
+      {
+       "buf": "layers.53.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.51",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.53.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.52",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.53.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.53",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.53.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.54",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.54.sw_attn.norm"
+      },
+      {
+       "buf": "layers.54.sw_attn.proj"
+      },
+      {
+       "buf": "layers.54.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.55",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.54.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.54.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.54.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.56",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.54.wsm.b"
+      },
+      {
+       "buf": "layers.54.wsm.f_a"
+      },
+      {
+       "buf": "layers.54.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.57",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.54.cw.q"
+      },
+      {
+       "buf": "layers.54.cw.k"
+      },
+      {
+       "buf": "layers.54.cw.v"
+      },
+      {
+       "buf": "layers.54.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.58",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.54.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.59",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.54.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.60",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.54.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.61",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.55.sw_attn.norm"
+      },
+      {
+       "buf": "layers.55.sw_attn.proj"
+      },
+      {
+       "buf": "layers.55.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.62",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.55.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.55.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.55.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_kvb_aug.63",
+     "op": "k3_kvb_aug",
+     "args": [
+      {
+       "buf": "layers.55.w_kv_b"
+      },
+      {
+       "buf": "layers.55.w_aug"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.64",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.55.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.65",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.55.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.66",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.55.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.67",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.56.sw_attn.norm"
+      },
+      {
+       "buf": "layers.56.sw_attn.proj"
+      },
+      {
+       "buf": "layers.56.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.68",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.56.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.56.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.56.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.69",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.56.wsm.b"
+      },
+      {
+       "buf": "layers.56.wsm.f_a"
+      },
+      {
+       "buf": "layers.56.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.70",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.56.cw.q"
+      },
+      {
+       "buf": "layers.56.cw.k"
+      },
+      {
+       "buf": "layers.56.cw.v"
+      },
+      {
+       "buf": "layers.56.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.71",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.56.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.72",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.56.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.73",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.56.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.74",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.57.sw_attn.norm"
+      },
+      {
+       "buf": "layers.57.sw_attn.proj"
+      },
+      {
+       "buf": "layers.57.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.75",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.57.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.57.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.57.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.76",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.57.wsm.b"
+      },
+      {
+       "buf": "layers.57.wsm.f_a"
+      },
+      {
+       "buf": "layers.57.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.77",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.57.cw.q"
+      },
+      {
+       "buf": "layers.57.cw.k"
+      },
+      {
+       "buf": "layers.57.cw.v"
+      },
+      {
+       "buf": "layers.57.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.78",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.57.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.79",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.57.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.80",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.57.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.81",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.58.sw_attn.norm"
+      },
+      {
+       "buf": "layers.58.sw_attn.proj"
+      },
+      {
+       "buf": "layers.58.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.82",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.58.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.58.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.58.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.83",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.58.wsm.b"
+      },
+      {
+       "buf": "layers.58.wsm.f_a"
+      },
+      {
+       "buf": "layers.58.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.84",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.58.cw.q"
+      },
+      {
+       "buf": "layers.58.cw.k"
+      },
+      {
+       "buf": "layers.58.cw.v"
+      },
+      {
+       "buf": "layers.58.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.85",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.58.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.86",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.58.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.87",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.58.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.88",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.59.sw_attn.norm"
+      },
+      {
+       "buf": "layers.59.sw_attn.proj"
+      },
+      {
+       "buf": "layers.59.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.89",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.59.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.59.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.59.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_kvb_aug.90",
+     "op": "k3_kvb_aug",
+     "args": [
+      {
+       "buf": "layers.59.w_kv_b"
+      },
+      {
+       "buf": "layers.59.w_aug"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.91",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.59.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.92",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.59.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.93",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.59.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.94",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.60.sw_attn.norm"
+      },
+      {
+       "buf": "layers.60.sw_attn.proj"
+      },
+      {
+       "buf": "layers.60.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.95",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.60.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.60.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.60.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.96",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.60.wsm.b"
+      },
+      {
+       "buf": "layers.60.wsm.f_a"
+      },
+      {
+       "buf": "layers.60.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.97",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.60.cw.q"
+      },
+      {
+       "buf": "layers.60.cw.k"
+      },
+      {
+       "buf": "layers.60.cw.v"
+      },
+      {
+       "buf": "layers.60.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.98",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.60.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.99",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.60.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.100",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.60.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.101",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.61.sw_attn.norm"
+      },
+      {
+       "buf": "layers.61.sw_attn.proj"
+      },
+      {
+       "buf": "layers.61.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.102",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.61.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.61.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.61.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.103",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.61.wsm.b"
+      },
+      {
+       "buf": "layers.61.wsm.f_a"
+      },
+      {
+       "buf": "layers.61.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.104",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.61.cw.q"
+      },
+      {
+       "buf": "layers.61.cw.k"
+      },
+      {
+       "buf": "layers.61.cw.v"
+      },
+      {
+       "buf": "layers.61.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.105",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.61.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.106",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.61.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.107",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.61.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.108",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.62.sw_attn.norm"
+      },
+      {
+       "buf": "layers.62.sw_attn.proj"
+      },
+      {
+       "buf": "layers.62.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.109",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.62.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.62.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.62.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.110",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.62.wsm.b"
+      },
+      {
+       "buf": "layers.62.wsm.f_a"
+      },
+      {
+       "buf": "layers.62.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.111",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.62.cw.q"
+      },
+      {
+       "buf": "layers.62.cw.k"
+      },
+      {
+       "buf": "layers.62.cw.v"
+      },
+      {
+       "buf": "layers.62.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.112",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.62.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.113",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.62.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.114",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.62.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.115",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.63.sw_attn.norm"
+      },
+      {
+       "buf": "layers.63.sw_attn.proj"
+      },
+      {
+       "buf": "layers.63.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.116",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.63.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.63.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.63.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_kvb_aug.117",
+     "op": "k3_kvb_aug",
+     "args": [
+      {
+       "buf": "layers.63.w_kv_b"
+      },
+      {
+       "buf": "layers.63.w_aug"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.118",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.63.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.119",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.63.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.120",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.63.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.121",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.64.sw_attn.norm"
+      },
+      {
+       "buf": "layers.64.sw_attn.proj"
+      },
+      {
+       "buf": "layers.64.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.122",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.64.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.64.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.64.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.123",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.64.wsm.b"
+      },
+      {
+       "buf": "layers.64.wsm.f_a"
+      },
+      {
+       "buf": "layers.64.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.124",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.64.cw.q"
+      },
+      {
+       "buf": "layers.64.cw.k"
+      },
+      {
+       "buf": "layers.64.cw.v"
+      },
+      {
+       "buf": "layers.64.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.125",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.64.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.126",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.64.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.127",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.64.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.128",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.65.sw_attn.norm"
+      },
+      {
+       "buf": "layers.65.sw_attn.proj"
+      },
+      {
+       "buf": "layers.65.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.129",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.65.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.65.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.65.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.130",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.65.wsm.b"
+      },
+      {
+       "buf": "layers.65.wsm.f_a"
+      },
+      {
+       "buf": "layers.65.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.131",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.65.cw.q"
+      },
+      {
+       "buf": "layers.65.cw.k"
+      },
+      {
+       "buf": "layers.65.cw.v"
+      },
+      {
+       "buf": "layers.65.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.132",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.65.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.133",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.65.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.134",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.65.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.135",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.66.sw_attn.norm"
+      },
+      {
+       "buf": "layers.66.sw_attn.proj"
+      },
+      {
+       "buf": "layers.66.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.136",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.66.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.66.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.66.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.137",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.66.wsm.b"
+      },
+      {
+       "buf": "layers.66.wsm.f_a"
+      },
+      {
+       "buf": "layers.66.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.138",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.66.cw.q"
+      },
+      {
+       "buf": "layers.66.cw.k"
+      },
+      {
+       "buf": "layers.66.cw.v"
+      },
+      {
+       "buf": "layers.66.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.139",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.66.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.140",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.66.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.141",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.66.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.142",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.67.sw_attn.norm"
+      },
+      {
+       "buf": "layers.67.sw_attn.proj"
+      },
+      {
+       "buf": "layers.67.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.143",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.67.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.67.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.67.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_kvb_aug.144",
+     "op": "k3_kvb_aug",
+     "args": [
+      {
+       "buf": "layers.67.w_kv_b"
+      },
+      {
+       "buf": "layers.67.w_aug"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.145",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.67.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.146",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.67.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.147",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.67.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.148",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.68.sw_attn.norm"
+      },
+      {
+       "buf": "layers.68.sw_attn.proj"
+      },
+      {
+       "buf": "layers.68.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.149",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.68.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.68.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.68.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.150",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.68.wsm.b"
+      },
+      {
+       "buf": "layers.68.wsm.f_a"
+      },
+      {
+       "buf": "layers.68.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.151",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.68.cw.q"
+      },
+      {
+       "buf": "layers.68.cw.k"
+      },
+      {
+       "buf": "layers.68.cw.v"
+      },
+      {
+       "buf": "layers.68.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.152",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.68.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.153",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.68.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.154",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.68.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    }
+   ]
+  },
+  "derive": {
+   "calls": [
+    {
+     "label": "load.k3_moe_w_shuffle.0",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -276931,7 +277922,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.6",
+     "label": "load.k3_moe_sf_shuffle.1",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -276952,7 +277943,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.7",
+     "label": "load.k3_moe_w_shuffle.2",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -276973,7 +277964,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.8",
+     "label": "load.k3_moe_sf_shuffle.3",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -276994,82 +277985,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.9",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.46.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.10",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.46.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.11",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.47.sw_attn.norm"
-      },
-      {
-       "buf": "layers.47.sw_attn.proj"
-      },
-      {
-       "buf": "layers.47.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.12",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.47.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.47.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.47.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_kvb_aug.13",
-     "op": "k3_kvb_aug",
-     "args": [
-      {
-       "buf": "layers.47.w_kv_b"
-      },
-      {
-       "buf": "layers.47.w_aug"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.14",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.47.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.15",
+     "label": "load.k3_moe_w_shuffle.4",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -277090,7 +278006,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.16",
+     "label": "load.k3_moe_sf_shuffle.5",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -277111,7 +278027,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.17",
+     "label": "load.k3_moe_w_shuffle.6",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -277132,7 +278048,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.18",
+     "label": "load.k3_moe_sf_shuffle.7",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -277153,103 +278069,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.19",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.47.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.20",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.47.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.21",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.48.sw_attn.norm"
-      },
-      {
-       "buf": "layers.48.sw_attn.proj"
-      },
-      {
-       "buf": "layers.48.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.22",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.48.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.48.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.48.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.23",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.48.wsm.b"
-      },
-      {
-       "buf": "layers.48.wsm.f_a"
-      },
-      {
-       "buf": "layers.48.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.24",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.48.cw.q"
-      },
-      {
-       "buf": "layers.48.cw.k"
-      },
-      {
-       "buf": "layers.48.cw.v"
-      },
-      {
-       "buf": "layers.48.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.25",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.48.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.26",
+     "label": "load.k3_moe_w_shuffle.8",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -277270,7 +278090,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.27",
+     "label": "load.k3_moe_sf_shuffle.9",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -277291,7 +278111,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.28",
+     "label": "load.k3_moe_w_shuffle.10",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -277312,7 +278132,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.29",
+     "label": "load.k3_moe_sf_shuffle.11",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -277333,103 +278153,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.30",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.48.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.31",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.48.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.32",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.49.sw_attn.norm"
-      },
-      {
-       "buf": "layers.49.sw_attn.proj"
-      },
-      {
-       "buf": "layers.49.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.33",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.49.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.49.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.49.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.34",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.49.wsm.b"
-      },
-      {
-       "buf": "layers.49.wsm.f_a"
-      },
-      {
-       "buf": "layers.49.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.35",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.49.cw.q"
-      },
-      {
-       "buf": "layers.49.cw.k"
-      },
-      {
-       "buf": "layers.49.cw.v"
-      },
-      {
-       "buf": "layers.49.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.36",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.49.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.37",
+     "label": "load.k3_moe_w_shuffle.12",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -277450,7 +278174,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.38",
+     "label": "load.k3_moe_sf_shuffle.13",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -277471,7 +278195,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.39",
+     "label": "load.k3_moe_w_shuffle.14",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -277492,7 +278216,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.40",
+     "label": "load.k3_moe_sf_shuffle.15",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -277513,103 +278237,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.41",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.49.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.42",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.49.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.43",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.50.sw_attn.norm"
-      },
-      {
-       "buf": "layers.50.sw_attn.proj"
-      },
-      {
-       "buf": "layers.50.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.44",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.50.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.50.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.50.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.45",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.50.wsm.b"
-      },
-      {
-       "buf": "layers.50.wsm.f_a"
-      },
-      {
-       "buf": "layers.50.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.46",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.50.cw.q"
-      },
-      {
-       "buf": "layers.50.cw.k"
-      },
-      {
-       "buf": "layers.50.cw.v"
-      },
-      {
-       "buf": "layers.50.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.47",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.50.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.48",
+     "label": "load.k3_moe_w_shuffle.16",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -277630,7 +278258,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.49",
+     "label": "load.k3_moe_sf_shuffle.17",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -277651,7 +278279,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.50",
+     "label": "load.k3_moe_w_shuffle.18",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -277672,7 +278300,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.51",
+     "label": "load.k3_moe_sf_shuffle.19",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -277693,82 +278321,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.52",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.50.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.53",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.50.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.54",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.51.sw_attn.norm"
-      },
-      {
-       "buf": "layers.51.sw_attn.proj"
-      },
-      {
-       "buf": "layers.51.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.55",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.51.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.51.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.51.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_kvb_aug.56",
-     "op": "k3_kvb_aug",
-     "args": [
-      {
-       "buf": "layers.51.w_kv_b"
-      },
-      {
-       "buf": "layers.51.w_aug"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.57",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.51.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.58",
+     "label": "load.k3_moe_w_shuffle.20",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -277789,7 +278342,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.59",
+     "label": "load.k3_moe_sf_shuffle.21",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -277810,7 +278363,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.60",
+     "label": "load.k3_moe_w_shuffle.22",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -277831,7 +278384,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.61",
+     "label": "load.k3_moe_sf_shuffle.23",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -277852,103 +278405,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.62",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.51.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.63",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.51.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.64",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.52.sw_attn.norm"
-      },
-      {
-       "buf": "layers.52.sw_attn.proj"
-      },
-      {
-       "buf": "layers.52.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.65",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.52.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.52.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.52.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.66",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.52.wsm.b"
-      },
-      {
-       "buf": "layers.52.wsm.f_a"
-      },
-      {
-       "buf": "layers.52.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.67",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.52.cw.q"
-      },
-      {
-       "buf": "layers.52.cw.k"
-      },
-      {
-       "buf": "layers.52.cw.v"
-      },
-      {
-       "buf": "layers.52.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.68",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.52.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.69",
+     "label": "load.k3_moe_w_shuffle.24",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -277969,7 +278426,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.70",
+     "label": "load.k3_moe_sf_shuffle.25",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -277990,7 +278447,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.71",
+     "label": "load.k3_moe_w_shuffle.26",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -278011,7 +278468,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.72",
+     "label": "load.k3_moe_sf_shuffle.27",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -278032,103 +278489,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.73",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.52.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.74",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.52.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.75",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.53.sw_attn.norm"
-      },
-      {
-       "buf": "layers.53.sw_attn.proj"
-      },
-      {
-       "buf": "layers.53.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.76",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.53.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.53.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.53.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.77",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.53.wsm.b"
-      },
-      {
-       "buf": "layers.53.wsm.f_a"
-      },
-      {
-       "buf": "layers.53.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.78",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.53.cw.q"
-      },
-      {
-       "buf": "layers.53.cw.k"
-      },
-      {
-       "buf": "layers.53.cw.v"
-      },
-      {
-       "buf": "layers.53.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.79",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.53.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.80",
+     "label": "load.k3_moe_w_shuffle.28",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -278149,7 +278510,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.81",
+     "label": "load.k3_moe_sf_shuffle.29",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -278170,7 +278531,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.82",
+     "label": "load.k3_moe_w_shuffle.30",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -278191,7 +278552,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.83",
+     "label": "load.k3_moe_sf_shuffle.31",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -278212,103 +278573,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.84",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.53.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.85",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.53.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.86",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.54.sw_attn.norm"
-      },
-      {
-       "buf": "layers.54.sw_attn.proj"
-      },
-      {
-       "buf": "layers.54.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.87",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.54.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.54.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.54.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.88",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.54.wsm.b"
-      },
-      {
-       "buf": "layers.54.wsm.f_a"
-      },
-      {
-       "buf": "layers.54.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.89",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.54.cw.q"
-      },
-      {
-       "buf": "layers.54.cw.k"
-      },
-      {
-       "buf": "layers.54.cw.v"
-      },
-      {
-       "buf": "layers.54.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.90",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.54.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.91",
+     "label": "load.k3_moe_w_shuffle.32",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -278329,7 +278594,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.92",
+     "label": "load.k3_moe_sf_shuffle.33",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -278350,7 +278615,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.93",
+     "label": "load.k3_moe_w_shuffle.34",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -278371,7 +278636,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.94",
+     "label": "load.k3_moe_sf_shuffle.35",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -278392,82 +278657,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.95",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.54.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.96",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.54.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.97",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.55.sw_attn.norm"
-      },
-      {
-       "buf": "layers.55.sw_attn.proj"
-      },
-      {
-       "buf": "layers.55.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.98",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.55.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.55.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.55.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_kvb_aug.99",
-     "op": "k3_kvb_aug",
-     "args": [
-      {
-       "buf": "layers.55.w_kv_b"
-      },
-      {
-       "buf": "layers.55.w_aug"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.100",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.55.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.101",
+     "label": "load.k3_moe_w_shuffle.36",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -278488,7 +278678,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.102",
+     "label": "load.k3_moe_sf_shuffle.37",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -278509,7 +278699,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.103",
+     "label": "load.k3_moe_w_shuffle.38",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -278530,7 +278720,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.104",
+     "label": "load.k3_moe_sf_shuffle.39",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -278551,103 +278741,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.105",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.55.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.106",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.55.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.107",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.56.sw_attn.norm"
-      },
-      {
-       "buf": "layers.56.sw_attn.proj"
-      },
-      {
-       "buf": "layers.56.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.108",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.56.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.56.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.56.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.109",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.56.wsm.b"
-      },
-      {
-       "buf": "layers.56.wsm.f_a"
-      },
-      {
-       "buf": "layers.56.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.110",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.56.cw.q"
-      },
-      {
-       "buf": "layers.56.cw.k"
-      },
-      {
-       "buf": "layers.56.cw.v"
-      },
-      {
-       "buf": "layers.56.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.111",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.56.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.112",
+     "label": "load.k3_moe_w_shuffle.40",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -278668,7 +278762,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.113",
+     "label": "load.k3_moe_sf_shuffle.41",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -278689,7 +278783,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.114",
+     "label": "load.k3_moe_w_shuffle.42",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -278710,7 +278804,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.115",
+     "label": "load.k3_moe_sf_shuffle.43",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -278731,103 +278825,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.116",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.56.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.117",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.56.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.118",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.57.sw_attn.norm"
-      },
-      {
-       "buf": "layers.57.sw_attn.proj"
-      },
-      {
-       "buf": "layers.57.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.119",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.57.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.57.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.57.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.120",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.57.wsm.b"
-      },
-      {
-       "buf": "layers.57.wsm.f_a"
-      },
-      {
-       "buf": "layers.57.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.121",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.57.cw.q"
-      },
-      {
-       "buf": "layers.57.cw.k"
-      },
-      {
-       "buf": "layers.57.cw.v"
-      },
-      {
-       "buf": "layers.57.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.122",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.57.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.123",
+     "label": "load.k3_moe_w_shuffle.44",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -278848,7 +278846,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.124",
+     "label": "load.k3_moe_sf_shuffle.45",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -278869,7 +278867,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.125",
+     "label": "load.k3_moe_w_shuffle.46",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -278890,7 +278888,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.126",
+     "label": "load.k3_moe_sf_shuffle.47",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -278911,103 +278909,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.127",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.57.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.128",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.57.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.129",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.58.sw_attn.norm"
-      },
-      {
-       "buf": "layers.58.sw_attn.proj"
-      },
-      {
-       "buf": "layers.58.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.130",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.58.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.58.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.58.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.131",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.58.wsm.b"
-      },
-      {
-       "buf": "layers.58.wsm.f_a"
-      },
-      {
-       "buf": "layers.58.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.132",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.58.cw.q"
-      },
-      {
-       "buf": "layers.58.cw.k"
-      },
-      {
-       "buf": "layers.58.cw.v"
-      },
-      {
-       "buf": "layers.58.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.133",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.58.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.134",
+     "label": "load.k3_moe_w_shuffle.48",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279028,7 +278930,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.135",
+     "label": "load.k3_moe_sf_shuffle.49",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279049,7 +278951,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.136",
+     "label": "load.k3_moe_w_shuffle.50",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279070,7 +278972,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.137",
+     "label": "load.k3_moe_sf_shuffle.51",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279091,82 +278993,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.138",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.58.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.139",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.58.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.140",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.59.sw_attn.norm"
-      },
-      {
-       "buf": "layers.59.sw_attn.proj"
-      },
-      {
-       "buf": "layers.59.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.141",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.59.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.59.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.59.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_kvb_aug.142",
-     "op": "k3_kvb_aug",
-     "args": [
-      {
-       "buf": "layers.59.w_kv_b"
-      },
-      {
-       "buf": "layers.59.w_aug"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.143",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.59.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.144",
+     "label": "load.k3_moe_w_shuffle.52",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279187,7 +279014,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.145",
+     "label": "load.k3_moe_sf_shuffle.53",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279208,7 +279035,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.146",
+     "label": "load.k3_moe_w_shuffle.54",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279229,7 +279056,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.147",
+     "label": "load.k3_moe_sf_shuffle.55",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279250,103 +279077,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.148",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.59.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.149",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.59.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.150",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.60.sw_attn.norm"
-      },
-      {
-       "buf": "layers.60.sw_attn.proj"
-      },
-      {
-       "buf": "layers.60.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.151",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.60.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.60.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.60.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.152",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.60.wsm.b"
-      },
-      {
-       "buf": "layers.60.wsm.f_a"
-      },
-      {
-       "buf": "layers.60.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.153",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.60.cw.q"
-      },
-      {
-       "buf": "layers.60.cw.k"
-      },
-      {
-       "buf": "layers.60.cw.v"
-      },
-      {
-       "buf": "layers.60.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.154",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.60.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.155",
+     "label": "load.k3_moe_w_shuffle.56",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279367,7 +279098,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.156",
+     "label": "load.k3_moe_sf_shuffle.57",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279388,7 +279119,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.157",
+     "label": "load.k3_moe_w_shuffle.58",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279409,7 +279140,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.158",
+     "label": "load.k3_moe_sf_shuffle.59",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279430,103 +279161,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.159",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.60.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.160",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.60.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.161",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.61.sw_attn.norm"
-      },
-      {
-       "buf": "layers.61.sw_attn.proj"
-      },
-      {
-       "buf": "layers.61.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.162",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.61.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.61.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.61.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.163",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.61.wsm.b"
-      },
-      {
-       "buf": "layers.61.wsm.f_a"
-      },
-      {
-       "buf": "layers.61.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.164",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.61.cw.q"
-      },
-      {
-       "buf": "layers.61.cw.k"
-      },
-      {
-       "buf": "layers.61.cw.v"
-      },
-      {
-       "buf": "layers.61.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.165",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.61.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.166",
+     "label": "load.k3_moe_w_shuffle.60",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279547,7 +279182,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.167",
+     "label": "load.k3_moe_sf_shuffle.61",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279568,7 +279203,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.168",
+     "label": "load.k3_moe_w_shuffle.62",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279589,7 +279224,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.169",
+     "label": "load.k3_moe_sf_shuffle.63",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279610,103 +279245,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.170",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.61.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.171",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.61.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.172",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.62.sw_attn.norm"
-      },
-      {
-       "buf": "layers.62.sw_attn.proj"
-      },
-      {
-       "buf": "layers.62.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.173",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.62.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.62.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.62.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.174",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.62.wsm.b"
-      },
-      {
-       "buf": "layers.62.wsm.f_a"
-      },
-      {
-       "buf": "layers.62.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.175",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.62.cw.q"
-      },
-      {
-       "buf": "layers.62.cw.k"
-      },
-      {
-       "buf": "layers.62.cw.v"
-      },
-      {
-       "buf": "layers.62.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.176",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.62.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.177",
+     "label": "load.k3_moe_w_shuffle.64",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279727,7 +279266,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.178",
+     "label": "load.k3_moe_sf_shuffle.65",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279748,7 +279287,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.179",
+     "label": "load.k3_moe_w_shuffle.66",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279769,7 +279308,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.180",
+     "label": "load.k3_moe_sf_shuffle.67",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279790,82 +279329,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.181",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.62.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.182",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.62.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.183",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.63.sw_attn.norm"
-      },
-      {
-       "buf": "layers.63.sw_attn.proj"
-      },
-      {
-       "buf": "layers.63.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.184",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.63.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.63.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.63.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_kvb_aug.185",
-     "op": "k3_kvb_aug",
-     "args": [
-      {
-       "buf": "layers.63.w_kv_b"
-      },
-      {
-       "buf": "layers.63.w_aug"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.186",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.63.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.187",
+     "label": "load.k3_moe_w_shuffle.68",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279886,7 +279350,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.188",
+     "label": "load.k3_moe_sf_shuffle.69",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279907,7 +279371,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.189",
+     "label": "load.k3_moe_w_shuffle.70",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -279928,7 +279392,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.190",
+     "label": "load.k3_moe_sf_shuffle.71",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -279949,103 +279413,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.191",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.63.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.192",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.63.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.193",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.64.sw_attn.norm"
-      },
-      {
-       "buf": "layers.64.sw_attn.proj"
-      },
-      {
-       "buf": "layers.64.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.194",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.64.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.64.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.64.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.195",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.64.wsm.b"
-      },
-      {
-       "buf": "layers.64.wsm.f_a"
-      },
-      {
-       "buf": "layers.64.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.196",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.64.cw.q"
-      },
-      {
-       "buf": "layers.64.cw.k"
-      },
-      {
-       "buf": "layers.64.cw.v"
-      },
-      {
-       "buf": "layers.64.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.197",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.64.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.198",
+     "label": "load.k3_moe_w_shuffle.72",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -280066,7 +279434,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.199",
+     "label": "load.k3_moe_sf_shuffle.73",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -280087,7 +279455,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.200",
+     "label": "load.k3_moe_w_shuffle.74",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -280108,7 +279476,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.201",
+     "label": "load.k3_moe_sf_shuffle.75",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -280129,103 +279497,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.202",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.64.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.203",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.64.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.204",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.65.sw_attn.norm"
-      },
-      {
-       "buf": "layers.65.sw_attn.proj"
-      },
-      {
-       "buf": "layers.65.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.205",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.65.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.65.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.65.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.206",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.65.wsm.b"
-      },
-      {
-       "buf": "layers.65.wsm.f_a"
-      },
-      {
-       "buf": "layers.65.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.207",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.65.cw.q"
-      },
-      {
-       "buf": "layers.65.cw.k"
-      },
-      {
-       "buf": "layers.65.cw.v"
-      },
-      {
-       "buf": "layers.65.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.208",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.65.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.209",
+     "label": "load.k3_moe_w_shuffle.76",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -280246,7 +279518,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.210",
+     "label": "load.k3_moe_sf_shuffle.77",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -280267,7 +279539,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.211",
+     "label": "load.k3_moe_w_shuffle.78",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -280288,7 +279560,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.212",
+     "label": "load.k3_moe_sf_shuffle.79",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -280309,103 +279581,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.213",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.65.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.214",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.65.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.215",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.66.sw_attn.norm"
-      },
-      {
-       "buf": "layers.66.sw_attn.proj"
-      },
-      {
-       "buf": "layers.66.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.216",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.66.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.66.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.66.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.217",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.66.wsm.b"
-      },
-      {
-       "buf": "layers.66.wsm.f_a"
-      },
-      {
-       "buf": "layers.66.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.218",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.66.cw.q"
-      },
-      {
-       "buf": "layers.66.cw.k"
-      },
-      {
-       "buf": "layers.66.cw.v"
-      },
-      {
-       "buf": "layers.66.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.219",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.66.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.220",
+     "label": "load.k3_moe_w_shuffle.80",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -280426,7 +279602,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.221",
+     "label": "load.k3_moe_sf_shuffle.81",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -280447,7 +279623,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.222",
+     "label": "load.k3_moe_w_shuffle.82",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -280468,7 +279644,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.223",
+     "label": "load.k3_moe_sf_shuffle.83",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -280489,82 +279665,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.224",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.66.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.225",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.66.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.226",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.67.sw_attn.norm"
-      },
-      {
-       "buf": "layers.67.sw_attn.proj"
-      },
-      {
-       "buf": "layers.67.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.227",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.67.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.67.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.67.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_kvb_aug.228",
-     "op": "k3_kvb_aug",
-     "args": [
-      {
-       "buf": "layers.67.w_kv_b"
-      },
-      {
-       "buf": "layers.67.w_aug"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.229",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.67.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.230",
+     "label": "load.k3_moe_w_shuffle.84",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -280585,7 +279686,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.231",
+     "label": "load.k3_moe_sf_shuffle.85",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -280606,7 +279707,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.232",
+     "label": "load.k3_moe_w_shuffle.86",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -280627,7 +279728,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.233",
+     "label": "load.k3_moe_sf_shuffle.87",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -280648,103 +279749,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.234",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.67.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.235",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.67.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.236",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.68.sw_attn.norm"
-      },
-      {
-       "buf": "layers.68.sw_attn.proj"
-      },
-      {
-       "buf": "layers.68.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.237",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.68.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.68.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.68.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.238",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.68.wsm.b"
-      },
-      {
-       "buf": "layers.68.wsm.f_a"
-      },
-      {
-       "buf": "layers.68.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.239",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.68.cw.q"
-      },
-      {
-       "buf": "layers.68.cw.k"
-      },
-      {
-       "buf": "layers.68.cw.v"
-      },
-      {
-       "buf": "layers.68.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.240",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.68.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.241",
+     "label": "load.k3_moe_w_shuffle.88",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -280765,7 +279770,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.242",
+     "label": "load.k3_moe_sf_shuffle.89",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -280786,7 +279791,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.243",
+     "label": "load.k3_moe_w_shuffle.90",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -280807,7 +279812,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.244",
+     "label": "load.k3_moe_sf_shuffle.91",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -280826,32 +279831,9 @@
        "i32": 0
       }
      ]
-    },
-    {
-     "label": "load.fill_f32.245",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.68.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.246",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.68.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
     }
-   ]
+   ],
+   "derive": true
   }
  }
 }

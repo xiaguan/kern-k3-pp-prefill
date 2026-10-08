@@ -62,10 +62,9 @@ KERN=<kern checkout @ b43bb5a> KERN_INDEX_DIR=<kern-kernels>/index \
   > manifests/k3-pruned-pp4-l23-46.json
 ```
 
-Add `--experts 896` for the full checkpoint. The four manifests were
-generated at the pinned commit; their module hashes have since followed the
-sources, which gained the packed kernels. The generator now emits the
-`derive` program, so its output needs a kern with
+Add `--experts 896` for the full checkpoint. The four manifests are this
+command's output (`--layers` 0:23, 23:46, 46:69 and 69:93). The generator
+emits the `derive` program, so its output needs a kern with
 [#43](https://github.com/pegainfer-project/kern/pull/43).
 
 ### Packed prefill and `kern cut`
@@ -190,7 +189,11 @@ The files this repository forks from that commit:
 | `scripts/k3_moe_bmm.py` | `tools/k3_moe_bmm.py` | the expert count; FlashInfer routing when one rank holds every expert |
 | `stage/src/main.rs` | (new) | |
 | `source/k3_router_argmax.cu` | `tools/kernels-src/k3_router_argmax.cu` | `-DEXPERTS` (default 224; the 224 build is byte-identical to kern's) |
-| `source/k3_span_gather.cu`, `k3_span_state.cu`, `k3_mla_v2.cu`, `k3_prefill.cu`, `copy_rows.cu` | `tools/kernels-src/` | varlen kernels for `--pack` appended; the existing kernels are unchanged |
+| `source/k3_span_state.cu`, `k3_mla_v2.cu`, `k3_prefill.cu`, `copy_rows.cu` | `tools/kernels-src/` | varlen kernels for `--pack` appended; the existing kernels are unchanged |
+| `source/k3_span_gather.cu` | `tools/kernels-src/` | the varlen kernels; a block issues all its rows' loads before the first is used (same values) |
+| `source/k3_kda_out_gate.cu` | `tools/kernels-src/` | a warp per head, the same reduction tree (same values) |
+| `source/k3_moe_prefill.cu` | `tools/kernels-src/` | the quant lands the f32 latent itself; `kern_k3_moe_finalize_rms`, the combine with the latent norm |
+| `source/k3_prefill_glue.cu` | (new) | the residual stream and router top-k laid out for a chunk's rows, the closing landing add fused into the next layer's mix |
 | `source/flash-kda/` | `tools/flash-kda/` | the `-DKERN_VARLEN` instantiation (see its `PROVENANCE.md`) |
 | `scripts/varlen_abi.py` | (new) | the varlen FlashKDA and batched FMHA launches |
 
@@ -202,12 +205,14 @@ The other files in `source/` are copied unchanged from `tools/kernels-src/` and
 cross-checked against the private
 [kern-kernels](https://github.com/xiaguan/kern-kernels) index.
 
-The two cubins that are not in that index or in the HF blob store are both
+The cubins that are not in that index or in the HF blob store are all
 built from this repository:
 - `flashinfer_moe_routing`;
-- `k3_router_argmax+EXPERTS=896`.
+- `k3_router_argmax+EXPERTS=896`;
+- `k3_prefill_glue` and `k3_prefill_glue+EXPERTS=896`;
+- `k3_span_gather`, `k3_kda_out_gate` and `k3_moe_prefill`.
 
-`scripts/build.py` makes both. Use `build/` as the kern cache, or upload the
+`scripts/build.py` makes them. Use `build/` as the kern cache, or upload the
 blobs, to run the manifests.
 
 ## Validation scripts

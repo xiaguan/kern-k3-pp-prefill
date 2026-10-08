@@ -121,14 +121,21 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather(
   const float wt[4][K9_VEC] = {{w0.x, w0.y, w0.z, w0.w}, {w1.x, w1.y, w1.z, w1.w},
                                {w2.x, w2.y, w2.z, w2.w}, {w3.x, w3.y, w3.z, w3.w}};
 
-  // The block's rows plus the three before them, in a sliding register set.
-  float t0[K9_VEC], t1[K9_VEC], t2[K9_VEC], x[K9_VEC];
+  // The block's rows plus the three before them, in a sliding register set;
+  // the rows' loads all issue before the first one is used.
+  float t0[K9_VEC], t1[K9_VEC], t2[K9_VEC];
   k9_input(partial, win, s, c, row0 - 3, t0);
   k9_input(partial, win, s, c, row0 - 2, t1);
   k9_input(partial, win, s, c, row0 - 1, t2);
   const int rows = min(K9_ROWS, span - row0);
-  for (int r = 0; r < rows; ++r) {
-    k9_input(partial, win, s, c, row0 + r, x);
+  float xs[K9_ROWS][K9_VEC];
+#pragma unroll
+  for (int r = 0; r < K9_ROWS; ++r)
+    if (r < rows) k9_input(partial, win, s, c, row0 + r, xs[r]);
+#pragma unroll
+  for (int r = 0; r < K9_ROWS; ++r) {
+    if (r >= rows) break;
+    const float* x = xs[r];
     bf16 o[K9_VEC];
 #pragma unroll
     for (int k = 0; k < K9_VEC; ++k) {
@@ -221,11 +228,16 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_varle
   int j = k9_seq_of(cu_seqlens, nseq, row0);
   int bos = (int)cu_seqlens[j];
   const bf16* win = k9_win(kda_base, line_index, line_bytes, j, s);
-  float t0[K9_VEC], t1[K9_VEC], t2[K9_VEC], x[K9_VEC];
+  float t0[K9_VEC], t1[K9_VEC], t2[K9_VEC], xs[K9_ROWS][K9_VEC];
+#pragma unroll
+  for (int r = 0; r < K9_ROWS; ++r)
+    if (r < rows) k9_input(partial, win, s, c, row0 + r, xs[r]);
   k9_input_seq(partial, win, bos, s, c, row0 - 3, t0);
   k9_input_seq(partial, win, bos, s, c, row0 - 2, t1);
   k9_input_seq(partial, win, bos, s, c, row0 - 1, t2);
-  for (int r = 0; r < rows; ++r) {
+#pragma unroll
+  for (int r = 0; r < K9_ROWS; ++r) {
+    if (r >= rows) break;
     const int i = row0 + r;
     if (j + 1 < nseq && i == cu_seqlens[j + 1]) {
       ++j;
@@ -235,7 +247,7 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_varle
       k9_input_seq(partial, win, bos, s, c, i - 2, t1);
       k9_input_seq(partial, win, bos, s, c, i - 1, t2);
     }
-    k9_input(partial, win, s, c, i, x);
+    const float* x = xs[r];
     bf16 o[K9_VEC];
 #pragma unroll
     for (int k = 0; k < K9_VEC; ++k) {
