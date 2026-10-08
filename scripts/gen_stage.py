@@ -334,6 +334,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     max_pages = -(-max_ctx // PAGE)
     assert not per_layer or chunk, "per-layer states are for the prefill-only manifest"
     page_stride = (1 if per_layer else n_mla) * PAGE * LATENT_ROW  # elements
+    # One rank with one state per layer names no group; otherwise the experts are bound through `ep`.
+    topology = not (per_layer and ranks == 1 and tp == 1)
     kv_of = (lambda i: f"kv.{i}") if per_layer else (lambda i: "kv")
     kda_of = (lambda i: f"kda.{i}") if per_layer else (lambda i: "kda")
     kv0 = kv_of(min(mla_index))
@@ -795,7 +797,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         bound per expert (FC1 as [up; gate]) that the derive program shuffles into the GEMMs' layout while the
         weights load, so device memory never holds both; the gate's alpha and beta."""
         hf = lambda e, t: f"{HF}model.layers.{layer}.block_sparse_moe.experts.{e}.{t}"
-        src = lambda t, j: hf(j, t) if ranks == 1 else {"group": "ep", "tensors": [hf(r * epr + j, t) for r in range(ranks)]}
+        src = lambda t, j: {"group": "ep", "tensors": [hf(r * epr + j, t) for r in range(ranks)]} if topology else hf(j, t)
         raw = {"w13": [seg(src(f"{t}.weight_packed", j)) for j in range(epr) for t in ("w3", "w1")],
                "w13_sf": [seg(src(f"{t}.weight_scale", j)) for j in range(epr) for t in ("w3", "w1")],
                "w2": [seg(src("w2.weight_packed", j)) for j in range(epr)],
@@ -1274,7 +1276,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         "vars": {T: {"max": t_max, "axis": "rows"}, "seqs": {"max": seqs_max, "axis": "groups"},
                  R: {"max": rows_max, "axis": "tray"},
                  **({SP: {"max": span_max}} if span_max else {}), **({CTX: {"max": max_ctx}} if chunk else {})},
-        **({} if per_layer and all(n == 1 for n in groups.values()) else {"topology": {"groups": groups}}),
+        **({"topology": {"groups": groups}} if topology else {}),
         "states": states,
         "buffers": buffers,
         "ops": ops,
