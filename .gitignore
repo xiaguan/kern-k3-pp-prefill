@@ -4,3 +4,4 @@ __pycache__/
 !prebuilt/*.cubin
 !decode/*/prebuilt/*.cubin
 /harness/out/
+/step/target/

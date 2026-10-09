@@ -1,0 +1,23 @@
+[package]
+name = "k3-step"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Run a Kimi-K3 decode manifest teacher-forced on one rank of a replicated batch, on kern"
+publish = false
+
+[[bin]]
+name = "k3_step"
+path = "src/main.rs"
+
+# kern's `pd-agentx` line (schema 7 with state shards, NCCL all-to-all). Until
+# that rev is public, build with the checkout patched in:
+#   cargo build --release --manifest-path step/Cargo.toml \
+#     --config 'patch."https://github.com/pegainfer-project/kern".kern-runtime.path="<kern>/crates/kern-runtime"' \
+#     --config 'patch."https://github.com/pegainfer-project/kern".kern-manifest.path="<kern>/crates/kern-manifest"' \
+#     --config 'patch."https://github.com/pegainfer-project/kern".kern-pool.path="<kern>/crates/kern-pool"'
+[dependencies]
+anyhow = "1"
+kern-manifest = { git = "https://github.com/pegainfer-project/kern", branch = "master" }
+kern-pool = { git = "https://github.com/pegainfer-project/kern", branch = "master" }
+kern-runtime = { git = "https://github.com/pegainfer-project/kern", branch = "master" }

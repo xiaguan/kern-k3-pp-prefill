@@ -161,7 +161,7 @@ the MLA KV dealt by position (`p % 8`), 112 of the 896 experts per rank.
 | `k3_mla_vup_gate+HEADS=12` | W_UV and the gate over the rank's 12 heads |
 | `k3_dcp` | the DCP exchange around one all-to-all: `kern_k3_dcp_fixup` (rows a rank holds no position of), `kern_k3_dcp_pack` (partials into per-peer chunks), `kern_k3_dcp_combine` (the LSE merge of 8 partials into the rank's 12 heads); the chunk layout is in the source's header |
 | `k3_router_argmax+EXPERTS=896` | the router top-k over 896 experts |
-| `flashinfer_moe_routing` | unchanged; `scripts/flashinfer_moe_routing_abi.py` takes `local` and the slice's first expert as an i32 param (`mLocalExpertsStartIdx`) |
+| `flashinfer_moe_routing` | unchanged; `scripts/flashinfer_moe_routing_abi.py` takes `local`, the slice's first expert as an i32 param (`mLocalExpertsStartIdx`) and its stride (`mLocalExpertsStrideLog2`): a rank holds experts `rank, rank + 8, ...`, so the first expert is the rank itself |
 
 The routed MoE runs the same TRT-LLM gen batched-GEMM families at decode
 tiles (`t128x8x256`, `t128x8x512`, `t128x16x256`), the variants SGLang picks
@@ -177,6 +177,23 @@ with a TP8 rank's constants over the 12-head and 896-expert variants, and
 simulated on one GPU, checked against the merge of their partials and
 against unsharded attention) and the routing of a 112-expert slice with
 kern's finalize.
+
+`gen_stage.py --dcp` generates the decode step in this layout (schema 7:
+`kv.<l>` shards by position over `tp`, `kda.<l>` by heads), and the same
+flags at `--tp 1 --ranks 1` its one-GPU oracle with every expert:
+
+```sh
+python3 scripts/gen_stage.py --tp 8 --ranks 8 --dcp --experts 896 --state-per-layer \
+    --max-ctx 327680 --seqs 64 --layers 93 > dcp-l93-tp8.json
+python3 scripts/check_binds.py dcp-l93-tp8.json <checkpoint>   # every rank's slices, no GPU
+python3 scripts/rank_memory.py dcp-l93-tp8.json                # weights, slots, KV tokens per rank
+```
+
+[`step/`](step/) (`k3_step`) runs such a manifest teacher-forced, one
+process per rank, the ranks meeting through an NCCL id file on a shared
+disk; `scripts/compare_steps.py` judges a group's run against the oracle's
+(top-1 flips by the oracle's margin, logits' relative RMS, every rank's
+tokens identical).
 
 ## Build the kernels
 
