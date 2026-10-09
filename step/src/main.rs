@@ -17,6 +17,9 @@
 //! logit and the runner-up's) and `logits.f32` [kept, rows, vocab] of every
 //! `--every`-th step (s + 1 a multiple of it; default 1, every step). Without
 //! `--world` (a group of one, the manifest's own oracle) no NCCL is joined.
+//! `--dump <buffer>` (repeatable) has rank 0 also write `<buffer>.bin`, the
+//! buffer's live rows after every step: a workspace the last layer leaves
+//! behind, such as its routing (`topk_idx`).
 //! A manifest of two layers (`--layers 2`: one KDA layer, one MoE layer) has
 //! no paged state and takes no slots or lengths.
 use std::collections::BTreeMap;
@@ -37,6 +40,7 @@ struct Args {
     tokens: PathBuf,
     rows: usize,
     every: usize,
+    dump: Vec<String>,
     out: PathBuf,
 }
 
@@ -51,6 +55,7 @@ fn args() -> anyhow::Result<Args> {
         tokens: PathBuf::new(),
         rows: 1,
         every: 1,
+        dump: Vec::new(),
         out: PathBuf::new(),
     };
     let mut it = std::env::args().skip(1);
@@ -66,6 +71,7 @@ fn args() -> anyhow::Result<Args> {
             "--tokens" => a.tokens = v()?.into(),
             "--rows" => a.rows = v()?.parse()?,
             "--every" => a.every = v()?.parse()?,
+            "--dump" => a.dump.push(v()?),
             "--out" => a.out = v()?.into(),
             _ => anyhow::bail!("unknown arg {k}"),
         }
@@ -166,6 +172,13 @@ fn main() -> anyhow::Result<()> {
         Dim::Const(n) => n as usize,
         ref d => anyhow::bail!("logits width {d:?}"),
     };
+    let row_bytes = |name: &str| -> anyhow::Result<usize> {
+        let buf = m.buffers.get(name).ok_or_else(|| anyhow::anyhow!("no buffer `{name}` to dump"))?;
+        let consts: Vec<u64> = buf.shape[1..].iter().map(|d| match d { Dim::Const(n) => Ok(*n), d => Err(anyhow::anyhow!("`{name}` dim {d:?}")) }).collect::<anyhow::Result<_>>()?;
+        Ok((consts.iter().product::<u64>() * buf.dtype.bytes()) as usize)
+    };
+    let dumps: Vec<(String, usize)> = a.dump.iter().map(|n| Ok((n.clone(), row_bytes(n)? * b))).collect::<anyhow::Result<_>>()?;
+    let mut dumped = vec![Vec::new(); dumps.len()];
     let (mut next, mut logits, mut top) = (Vec::new(), Vec::new(), Vec::<f64>::new());
     let t1 = Instant::now();
     for s in 0..steps {
@@ -190,6 +203,9 @@ fn main() -> anyhow::Result<()> {
             if (s + 1) % a.every == 0 {
                 logits.extend(l);
             }
+            for ((name, n), d) in dumps.iter().zip(&mut dumped) {
+                d.extend(rt.read_buffer_prefix(name, *n)?);
+            }
         }
     }
     let ms = t1.elapsed().as_secs_f64() * 1e3 / steps as f64;
@@ -198,6 +214,9 @@ fn main() -> anyhow::Result<()> {
     if me == 0 {
         std::fs::write(a.out.join("logits.f32"), &logits)?;
         std::fs::write(a.out.join("top.f64"), le(&top, f64::to_le_bytes))?;
+        for ((name, _), d) in dumps.iter().zip(&dumped) {
+            std::fs::write(a.out.join(format!("{name}.bin")), d)?;
+        }
     }
     println!("rank {me}: {steps} steps x {b} rows, {ms:.1} ms per step (eager, with readback)");
     Ok(())
