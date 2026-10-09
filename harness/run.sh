@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# The D1 acceptance run: every kernel a full-K3 decode at TP8 / EP8 / DCP8
+# adds, against CPU references, at the decode batches, plus the SASS check.
+#
+#   KERN=<kern checkout> CUDA_VISIBLE_DEVICES=<one free GPU> harness/run.sh [sass|tp8|d1 ...]
+#
+# Needs build/ from scripts/build.py (the pinned cubins, hashes checked) and
+# nvcc/cuobjdump (NVCC_BIN, default /usr/local/cuda-13.1/bin). Three parts:
+#   sass  every D1 cubin: no stack, no local memory, no .MULTICAST in its SASS
+#   tp8   kern's tools/k3-harness built with the TP8 rank's model constants
+#         (HEADS 12, EXPERTS 896; its sources untouched, the copy's ref.h
+#         patched) over the HEADS=12 / EXPERTS=896 / INNER=1536 variants
+#   d1    harness/d1.cu: vup_gate at 12 heads, the DCP fixup / pack / combine
+#         over 8 simulated members, FlashInfer routing of a 112-expert slice
+#         with kern's finalize
+# Prints one RESULT line per run and a summary; exit 1 if anything fails.
+set -uo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="$(dirname "$here")"
+bin="${NVCC_BIN:-/usr/local/cuda-13.1/bin}"
+out="${OUT:-$here/out}"
+build="$root/build"
+reps="${REPS:-20}"
+: "${KERN:?set KERN to a kern checkout (for tools/k3-harness)}"
+parts=("$@")
+[ ${#parts[@]} -eq 0 ] && parts=(sass tp8 d1)
+mkdir -p "$out"
+log="$out/run.log"
+: > "$log"
+fail=0
+
+# One run: its RESULT line lands in the log; a harness or driver error (exit 2)
+# leaves none, so it gets one.
+r() {
+  "$@" >> "$log" 2>&1
+  [ $? -eq 2 ] && printf 'RESULT\terror\t%s\tFAIL\n' "$*" >> "$log"
+  return 0
+}
+
+cubin() {
+  local f="$build/$1.cubin"
+  [ -f "$f" ] || { echo "missing $f: run scripts/build.py" >&2; exit 2; }
+  echo "$f"
+}
+
+D1=(k3_conv_silu+HEADS=12 k3_kda_core+HEADS=12 k3_kda_out_gate+HEADS=12 k3_mla_vup_gate+HEADS=12
+    k3_mla_prep+INNER=1536+MLA_FUSED=3648 k3_dcp k3_router_argmax+EXPERTS=896)
+
+sass() {
+  for k in "${D1[@]}"; do
+    local f; f="$(cubin "$k")"
+    local res; res="$("$bin/cuobjdump" -res-usage "$f" | grep -o 'Function [^:]*:\|STACK:[0-9]*\|LOCAL:[0-9]*' | paste -sd' ')"
+    local mc; mc="$("$bin/cuobjdump" -sass "$f" | grep -c MULTICAST)"
+    local ok=PASS
+    echo "$res" | grep -q 'STACK:[1-9]\|LOCAL:[1-9]' && ok=FAIL
+    [ "$mc" -ne 0 ] && ok=FAIL
+    printf 'RESULT\tsass\t%s\t%s\tmulticast=%s\t%s\n' "$k" "$res" "$mc" "$ok" >> "$log"
+    [ "$ok" = PASS ] || fail=1
+  done
+}
+
+tp8() {
+  local h="$out/k3-harness-tp8"
+  mkdir -p "$h"
+  cp "$KERN/tools/k3-harness/harness.cu" "$h/"
+  sed -e 's/^  HEADS = 96,/  HEADS = 12,/' -e 's/^  EXPERTS = 224,/  EXPERTS = 896,/' \
+      -e 's/^static const long long REC_BYTES = 6291456LL;/static const long long REC_BYTES = (long long)HEADS * 128 * 128 * 4;/' \
+      "$KERN/tools/k3-harness/ref.h" > "$h/ref.h"
+  [ "$(grep -c '^  HEADS = 12,\|^  EXPERTS = 896,\|REC_BYTES = (long long)HEADS' "$h/ref.h")" -eq 3 ] \
+    || { echo "ref.h no longer has the constants this patch rewrites" >&2; exit 2; }
+  "$bin/nvcc" -O2 -std=c++17 -arch=sm_103a "$h/harness.cu" -o "$h/harness" -lcuda || exit 2
+  local run=(r "$h/harness" --reps "$reps")
+  for B in 1 2 8 64; do
+    "${run[@]}" --kernel conv_silu --cubin "$(cubin k3_conv_silu+HEADS=12)" --B "$B" --grid "$B,3,3" --block 128,1,1
+    "${run[@]}" --kernel kda_core --cubin "$(cubin k3_kda_core+HEADS=12)" --B "$B"
+    "${run[@]}" --kernel kda_out_gate --cubin "$(cubin k3_kda_out_gate+HEADS=12)" --B "$B" --grid "$B,3,1"
+    "${run[@]}" --kernel mla_prep --cubin "$(cubin k3_mla_prep+INNER=1536+MLA_FUSED=3648)" --B "$B"
+    "${run[@]}" --kernel mla_prep --cubin "$(cubin k3_mla_prep+INNER=1536+MLA_FUSED=3648)" --B "$B" \
+      --grid "$B,3,1" --block 512,1,1 --nmla 2 --layer 1
+    "${run[@]}" --kernel router_topk --cubin "$(cubin k3_router_argmax+EXPERTS=896)" --B "$B"
+  done
+}
+
+d1() {
+  "$bin/nvcc" -O2 -std=c++17 -arch=sm_103a "$here/d1.cu" -o "$out/d1" -lcuda || exit 2
+  local run=(r "$out/d1" --reps "$reps")
+  for B in 1 2 8 48 64; do
+    "${run[@]}" --kernel vup_gate --cubin "$(cubin k3_mla_vup_gate+HEADS=12)" --heads 12 --B "$B"
+    for ctx in 1 7 64 515 2048; do
+      "${run[@]}" --kernel dcp --cubin "$(cubin k3_dcp)" --B "$B" --ctx "$ctx"
+    done
+  done
+  for T in 1 8 48 64; do
+    for rank in 0 3 7; do
+      for tile in 8 16; do
+        "${run[@]}" --kernel routing --cubin "$(cubin flashinfer_moe_routing)" --cubin2 "$(cubin k3_moe_prefill)" \
+          --B "$T" --rank "$rank" --tile "$tile"
+      done
+    done
+  done
+}
+
+for p in "${parts[@]}"; do "$p"; done
+grep -h '^RESULT' "$log" | sed 's/^RESULT\t//' | column -t -s $'\t'
+grep -q '^RESULT.*FAIL\|CUDA error\|has no entry' "$log" && fail=1
+echo
+[ $fail -eq 0 ] && echo "all runs PASS ($log)" || echo "FAILURES, see $log"
+exit $fail

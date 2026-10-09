@@ -147,6 +147,37 @@ experts as `source` tensors and shuffles them in a `derive` program, which
 kern runs while the weights load
 ([pegainfer-project/kern#43](https://github.com/pegainfer-project/kern/pull/43)).
 
+## Decode at TP8 / EP8 / DCP8
+
+The kernels a full-K3 decode needs in SGLang's layout
+([`decode/sglang-tp8-dcp8-ep8/`](decode/sglang-tp8-dcp8-ep8/)): the hidden
+replicated on 8 GPUs, KDA and the MLA o side split by head (12 per rank),
+the MLA KV dealt by position (`p % 8`), 112 of the 896 experts per rank.
+
+| Module | What it is |
+|---|---|
+| `k3_conv_silu+HEADS=12`, `k3_kda_core+HEADS=12`, `k3_kda_out_gate+HEADS=12` | the KDA kernels over a rank's 12 heads |
+| `k3_mla_prep+INNER=1536+MLA_FUSED=3648` | the MLA prep with the gate of the rank's 12 heads |
+| `k3_mla_vup_gate+HEADS=12` | W_UV and the gate over the rank's 12 heads |
+| `k3_dcp` | the DCP exchange around one all-to-all: `kern_k3_dcp_fixup` (rows a rank holds no position of), `kern_k3_dcp_pack` (partials into per-peer chunks), `kern_k3_dcp_combine` (the LSE merge of 8 partials into the rank's 12 heads); the chunk layout is in the source's header |
+| `k3_router_argmax+EXPERTS=896` | the router top-k over 896 experts |
+| `flashinfer_moe_routing` | unchanged; `scripts/flashinfer_moe_routing_abi.py` takes `local` and the slice's first expert as an i32 param (`mLocalExpertsStartIdx`) |
+
+The routed MoE runs the same TRT-LLM gen batched-GEMM families at decode
+tiles (`t128x8x256`, `t128x8x512`, `t128x16x256`), the variants SGLang picks
+at 1, 8 and 48 sequences. They are in the kern-kernels index already
+(flashinfer-cubin 0.6.18; SGLang loads the same-named 0.7.0.post1 builds).
+`scripts/check_decode_bmm.py` replays kern's port of their parameter block
+against every `bmm_*` launch of the captured graphs.
+
+[`harness/run.sh`](harness/run.sh) is the acceptance run: the SASS check
+(no stack, no local memory, no `.MULTICAST`), kern's `tools/k3-harness` built
+with a TP8 rank's constants over the 12-head and 896-expert variants, and
+[`harness/d1.cu`](harness/d1.cu) over `vup_gate`, the DCP kernels (8 members
+simulated on one GPU, checked against the merge of their partials and
+against unsharded attention) and the routing of a 112-expert slice with
+kern's finalize.
+
 ## Build the kernels
 
 Python 3.11+ and CUDA 13.0 nvcc (V13.0.88, `cuda_13.0.r13.0/compiler.36424714_0`)
@@ -196,6 +227,8 @@ The files this repository forks from that commit:
 | `source/k3_span_gather.cu` | `tools/kernels-src/` | the varlen kernels; a block issues all its rows' loads before the first is used (same values); `-DPARTIAL_BF16` reads projections landed in bf16 |
 | `source/k3_kda_out_gate.cu` | `tools/kernels-src/` | a warp per head, the same reduction tree (same values); `-DPARTIAL_BF16` reads the gate landed in bf16 |
 | `source/k3_prefill_glue.cu` | (new) | the residual stream, router top-k, MoE combine with the latent norm and SiTU laid out for a chunk's rows; the closing landing add fused into the next layer's mix |
+| `source/k3_mla_vup_gate.cu` | `tools/kernels-src/` | `-DHEADS` (default 96; the 96 build is byte-identical to kern's) |
+| `source/k3_dcp.cu` | (new) | the DCP fixup, pack and combine |
 | `source/flash-kda/` | `tools/flash-kda/` | the `-DKERN_VARLEN` instantiation (see its `PROVENANCE.md`) |
 | `scripts/varlen_abi.py` | (new) | the varlen FlashKDA and batched FMHA launches |
 
@@ -212,7 +245,10 @@ built from this repository:
 - `flashinfer_moe_routing`;
 - `k3_router_argmax+EXPERTS=896`;
 - `k3_prefill_glue` and `k3_prefill_glue+EXPERTS=896`;
-- `k3_span_gather`, `k3_kda_out_gate` and their `+PARTIAL_BF16=1` builds.
+- `k3_span_gather`, `k3_kda_out_gate` and their `+PARTIAL_BF16=1` builds;
+- the TP8 decode's `+HEADS=12` builds of `k3_conv_silu`, `k3_kda_core`,
+  `k3_kda_out_gate` and `k3_mla_vup_gate`,
+  `k3_mla_prep+INNER=1536+MLA_FUSED=3648` and `k3_dcp`.
 
 `scripts/build.py` makes them. Use `build/` as the kern cache, or upload the
 blobs, to run the manifests.
