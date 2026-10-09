@@ -28,6 +28,9 @@ TP4/EP4 tray prefill.
   kern is a git dependency pinned to the same commit.
 - [`validation/`](validation/): the scripts that checked the stages against
   SGLang PP4.
+- [`decode/sglang-tp8-dcp8-ep8/`](decode/sglang-tp8-dcp8-ep8/): SGLang's full-K3
+  decode CUDA graphs at TP8 / DCP8 / EP8 (1, 8 and 48 sequences), captured
+  launch by launch, with the modules, their origins and licenses.
 
 ## A stage
 

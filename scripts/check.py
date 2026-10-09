@@ -46,8 +46,27 @@ def main():
                 assert call["op"] in manifest["ops"], call["op"]
         if not errors:
             print(f"{path.name}: {len(modules)} modules, source links, references and cubin checks OK")
+    for table in sorted((ROOT / "decode").glob("*/kernels.toml")):
+        check_capture(table, errors)
     if errors:
         raise SystemExit("\n".join(errors))
+
+
+def check_capture(table, errors):
+    """A captured set: every prebuilt cubin matches its hash, every module is either here or says why not."""
+    here = table.parent
+    kernels = tomllib.loads(table.read_text())["kernels"]
+    pinned = set()
+    for name, kernel in kernels.items():
+        assert re.fullmatch(r"[0-9a-f]{64}", kernel["sha256"]), name
+        assert ("prebuilt" in kernel) != ("not_included" in kernel), name
+        assert kernel["symbols"], name
+        if "prebuilt" in kernel:
+            check_cubin(here / kernel["prebuilt"], kernel["sha256"], errors)
+            pinned.add(kernel["prebuilt"])
+    stray = {f"prebuilt/{p.name}" for p in (here / "prebuilt").glob("*.cubin")} - pinned
+    errors += [f"{here.name}: {p} is in no kernels.toml entry" for p in sorted(stray)]
+    print(f"{here.name}: {len(kernels)} modules, {len(pinned)} prebuilt, hashes OK")
 
 
 if __name__ == "__main__":
