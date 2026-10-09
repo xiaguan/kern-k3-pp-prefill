@@ -9,7 +9,7 @@ prebuilt = "prebuilt/bmm_MxE4m3_MxE2m1MxE4m3_Fp32_Ab32_Bb32_Cb32_t128x128x256u2_
 upstream = "flashinfer-cubin 0.6.18, cubins/8ec29a98612c3670f9f28825d1ed19f09496073b/batched_gemm-fa419f4-31ee4e5, TLLM_GEN_EXPORT_VERSION 7.0.4.0.4.0"
 
 [kernels."copy_rows"]
-sha256 = "f301274a5957faac2f0891ea9d6e80e0dabdb56ee4c14c3795e836f6bf31fb54"
+sha256 = "9de645ab4053412ee0832c633510308f4cd3c3fa5d25812924d9a799689f5fc9"
 source = "source/copy_rows.cu"
 
 [kernels."embedding"]
@@ -21,6 +21,13 @@ sha256 = "34b83d875a418f63d14daf73984c1b8de0d1616250915a7d7e4810f327ce3617"
 prebuilt = "prebuilt/flash_kda_d128.cubin"
 source = "source/flash-kda/kern_flash_kda.cu"
 build = "source/flash-kda/build.sh"
+
+[kernels."flash_kda_d128_varlen"]
+sha256 = "751d1f12b73863328877fa69595a8ac4436b985905460f374ab34d6a672c5575"
+prebuilt = "prebuilt/flash_kda_d128_varlen.cubin"
+source = "source/flash-kda/kern_flash_kda.cu"
+build = "source/flash-kda/build.sh"
+defines = { KERN_VARLEN = 1 }
 
 [kernels."flashinfer_moe_routing"]
 sha256 = "d797b1d2edad680ecc0578d4d8a57d5f1a6a364bbb3acd7ecd4d6270c6be4ae0"
@@ -41,7 +48,7 @@ sha256 = "2b244a6333a73248b64291e27cd0d5d3198a5ce5e2d275c6c819a2183d468eb5"
 source = "source/k3_mla_prep.cu"
 
 [kernels."k3_mla_v2"]
-sha256 = "436c9ebb766141276fd52d431f238f3f5d92ed1d9359d39372208c2c72503a16"
+sha256 = "63caf8c109f83a79d622ffca2f05174472e628df858cc3823d4e86d88c4c3608"
 source = "source/k3_mla_v2.cu"
 
 [kernels."k3_moe_prefill"]
@@ -49,7 +56,7 @@ sha256 = "6b4d144e735a4b08d29bf8d6e302107a4d1396a6967b0b6d342fe263ff6c8bca"
 source = "source/k3_moe_prefill.cu"
 
 [kernels."k3_prefill"]
-sha256 = "eac5d5cef8d504f7141281177fb934b5df522a963cc18df0ffa4f7a662d7817c"
+sha256 = "c3c33eaf60000c313ba839258a54b2748e0483439e3f3068fc3dfa84a60adf2c"
 source = "source/k3_prefill.cu"
 
 [kernels."k3_residual"]
@@ -71,11 +78,11 @@ source = "source/k3_router_argmax.cu"
 defines = { EXPERTS = 896 }
 
 [kernels."k3_span_gather"]
-sha256 = "ad6dd834a1778b1d48674f587df9f3728b4bcb3544dee9389df8d401bfa5a3fa"
+sha256 = "55a7dfc9a4a0cef1fb10e4919d49099c6796e25fcfde2e2fb5b3f8ca62c495ad"
 source = "source/k3_span_gather.cu"
 
 [kernels."k3_span_state"]
-sha256 = "a1b9e40e420f4bcd4cd542006dd171dbcde299d6912b3a1b9ff5b04d8c171ffd"
+sha256 = "c55c411c7ec3b992b324078683897a8f71f6760ce2e3978730db300c0fa57d7b"
 source = "source/k3_span_state.cu"
 
 [kernels."k3_weight_prep"]

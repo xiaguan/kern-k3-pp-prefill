@@ -27,3 +27,19 @@ extern "C" __global__ __launch_bounds__(128) void kern_k3_span_state(
     b[j] = rec[j];
   }
 }
+
+// `kern_k3_span_state_varlen`: the same for a packed call, sequence z's line
+// (line_index[z]) against block z of `buf` ([nseq][HEADS][128][128]).
+//   grid (HEADS, 32, nseq)   block 128
+extern "C" __global__ __launch_bounds__(128) void kern_k3_span_state_varlen(
+    void* __restrict__ kda_base, const int* __restrict__ line_index, long long line_bytes, float* __restrict__ buf,
+    int to_line) {
+  float4* rec = (float4*)((char*)kda_base + (long long)line_index[blockIdx.z] * line_bytes) + (size_t)blockIdx.x * 4096;
+  float4* b = (float4*)buf + ((size_t)blockIdx.z * HEADS + blockIdx.x) * 4096;
+  const int j = blockIdx.y * 128 + threadIdx.x;
+  if (to_line) {
+    rec[j] = b[j];
+  } else {
+    b[j] = rec[j];
+  }
+}

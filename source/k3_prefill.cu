@@ -58,3 +58,25 @@ extern "C" __global__ void kern_k3_fmha_lens(const int* __restrict__ seq_lens, i
   lens[6] = 0;
   lens[7] = 0;
 }
+
+// `kern_k3_fmha_lens_varlen`: the FMHA's tables for a packed call of `n`
+// sequences, three rows of `ns` words: seq_lens_kv, cum_seq_lens_q (the
+// call's cu_seqlens) and cum_seq_lens_kv, the sequences' expanded rows back
+// to back. The kernel aligns its causal mask to cum_kv's spans, so a padded
+// span would show a sequence zero keys; the tile past a sequence's end reads
+// the next one's real rows, masked, and past the last the gather's zeros.
+//   grid (1, 1, 1)   block (32, 1, 1)
+extern "C" __global__ void kern_k3_fmha_lens_varlen(const int* __restrict__ seq_lens,
+                                                    const long long* __restrict__ cu_q, int* __restrict__ lens, int n,
+                                                    int ns) {
+  if (threadIdx.x != 0) return;
+  int kv = 0;
+  for (int j = 0; j < n; ++j) {
+    lens[j] = seq_lens[j];
+    lens[ns + j] = (int)cu_q[j];
+    lens[2 * ns + j] = kv;
+    kv += seq_lens[j];
+  }
+  lens[ns + n] = (int)cu_q[n];
+  lens[2 * ns + n] = kv;
+}

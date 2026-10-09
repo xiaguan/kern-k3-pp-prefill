@@ -43,3 +43,13 @@ extern "C" __global__ void kern_own_rows(
   uint4* d = reinterpret_cast<uint4*>(static_cast<char*>(dst) + (size_t)j * row_bytes);
   for (int p = threadIdx.x; p < row_bytes / 16; p += blockDim.x) d[p] = s[p];
 }
+
+// kern_last_rows_bf16: dst[j, :width] = src[cu_seqlens[j + 1] - 1, :width],
+// grid.x = sequences: each sequence's last row of a packed call.
+extern "C" __global__ void kern_last_rows_bf16(
+    __nv_bfloat16* __restrict__ dst, const __nv_bfloat16* __restrict__ src, const long long* __restrict__ cu_seqlens,
+    int src_stride, int width) {
+  const __nv_bfloat16* s = src + (cu_seqlens[blockIdx.x + 1] - 1) * src_stride;
+  __nv_bfloat16* d = dst + (long long)blockIdx.x * width;
+  for (int j = threadIdx.x; j < width; j += blockDim.x) d[j] = s[j];
+}

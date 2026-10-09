@@ -227,5 +227,10 @@ void launch_fwd(
 
 // kern trim (see ../../PROVENANCE.md): upstream instantiates 14 variants
 // here; kern launches one — D=128, f32 state carried in and out, non-varlen
-// (one span per launch). Everything above this line is upstream verbatim.
+// (one span per launch), or with -DKERN_VARLEN the varlen one (sequences split by
+// cu_seqlens). Everything above this line is upstream verbatim.
+#ifdef KERN_VARLEN
+INSTANTIATE_LAUNCH_FWD(128, true, true, true, true)
+#else
 INSTANTIATE_LAUNCH_FWD(128, true, true, true, false)
+#endif
