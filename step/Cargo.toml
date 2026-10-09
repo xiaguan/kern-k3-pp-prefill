@@ -18,6 +18,7 @@ path = "src/main.rs"
 #     --config 'patch."https://github.com/pegainfer-project/kern".kern-pool.path="<kern>/crates/kern-pool"'
 [dependencies]
 anyhow = "1"
+cudarc = { version = "=0.19.7", features = ["cuda-13000", "f16", "nccl"] }
 kern-manifest = { git = "https://github.com/pegainfer-project/kern", branch = "master" }
 kern-pool = { git = "https://github.com/pegainfer-project/kern", branch = "master" }
 kern-runtime = { git = "https://github.com/pegainfer-project/kern", branch = "master" }

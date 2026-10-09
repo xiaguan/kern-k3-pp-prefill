@@ -21,14 +21,26 @@
 //! buffer's live rows after every step: a workspace the last layer leaves
 //! behind, such as its routing (`topk_idx`).
 //! A manifest of two layers (`--layers 2`: one KDA layer, one MoE layer) has
-//! no paged state and takes no slots or lengths.
+//! no paged state and takes no slots or lengths. `--graph` replays the
+//! decode program's CUDA graph (one per row count) instead of launching it.
+//!
+//! `--ctx N,... --bench 16,32,48,64` measures instead: every row holds N
+//! positions of whatever the pages hold (finite garbage: the attention reads
+//! it, nobody checks it), every step feeds each row a fresh pseudo-random
+//! token, and each row count's graph is replayed `--iters` times after
+//! `--warmup`. Each step is timed from the token write to the readback of
+//! `next_token`; `bench.r<rank>.json` holds every row count's median, p10 and
+//! p90, plus the back-to-back time of `--iters` replays (fresh tokens each) with one sync,
+//! started right after a synchronous step so the ranks start together.
+//! `--profile R@N,...` brackets three replays at R rows and context N with
+//! cuProfilerStart/Stop (nsys `--capture-range=cudaProfilerApi`).
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use kern_manifest::types::Dim;
+use kern_manifest::types::{BufferKind, Dim};
 use kern_pool::Interleave;
-use kern_runtime::{Capacity, NcclId, Runtime, Topology};
+use kern_runtime::{Capacity, NcclId, PeerHandle, Runtime, Topology};
 
 struct Args {
     manifest: PathBuf,
@@ -42,6 +54,12 @@ struct Args {
     every: usize,
     dump: Vec<String>,
     out: PathBuf,
+    graph: bool,
+    ctx: Vec<u64>,
+    bench: Vec<usize>,
+    warmup: usize,
+    iters: usize,
+    profile: Vec<(usize, u64)>,
 }
 
 fn args() -> anyhow::Result<Args> {
@@ -57,6 +75,12 @@ fn args() -> anyhow::Result<Args> {
         every: 1,
         dump: Vec::new(),
         out: PathBuf::new(),
+        graph: false,
+        ctx: Vec::new(),
+        bench: Vec::new(),
+        warmup: 5,
+        iters: 50,
+        profile: Vec::new(),
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -73,6 +97,21 @@ fn args() -> anyhow::Result<Args> {
             "--every" => a.every = v()?.parse()?,
             "--dump" => a.dump.push(v()?),
             "--out" => a.out = v()?.into(),
+            "--graph" => a.graph = true,
+            "--eager" => a.graph = false,
+            "--ctx" => a.ctx = v()?.split(',').map(str::parse).collect::<Result<_, _>>()?,
+            "--bench" => a.bench = v()?.split(',').map(str::parse).collect::<Result<_, _>>()?,
+            "--warmup" => a.warmup = v()?.parse()?,
+            "--iters" => a.iters = v()?.parse()?,
+            "--profile" => {
+                a.profile = v()?
+                    .split(',')
+                    .map(|w| {
+                        let (r, c) = w.split_once('@').ok_or_else(|| anyhow::anyhow!("--profile takes rows@ctx,..."))?;
+                        Ok((r.parse()?, c.parse()?))
+                    })
+                    .collect::<anyhow::Result<_>>()?
+            }
             _ => anyhow::bail!("unknown arg {k}"),
         }
     }
@@ -109,13 +148,59 @@ fn nccl_id(path: &Path, rank: u64) -> anyhow::Result<NcclId> {
     }
 }
 
+/// Every member's handles of the buffers its peers map, through files beside the NCCL id.
+fn handles(path: &Path, rank: u64, world: u64, own: &BTreeMap<String, PeerHandle>) -> anyhow::Result<Vec<BTreeMap<String, PeerHandle>>> {
+    let file = |r: u64| path.with_extension(format!("h{r}"));
+    let mut bytes = Vec::new();
+    for (n, h) in own {
+        let h = h.to_bytes().ok_or_else(|| anyhow::anyhow!("`{n}` has no fabric handle to share"))?;
+        bytes.extend((n.len() as u32).to_le_bytes());
+        bytes.extend(n.as_bytes());
+        bytes.extend(h);
+    }
+    let tmp = path.with_extension(format!("h{rank}-tmp"));
+    std::fs::write(&tmp, &bytes)?;
+    std::fs::rename(&tmp, file(rank))?;
+    let parse = |b: &[u8]| -> Option<BTreeMap<String, PeerHandle>> {
+        let mut out = BTreeMap::new();
+        let mut at = 0;
+        while at < b.len() {
+            let n = u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?) as usize;
+            let name = String::from_utf8(b.get(at + 4..at + 4 + n)?.to_vec()).ok()?;
+            let h = PeerHandle::from_bytes(b.get(at + 4 + n..at + 4 + n + PeerHandle::BYTES)?)?;
+            out.insert(name, h);
+            at += 4 + n + PeerHandle::BYTES;
+        }
+        Some(out)
+    };
+    let t = Instant::now();
+    (0..world)
+        .map(|r| loop {
+            if let Some(h) = std::fs::read(file(r)).ok().and_then(|b| parse(&b)).filter(|h| h.len() == own.len()) {
+                return Ok(h);
+            }
+            anyhow::ensure!(t.elapsed() < Duration::from_secs(600), "no handles from rank {r}");
+            std::thread::sleep(Duration::from_millis(200));
+        })
+        .collect()
+}
+
 fn main() -> anyhow::Result<()> {
     let a = args()?;
     let m = kern_manifest::Verified::from_json(&std::fs::read_to_string(&a.manifest)?)?;
-    let ids: Vec<i64> =
-        std::fs::read(&a.tokens)?.chunks_exact(8).map(|c| i64::from_le_bytes(c.try_into().unwrap())).collect();
-    let (b, steps) = (a.rows, ids.len() / a.rows);
-    anyhow::ensure!(b * steps == ids.len() && steps > 0, "{} tokens are not {b} rows", ids.len());
+    let benching = !a.ctx.is_empty();
+    let ids: Vec<i64> = if benching {
+        Vec::new()
+    } else {
+        std::fs::read(&a.tokens)?.chunks_exact(8).map(|c| i64::from_le_bytes(c.try_into().unwrap())).collect()
+    };
+    let (b, steps) = if benching {
+        (a.bench.iter().copied().max().ok_or_else(|| anyhow::anyhow!("--ctx needs --bench <rows,...>"))?, 1)
+    } else {
+        (a.rows, ids.len() / a.rows)
+    };
+    anyhow::ensure!(b * steps == ids.len() || benching, "{} tokens are not {b} rows", ids.len());
+    anyhow::ensure!(steps > 0, "no steps");
     let seqs_max = m.vars["seqs"].max as usize;
     anyhow::ensure!(b <= seqs_max, "{b} rows, the manifest takes at most {seqs_max}");
     let dealt = m.states.values().any(|s| s.shard.is_some());
@@ -123,17 +208,27 @@ fn main() -> anyhow::Result<()> {
     let paged = m.buffers.contains_key("slot_mapping");
     anyhow::ensure!(dealt == (a.world > 1), "a dealt manifest runs over --world > 1, an undealt one alone");
     let il = Interleave::new(a.world)?;
-    let local = steps.div_ceil(a.world as usize);
+    // a bench row also writes its next position, past the context
+    let local = if benching { (a.ctx.iter().max().unwrap() + 1).div_ceil(a.world) as usize } else { steps.div_ceil(a.world as usize) };
 
     let t0 = Instant::now();
     let topo = Topology::one("tp", a.rank, a.world);
     // every row's local positions, plus the pad's page
     let capacity = Capacity { tokens: Some(((local + 64) * (b + 1)) as u64), seqs: (b + 1) as u64 };
     let mut rt = Runtime::load(&m, None, a.gpu, Some(capacity), Some(&topo))?;
+    rt.set_eager(!a.graph && !benching);
     rt.load_weights(&kern_runtime::Safetensors::open(&[&a.weights])?)?;
     if a.world > 1 {
         let path = a.nccl_id.as_ref().ok_or_else(|| anyhow::anyhow!("--world > 1 needs --nccl-id"))?;
         rt.join_nccl("tp", &nccl_id(path, a.rank)?)?;
+        let mapped: Vec<&str> =
+            m.buffers.values().filter(|b| b.kind == BufferKind::Peer).filter_map(|b| b.of.as_deref()).collect();
+        if !mapped.is_empty() {
+            let own: BTreeMap<String, PeerHandle> =
+                rt.export_handles()?.into_iter().filter(|(n, _)| mapped.contains(&n.as_str())).collect();
+            let members = handles(path, a.rank, a.world, &own)?;
+            rt.import_peers("tp", &members)?;
+        }
     }
     let once = BTreeMap::from([("tokens".to_string(), 1u64), ("seqs".to_string(), 1)]);
     for (name, p) in &m.programs {
@@ -167,6 +262,9 @@ fn main() -> anyhow::Result<()> {
         rt.write_input(&name, &le(&t, i32::to_le_bytes))?;
     }
     rt.write_input("span_at", &le(&[0i32], i32::to_le_bytes))?;
+    if benching {
+        return bench(&mut rt, &a, &leases, &pad, il, paged);
+    }
 
     let vocab = match m.buffers["logits"].shape[1] {
         Dim::Const(n) => n as usize,
@@ -194,7 +292,8 @@ fn main() -> anyhow::Result<()> {
             rt.write_input_at("slot_mapping", &le(&slot, i64::to_le_bytes), &vars)?;
             rt.write_input_at("seq_lens", &le(&len, i32::to_le_bytes), &vars)?;
         }
-        rt.run("decode", &vars)?;
+        rt.issue("decode", &vars)?;
+        rt.synchronize()?;
         next.extend_from_slice(&rt.read_output("next_token")?[..b * 8]);
         if me == 0 {
             let l = rt.read_buffer_prefix("logits", b * vocab * 4)?;
@@ -218,6 +317,90 @@ fn main() -> anyhow::Result<()> {
             std::fs::write(a.out.join(format!("{name}.bin")), d)?;
         }
     }
-    println!("rank {me}: {steps} steps x {b} rows, {ms:.1} ms per step (eager, with readback)");
+    let how = if a.graph { "graph" } else { "eager" };
+    println!("rank {me}: {steps} steps x {b} rows, {ms:.1} ms per step ({how}, with readback)");
+    Ok(())
+}
+
+/// A token in [1000, 101000) for step `s`, row `r`: distinct rows, no specials.
+fn token(s: usize, r: usize) -> i64 {
+    let mut x = (s as u64) << 32 | r as u64;
+    x = (x ^ (x >> 31)).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    x = (x ^ (x >> 29)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    1000 + ((x ^ (x >> 32)) % 100_000) as i64
+}
+
+fn quantile(sorted: &[f64], q: f64) -> f64 {
+    sorted[((sorted.len() - 1) as f64 * q).round() as usize]
+}
+
+fn bench(rt: &mut Runtime, a: &Args, leases: &[kern_pool::Lease], pad: &kern_pool::Lease, il: Interleave, paged: bool) -> anyhow::Result<()> {
+    let me = a.rank;
+    let mut report = Vec::new();
+    let mut step = 0;
+    for (&p, &rows) in a.ctx.iter().flat_map(|c| a.bench.iter().map(move |r| (c, r))) {
+        let vars = BTreeMap::from([("tokens".to_string(), rows as u64), ("seqs".to_string(), rows as u64)]);
+        if paged {
+            let slot: Vec<i64> = leases[..rows]
+                .iter()
+                .map(|l| if il.owner(p) == me { l.slot(il.local(p) as usize) } else { pad.slot(0) })
+                .collect();
+            rt.write_input_at("slot_mapping", &le(&slot, i64::to_le_bytes), &vars)?;
+            rt.write_input_at("seq_lens", &le(&vec![il.len(p + 1, me) as i32; rows], i32::to_le_bytes), &vars)?;
+        }
+        let mut times = Vec::new();
+        let mut finite = true;
+        for i in 0..a.warmup + a.iters {
+            let profiled = a.profile.contains(&(rows, p)) && i >= a.warmup && i < a.warmup + 3;
+            if profiled && i == a.warmup {
+                unsafe { cudarc::driver::sys::cuProfilerStart() };
+            }
+            let tok: Vec<i64> = (0..rows).map(|r| token(step, r)).collect();
+            step += 1;
+            let t = Instant::now();
+            rt.write_input_at("token_ids", &le(&tok, i64::to_le_bytes), &vars)?;
+            rt.issue("decode", &vars)?;
+            rt.synchronize()?;
+            let next = rt.read_output("next_token")?;
+            let dt = t.elapsed().as_secs_f64() * 1e3;
+            if profiled && i == a.warmup + 2 {
+                unsafe { cudarc::driver::sys::cuProfilerStop() };
+            }
+            if i >= a.warmup {
+                times.push(dt);
+            }
+            if i + 1 == a.warmup + a.iters {
+                let l = rt.read_buffer_prefix("logits", rows * 4 * 1024)?;
+                finite = l.chunks_exact(4).all(|c| f32::from_le_bytes(c.try_into().unwrap()).is_finite());
+                let n: Vec<i64> = next[..rows * 8].chunks_exact(8).map(|c| i64::from_le_bytes(c.try_into().unwrap())).collect();
+                let picks: std::collections::BTreeSet<i32> = rt
+                    .read_buffer_prefix("topk_idx", rows * 16 * 4)?
+                    .chunks_exact(4)
+                    .map(|c| i32::from_le_bytes(c.try_into().unwrap()))
+                    .collect();
+                let own = picks.iter().filter(|&&e| e as u64 % a.world == me).count();
+                eprintln!("rank {me} rows {rows}: next {:?}, last layer's experts {} ({own} here)", &n[..rows.min(8)], picks.len());
+            }
+        }
+        rt.issue("decode", &vars)?;
+        rt.synchronize()?;
+        let t = Instant::now();
+        for _ in 0..a.iters {
+            let tok: Vec<i64> = (0..rows).map(|r| token(step, r)).collect();
+            step += 1;
+            rt.write_input_at("token_ids", &le(&tok, i64::to_le_bytes), &vars)?;
+            rt.issue("decode", &vars)?;
+        }
+        rt.synchronize()?;
+        let b2b = t.elapsed().as_secs_f64() * 1e3 / a.iters as f64;
+        times.sort_by(f64::total_cmp);
+        let (p10, p50, p90) = (quantile(&times, 0.1), quantile(&times, 0.5), quantile(&times, 0.9));
+        println!("rank {me} ctx {p} rows {rows}: step p10/p50/p90 {p10:.2}/{p50:.2}/{p90:.2} ms, back-to-back {b2b:.2} ms, logits finite {finite}");
+        report.push(format!(
+            "{{\"rows\": {rows}, \"ctx\": {p}, \"p10\": {p10:.3}, \"p50\": {p50:.3}, \"p90\": {p90:.3}, \"b2b\": {b2b:.3}, \"finite\": {finite}}}"
+        ));
+    }
+    std::fs::create_dir_all(&a.out)?;
+    std::fs::write(a.out.join(format!("bench.r{me}.json")), format!("[{}]\n", report.join(",\n ")))?;
     Ok(())
 }

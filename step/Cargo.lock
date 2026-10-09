@@ -219,6 +219,7 @@ name = "k3-step"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cudarc",
  "kern-manifest",
  "kern-pool",
  "kern-runtime",
