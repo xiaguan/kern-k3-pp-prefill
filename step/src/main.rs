@@ -137,7 +137,7 @@ fn main() -> anyhow::Result<()> {
     }
     eprintln!("rank {} loaded `{}` in {:.1} s", a.rank, m.model, t0.elapsed().as_secs_f64());
 
-    let leases = (0..b).map(|_| rt.lease(local)).collect::<Result<Vec<_>, _>>()?;
+    let leases = (0..b).map(|_| if paged { rt.lease(local) } else { rt.lease_slot() }).collect::<Result<Vec<_>, _>>()?;
     // Positions this member does not hold write into a page nobody reads.
     let pad = rt.lease(1)?;
     let me = a.rank;
@@ -171,13 +171,13 @@ fn main() -> anyhow::Result<()> {
     for s in 0..steps {
         let p = s as u64;
         let tok: Vec<i64> = (0..b).map(|r| ids[r * steps + s]).collect();
-        let slot: Vec<i64> = leases
-            .iter()
-            .map(|l| if il.owner(p) == me { l.slot(il.local(p) as usize) } else { pad.slot(0) })
-            .collect();
-        let len = vec![il.len(p + 1, me) as i32; b];
         rt.write_input_at("token_ids", &le(&tok, i64::to_le_bytes), &vars)?;
         if paged {
+            let slot: Vec<i64> = leases
+                .iter()
+                .map(|l| if il.owner(p) == me { l.slot(il.local(p) as usize) } else { pad.slot(0) })
+                .collect();
+            let len = vec![il.len(p + 1, me) as i32; b];
             rt.write_input_at("slot_mapping", &le(&slot, i64::to_le_bytes), &vars)?;
             rt.write_input_at("seq_lens", &le(&len, i32::to_le_bytes), &vars)?;
         }
