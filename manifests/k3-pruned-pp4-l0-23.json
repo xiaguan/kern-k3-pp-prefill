@@ -215,7 +215,7 @@
    "kind": "workspace"
   },
   "kda_partial": {
-   "dtype": "f32",
+   "dtype": "bf16",
    "shape": [
     "tokens",
     49152
@@ -223,7 +223,7 @@
    "kind": "workspace"
   },
   "wsm_partial": {
-   "dtype": "f32",
+   "dtype": "bf16",
    "shape": [
     "tokens",
     256
@@ -467,23 +467,7 @@
    ],
    "kind": "workspace"
   },
-  "latent_partial": {
-   "dtype": "f32",
-   "shape": [
-    8192,
-    3584
-   ],
-   "kind": "workspace"
-  },
   "latent": {
-   "dtype": "bf16",
-   "shape": [
-    8192,
-    3584
-   ],
-   "kind": "workspace"
-  },
-  "routed_latent": {
    "dtype": "bf16",
    "shape": [
     8192,
@@ -516,7 +500,7 @@
    "kind": "workspace"
   },
   "routed_partial": {
-   "dtype": "f32",
+   "dtype": "bf16",
    "shape": [
     8192,
     7168
@@ -524,7 +508,7 @@
    "kind": "workspace"
   },
   "shared_partial": {
-   "dtype": "f32",
+   "dtype": "bf16",
    "shape": [
     8192,
     12288
@@ -540,7 +524,7 @@
    "kind": "workspace"
   },
   "shared_partial2": {
-   "dtype": "f32",
+   "dtype": "bf16",
    "shape": [
     8192,
     7168
@@ -548,7 +532,7 @@
    "kind": "workspace"
   },
   "dense_partial": {
-   "dtype": "f32",
+   "dtype": "bf16",
    "shape": [
     8192,
     67584
@@ -1177,7 +1161,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -4777,7 +4761,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -8377,7 +8361,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -10185,7 +10169,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -12362,7 +12346,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -15962,7 +15946,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -19562,7 +19546,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -21370,7 +21354,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -23467,7 +23451,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -27067,7 +27051,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -30667,7 +30651,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -32475,7 +32459,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -34652,7 +34636,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -38252,7 +38236,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -41852,7 +41836,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -43660,7 +43644,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -45837,7 +45821,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -49437,7 +49421,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -53037,7 +53021,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -54845,7 +54829,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -57022,7 +57006,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -60622,7 +60606,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -64222,7 +64206,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -66030,7 +66014,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -68127,7 +68111,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -71727,7 +71711,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -75327,7 +75311,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -77135,7 +77119,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -79312,7 +79296,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -82912,7 +82896,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -86512,7 +86496,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -88320,7 +88304,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -90497,7 +90481,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -94097,7 +94081,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -97697,7 +97681,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -99505,7 +99489,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -101682,7 +101666,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -105282,7 +105266,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -108882,7 +108866,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -110690,7 +110674,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -112787,7 +112771,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -116387,7 +116371,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -119987,7 +119971,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -121795,7 +121779,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -123972,7 +123956,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -127572,7 +127556,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -131172,7 +131156,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -132980,7 +132964,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -135157,7 +135141,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -138757,7 +138741,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -142357,7 +142341,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -144165,7 +144149,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -146342,7 +146326,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -149942,7 +149926,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -153542,7 +153526,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -155350,7 +155334,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -157447,7 +157431,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -161047,7 +161031,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -164647,7 +164631,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -166455,7 +166439,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -168632,7 +168616,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -172232,7 +172216,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -175832,7 +175816,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -177640,7 +177624,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -179817,7 +179801,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -183417,7 +183401,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -187017,7 +187001,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -188825,7 +188809,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -191002,7 +190986,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -194602,7 +194586,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -198202,7 +198186,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -200010,7 +199994,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -202107,7 +202091,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -205707,7 +205691,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -209307,7 +209291,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -211115,7 +211099,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -213292,7 +213276,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -216892,7 +216876,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -220492,7 +220476,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -222300,7 +222284,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -224477,7 +224461,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -228077,7 +228061,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -231677,7 +231661,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -233485,7 +233469,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -235662,7 +235646,7 @@
    "shape": [
     2466250752
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -239262,7 +239246,7 @@
    "shape": [
     154140672
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -242862,7 +242846,7 @@
    "shape": [
     1233125376
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -244670,7 +244654,7 @@
    "shape": [
     77070336
    ],
-   "kind": "weight",
+   "kind": "source",
    "bind": [
     {
      "tensor": {
@@ -246509,13 +246493,9 @@
    "source": "hf:Pegainfer/kern-kernels/blobs/d797b1d2edad680ecc0578d4d8a57d5f1a6a364bbb3acd7ecd4d6270c6be4ae0",
    "sha256": "d797b1d2edad680ecc0578d4d8a57d5f1a6a364bbb3acd7ecd4d6270c6be4ae0"
   },
-  "k3_kda_out_gate": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/740b4ceb2d8de833c2c56d4e09ce565dcddcd54d921e34440e104716865ca9c4",
-   "sha256": "740b4ceb2d8de833c2c56d4e09ce565dcddcd54d921e34440e104716865ca9c4"
-  },
-  "k3_land": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/2cd68c79bf3243f37d2f1406880060f610b4028f9e843bb356ea8ef0a0352fcc",
-   "sha256": "2cd68c79bf3243f37d2f1406880060f610b4028f9e843bb356ea8ef0a0352fcc"
+  "k3_kda_out_gate+PARTIAL_BF16=1": {
+   "source": "hf:Pegainfer/kern-kernels/blobs/663f5bb6b841d32049e549d801611132a3c157bdcabfcf20edd5aa0028200da8",
+   "sha256": "663f5bb6b841d32049e549d801611132a3c157bdcabfcf20edd5aa0028200da8"
   },
   "k3_mla_prep": {
    "source": "hf:Pegainfer/kern-kernels/blobs/2b244a6333a73248b64291e27cd0d5d3198a5ce5e2d275c6c819a2183d468eb5",
@@ -246533,21 +246513,13 @@
    "source": "hf:Pegainfer/kern-kernels/blobs/c3c33eaf60000c313ba839258a54b2748e0483439e3f3068fc3dfa84a60adf2c",
    "sha256": "c3c33eaf60000c313ba839258a54b2748e0483439e3f3068fc3dfa84a60adf2c"
   },
-  "k3_residual": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/d5d5d1fb3dda907822d99520b611fa77cab05bf11f165a1aa0d5e43d07cca8c8",
-   "sha256": "d5d5d1fb3dda907822d99520b611fa77cab05bf11f165a1aa0d5e43d07cca8c8"
+  "k3_prefill_glue": {
+   "source": "hf:Pegainfer/kern-kernels/blobs/dd27dcf6d62d41fc30fffdec4f0cdf9840104e3ca16972e90936ff253332ef1e",
+   "sha256": "dd27dcf6d62d41fc30fffdec4f0cdf9840104e3ca16972e90936ff253332ef1e"
   },
-  "k3_residual+LAND_BF16=1": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/1bb60d2f33b04d70d6866b50d12a67340e33cf0f1c555c9da92494dd5c98f254",
-   "sha256": "1bb60d2f33b04d70d6866b50d12a67340e33cf0f1c555c9da92494dd5c98f254"
-  },
-  "k3_router_argmax": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/e3b8395c90e502b7afd4e844a57d060c682c7ab060a361befb9cbf4e61034b5a",
-   "sha256": "e3b8395c90e502b7afd4e844a57d060c682c7ab060a361befb9cbf4e61034b5a"
-  },
-  "k3_span_gather": {
-   "source": "hf:Pegainfer/kern-kernels/blobs/55a7dfc9a4a0cef1fb10e4919d49099c6796e25fcfde2e2fb5b3f8ca62c495ad",
-   "sha256": "55a7dfc9a4a0cef1fb10e4919d49099c6796e25fcfde2e2fb5b3f8ca62c495ad"
+  "k3_span_gather+PARTIAL_BF16=1": {
+   "source": "hf:Pegainfer/kern-kernels/blobs/94b9525ba655d1b4fdd03cd2373e7c007af1a5a9502c74c220d97f2421566522",
+   "sha256": "94b9525ba655d1b4fdd03cd2373e7c007af1a5a9502c74c220d97f2421566522"
   },
   "k3_span_state": {
    "source": "hf:Pegainfer/kern-kernels/blobs/c55c411c7ec3b992b324078683897a8f71f6760ce2e3978730db300c0fa57d7b",
@@ -246628,13 +246600,44 @@
     "out buffer<f32>",
     "i32",
     "i32",
-    "i32",
     "i32"
    ],
    "impl": {
     "launches": [
      {
-      "entry": "extern:cublas_bf16_tn_f32"
+      "entry": "extern:cublas_bf16_tn_f32",
+      "params": [
+       "in buffer<bf16>",
+       "in buffer<bf16>",
+       "out buffer<f32>",
+       "i32",
+       "i32",
+       "i32",
+       "i32"
+      ],
+      "args": [
+       {
+        "param": 0
+       },
+       {
+        "param": 1
+       },
+       {
+        "param": 2
+       },
+       {
+        "param": 3
+       },
+       {
+        "param": 4
+       },
+       {
+        "i32": 7168
+       },
+       {
+        "param": 5
+       }
+      ]
      }
     ]
    }
@@ -246646,17 +246649,25 @@
     "in buffer<f32>",
     "in buffer<bf16>",
     "out buffer<bf16>",
-    "i32",
-    "i32",
     "i32"
    ],
    "impl": {
     "launches": [
      {
-      "module": "k3_residual",
-      "entry": "kern_k3_attnres_rms",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_attnres_rms",
+      "params": [
+       "in buffer<bf16>",
+       "inout buffer<bf16>",
+       "in buffer<f32>",
+       "in buffer<bf16>",
+       "out buffer<bf16>",
+       "i32",
+       "i32",
+       "i32"
+      ],
       "block": [
-       1024,
+       224,
        1,
        1
       ],
@@ -246664,6 +246675,32 @@
        "tokens",
        1,
        1
+      ],
+      "args": [
+       {
+        "param": 0
+       },
+       {
+        "param": 1
+       },
+       {
+        "param": 2
+       },
+       {
+        "param": 3
+       },
+       {
+        "param": 4
+       },
+       {
+        "i32": 1
+       },
+       {
+        "i32": 1
+       },
+       {
+        "param": 5
+       }
       ]
      }
     ]
@@ -246681,8 +246718,8 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_residual",
-      "entry": "kern_k3_attnres_rms",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_attnres_rms",
       "params": [
        "in buffer<bf16>",
        "out buffer<bf16>",
@@ -246694,7 +246731,7 @@
        "i32"
       ],
       "block": [
-       1024,
+       224,
        1,
        1
       ],
@@ -246749,10 +246786,43 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_residual+LAND_BF16=1",
-      "entry": "kern_k3_land_add_attnres_rms",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_land_add_attnres_rms",
       "block": [
-       1024,
+       224,
+       1,
+       1
+      ],
+      "grid": [
+       "tokens",
+       1,
+       1
+      ]
+     }
+    ]
+   }
+  },
+  "land_add2_attnres_rms": {
+   "params": [
+    "in buffer<bf16>",
+    "in buffer<bf16>",
+    "in buffer<bf16>",
+    "out buffer<bf16>",
+    "i32",
+    "in buffer<bf16>",
+    "in buffer<f32>",
+    "in buffer<bf16>",
+    "out buffer<bf16>",
+    "i32",
+    "i32"
+   ],
+   "impl": {
+    "launches": [
+     {
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_land_add2_attnres_rms",
+      "block": [
+       224,
        1,
        1
       ],
@@ -246767,27 +246837,54 @@
   },
   "land_add2": {
    "params": [
-    "in buffer<f32>",
-    "in buffer<f32>",
+    "in buffer<bf16>",
+    "in buffer<bf16>",
     "in buffer<bf16>",
     "out buffer<bf16>",
-    "i32",
     "i32"
    ],
    "impl": {
     "launches": [
      {
-      "module": "k3_residual",
-      "entry": "kern_k3_land_add2",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_land_add2",
+      "params": [
+       "in buffer<bf16>",
+       "in buffer<bf16>",
+       "in buffer<bf16>",
+       "out buffer<bf16>",
+       "i32",
+       "i32"
+      ],
       "block": [
-       1024,
+       224,
        1,
        1
       ],
       "grid": [
        "tokens",
-       1,
+       4,
        1
+      ],
+      "args": [
+       {
+        "param": 0
+       },
+       {
+        "param": 1
+       },
+       {
+        "param": 2
+       },
+       {
+        "param": 3
+       },
+       {
+        "i32": 1
+       },
+       {
+        "param": 4
+       }
       ]
      }
     ]
@@ -246921,11 +247018,11 @@
   },
   "span_gather": {
    "params": [
-    "in buffer<f32>",
+    "in buffer<bf16>",
     "in buffer<f32>",
     "inout state",
     "in buffer<i32>",
-    "in buffer<f32>",
+    "in buffer<bf16>",
     "out buffer<bf16>",
     "out buffer<bf16>",
     "out buffer<bf16>",
@@ -246937,15 +247034,15 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_span_gather",
+      "module": "k3_span_gather+PARTIAL_BF16=1",
       "entry": "kern_k3_span_gather",
       "params": [
-       "in buffer<f32>",
+       "in buffer<bf16>",
        "in buffer<f32>",
        "inout state",
        "in buffer<i32>",
        "i64",
-       "in buffer<f32>",
+       "in buffer<bf16>",
        "out buffer<bf16>",
        "out buffer<bf16>",
        "out buffer<bf16>",
@@ -247850,7 +247947,7 @@
   "kda_out_gate": {
    "params": [
     "in buffer<bf16>",
-    "in buffer<f32>",
+    "in buffer<bf16>",
     "in buffer<f32>",
     "out buffer<bf16>",
     "in buffer<i32>",
@@ -247859,7 +247956,7 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_kda_out_gate",
+      "module": "k3_kda_out_gate+PARTIAL_BF16=1",
       "entry": "kern_k3_kda_out_gate",
       "block": [
        128,
@@ -247868,7 +247965,7 @@
       ],
       "grid": [
        "tokens",
-       96,
+       24,
        1
       ]
      }
@@ -248378,67 +248475,22 @@
    "impl": {
     "launches": [
      {
-      "module": "k3_router_argmax",
-      "entry": "kern_k3_router_topk",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_router_topk",
       "block": [
-       256,
+       128,
        1,
        1
       ],
       "grid": [
-       "tokens",
+       {
+        "ceil_div": [
+         "tokens",
+         4
+        ]
+       },
        1,
        1
-      ]
-     }
-    ]
-   }
-  },
-  "rms": {
-   "params": [
-    "in buffer<bf16>",
-    "in buffer<bf16>",
-    "out buffer<bf16>",
-    "i32"
-   ],
-   "impl": {
-    "launches": [
-     {
-      "module": "k3_land",
-      "entry": "kern_k3_rms",
-      "params": [
-       "in buffer<bf16>",
-       "in buffer<bf16>",
-       "out buffer<bf16>",
-       "i32",
-       "i32"
-      ],
-      "block": [
-       1024,
-       1,
-       1
-      ],
-      "grid": [
-       "tokens",
-       1,
-       1
-      ],
-      "args": [
-       {
-        "param": 0
-       },
-       {
-        "param": 1
-       },
-       {
-        "param": 2
-       },
-       {
-        "i32": 3584
-       },
-       {
-        "param": 3
-       }
       ]
      }
     ]
@@ -249327,29 +249379,31 @@
     ]
    }
   },
-  "moe_finalize": {
+  "moe_finalize_rms": {
    "params": [
     "in buffer<bf16>",
     "in buffer<i32>",
     "in buffer<f32>",
+    "in buffer<bf16>",
     "out buffer<bf16>",
     "i32"
    ],
    "impl": {
     "launches": [
      {
-      "module": "k3_moe_prefill",
-      "entry": "kern_k3_moe_finalize",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_finalize_rms",
       "params": [
        "in buffer<bf16>",
        "in buffer<i32>",
        "in buffer<f32>",
+       "in buffer<bf16>",
        "out buffer<bf16>",
        "i32",
        "i32"
       ],
       "block": [
-       256,
+       448,
        1,
        1
       ],
@@ -249380,6 +249434,9 @@
         "param": 4
        },
        {
+        "param": 5
+       },
+       {
         "i32": 3584
        }
       ]
@@ -249387,31 +249444,31 @@
     ]
    }
   },
-  "land_situ_n33792": {
+  "situ_n33792": {
    "params": [
-    "in buffer<f32>",
+    "in buffer<bf16>",
     "out buffer<bf16>",
     "i32"
    ],
    "impl": {
     "launches": [
      {
-      "module": "k3_land",
-      "entry": "kern_k3_land_situ",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_situ",
       "params": [
-       "in buffer<f32>",
+       "in buffer<bf16>",
        "out buffer<bf16>",
        "i32",
        "i32"
       ],
       "block": [
-       1024,
+       256,
        1,
        1
       ],
       "grid": [
        "tokens",
-       33,
+       17,
        1
       ],
       "args": [
@@ -249432,84 +249489,31 @@
     ]
    }
   },
-  "land_n3584": {
+  "situ_n6144": {
    "params": [
-    "in buffer<f32>",
+    "in buffer<bf16>",
     "out buffer<bf16>",
     "i32"
    ],
    "impl": {
     "launches": [
      {
-      "module": "k3_land",
-      "entry": "kern_k3_land",
+      "module": "k3_prefill_glue",
+      "entry": "kern_k3g_situ",
       "params": [
-       "in buffer<f32>",
-       "out buffer<bf16>",
-       "i32",
-       "i32",
-       "i32",
-       "i32"
-      ],
-      "block": [
-       1024,
-       1,
-       1
-      ],
-      "grid": [
-       "tokens",
-       4,
-       1
-      ],
-      "args": [
-       {
-        "param": 0
-       },
-       {
-        "param": 1
-       },
-       {
-        "i32": 3584
-       },
-       {
-        "i32": 0
-       },
-       {
-        "i32": 3584
-       },
-       {
-        "param": 2
-       }
-      ]
-     }
-    ]
-   }
-  },
-  "land_situ_n6144": {
-   "params": [
-    "in buffer<f32>",
-    "out buffer<bf16>",
-    "i32"
-   ],
-   "impl": {
-    "launches": [
-     {
-      "module": "k3_land",
-      "entry": "kern_k3_land_situ",
-      "params": [
-       "in buffer<f32>",
+       "in buffer<bf16>",
        "out buffer<bf16>",
        "i32",
        "i32"
       ],
       "block": [
-       1024,
+       256,
        1,
        1
       ],
       "grid": [
        "tokens",
-       6,
+       3,
        1
       ],
       "args": [
@@ -249713,6 +249717,86 @@
     ]
    }
   },
+  "fill_f32": {
+   "params": [
+    "out buffer<f32>",
+    "f32"
+   ],
+   "impl": {
+    "launches": [
+     {
+      "module": "weight_prep",
+      "entry": "kern_fill_f32",
+      "params": [
+       "out buffer<f32>",
+       "i32",
+       "f32"
+      ],
+      "block": [
+       256,
+       1,
+       1
+      ],
+      "grid": [
+       1,
+       1,
+       1
+      ],
+      "args": [
+       {
+        "param": 0
+       },
+       {
+        "i32": 224
+       },
+       {
+        "param": 1
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "k3_kvb_aug": {
+   "params": [
+    "in buffer<bf16>",
+    "out buffer<bf16>"
+   ],
+   "impl": {
+    "launches": [
+     {
+      "module": "k3_weight_prep",
+      "entry": "kern_k3_kvb_aug",
+      "params": [
+       "in buffer<bf16>",
+       "out buffer<bf16>",
+       "i32"
+      ],
+      "block": [
+       256,
+       1,
+       1
+      ],
+      "grid": [
+       69120,
+       1,
+       1
+      ],
+      "args": [
+       {
+        "param": 0
+       },
+       {
+        "param": 1
+       },
+       {
+        "i32": 17694720
+       }
+      ]
+     }
+    ]
+   }
+  },
   "k3_moe_w_shuffle": {
    "params": [
     "in buffer<u8>",
@@ -249822,86 +249906,6 @@
      }
     ]
    }
-  },
-  "fill_f32": {
-   "params": [
-    "out buffer<f32>",
-    "f32"
-   ],
-   "impl": {
-    "launches": [
-     {
-      "module": "weight_prep",
-      "entry": "kern_fill_f32",
-      "params": [
-       "out buffer<f32>",
-       "i32",
-       "f32"
-      ],
-      "block": [
-       256,
-       1,
-       1
-      ],
-      "grid": [
-       1,
-       1,
-       1
-      ],
-      "args": [
-       {
-        "param": 0
-       },
-       {
-        "i32": 224
-       },
-       {
-        "param": 1
-       }
-      ]
-     }
-    ]
-   }
-  },
-  "k3_kvb_aug": {
-   "params": [
-    "in buffer<bf16>",
-    "out buffer<bf16>"
-   ],
-   "impl": {
-    "launches": [
-     {
-      "module": "k3_weight_prep",
-      "entry": "kern_k3_kvb_aug",
-      "params": [
-       "in buffer<bf16>",
-       "out buffer<bf16>",
-       "i32"
-      ],
-      "block": [
-       256,
-       1,
-       1
-      ],
-      "grid": [
-       69120,
-       1,
-       1
-      ],
-      "args": [
-       {
-        "param": 0
-       },
-       {
-        "param": 1
-       },
-       {
-        "i32": 17694720
-       }
-      ]
-     }
-    ]
-   }
   }
  },
  "programs": {
@@ -249971,7 +249975,7 @@
     },
     {
      "label": "l0.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -249998,7 +250002,7 @@
     },
     {
      "label": "l0.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -250274,7 +250278,7 @@
     },
     {
      "label": "l0.wgu",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -250301,7 +250305,7 @@
     },
     {
      "label": "l0.situ",
-     "op": "land_situ_n33792",
+     "op": "situ_n33792",
      "args": [
       {
        "buf": "dense_partial"
@@ -250316,7 +250320,7 @@
     },
     {
      "label": "l0.w_dn",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "dense_act"
@@ -250342,8 +250346,8 @@
      ]
     },
     {
-     "label": "l0.hidden",
-     "op": "land_add2",
+     "label": "l1.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -250361,18 +250365,6 @@
        "i32": 0
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l1.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -250388,16 +250380,13 @@
        "i32": 1
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l1.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -250424,7 +250413,7 @@
     },
     {
      "label": "l1.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -250721,9 +250710,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -250754,7 +250740,7 @@
     },
     {
      "label": "l1.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -250763,7 +250749,7 @@
        "buf": "layers.1.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -250776,21 +250762,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l1.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -250922,7 +250893,7 @@
     },
     {
      "label": "l1.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -250932,21 +250903,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l1.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.1.gamma_lat"
@@ -250961,7 +250917,7 @@
     },
     {
      "label": "l1.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -250988,7 +250944,7 @@
     },
     {
      "label": "l1.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -251015,7 +250971,7 @@
     },
     {
      "label": "l1.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -251030,7 +250986,7 @@
     },
     {
      "label": "l1.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -251056,8 +251012,8 @@
      ]
     },
     {
-     "label": "l1.hidden",
-     "op": "land_add2",
+     "label": "l2.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -251075,18 +251031,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l2.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -251102,16 +251046,13 @@
        "i32": 1
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l2.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -251138,7 +251079,7 @@
     },
     {
      "label": "l2.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -251435,9 +251376,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -251468,7 +251406,7 @@
     },
     {
      "label": "l2.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -251477,7 +251415,7 @@
        "buf": "layers.2.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -251490,21 +251428,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l2.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -251636,7 +251559,7 @@
     },
     {
      "label": "l2.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -251646,21 +251569,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l2.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.2.gamma_lat"
@@ -251675,7 +251583,7 @@
     },
     {
      "label": "l2.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -251702,7 +251610,7 @@
     },
     {
      "label": "l2.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -251729,7 +251637,7 @@
     },
     {
      "label": "l2.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -251744,7 +251652,7 @@
     },
     {
      "label": "l2.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -251770,8 +251678,8 @@
      ]
     },
     {
-     "label": "l2.hidden",
-     "op": "land_add2",
+     "label": "l3.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -251789,18 +251697,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l3.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -251814,9 +251710,6 @@
       },
       {
        "i32": 1
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -251841,9 +251734,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -252114,9 +252004,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -252147,7 +252034,7 @@
     },
     {
      "label": "l3.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -252156,7 +252043,7 @@
        "buf": "layers.3.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -252169,21 +252056,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l3.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -252315,7 +252187,7 @@
     },
     {
      "label": "l3.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -252325,21 +252197,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l3.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.3.gamma_lat"
@@ -252354,7 +252211,7 @@
     },
     {
      "label": "l3.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -252381,7 +252238,7 @@
     },
     {
      "label": "l3.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -252408,7 +252265,7 @@
     },
     {
      "label": "l3.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -252423,7 +252280,7 @@
     },
     {
      "label": "l3.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -252449,8 +252306,8 @@
      ]
     },
     {
-     "label": "l3.hidden",
-     "op": "land_add2",
+     "label": "l4.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -252468,18 +252325,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l4.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -252495,16 +252340,13 @@
        "i32": 1
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l4.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -252531,7 +252373,7 @@
     },
     {
      "label": "l4.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -252828,9 +252670,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -252861,7 +252700,7 @@
     },
     {
      "label": "l4.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -252870,7 +252709,7 @@
        "buf": "layers.4.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -252883,21 +252722,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l4.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -253029,7 +252853,7 @@
     },
     {
      "label": "l4.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -253039,21 +252863,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l4.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.4.gamma_lat"
@@ -253068,7 +252877,7 @@
     },
     {
      "label": "l4.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -253095,7 +252904,7 @@
     },
     {
      "label": "l4.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -253122,7 +252931,7 @@
     },
     {
      "label": "l4.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -253137,7 +252946,7 @@
     },
     {
      "label": "l4.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -253163,8 +252972,8 @@
      ]
     },
     {
-     "label": "l4.hidden",
-     "op": "land_add2",
+     "label": "l5.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -253182,18 +252991,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l5.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -253209,16 +253006,13 @@
        "i32": 1
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l5.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -253245,7 +253039,7 @@
     },
     {
      "label": "l5.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -253542,9 +253336,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -253575,7 +253366,7 @@
     },
     {
      "label": "l5.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -253584,7 +253375,7 @@
        "buf": "layers.5.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -253597,21 +253388,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l5.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -253743,7 +253519,7 @@
     },
     {
      "label": "l5.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -253753,21 +253529,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l5.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.5.gamma_lat"
@@ -253782,7 +253543,7 @@
     },
     {
      "label": "l5.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -253809,7 +253570,7 @@
     },
     {
      "label": "l5.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -253836,7 +253597,7 @@
     },
     {
      "label": "l5.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -253851,7 +253612,7 @@
     },
     {
      "label": "l5.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -253877,8 +253638,8 @@
      ]
     },
     {
-     "label": "l5.hidden",
-     "op": "land_add2",
+     "label": "l6.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -253896,18 +253657,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l6.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -253923,16 +253672,13 @@
        "i32": 1
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l6.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -253959,7 +253705,7 @@
     },
     {
      "label": "l6.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -254256,9 +254002,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -254289,7 +254032,7 @@
     },
     {
      "label": "l6.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -254298,7 +254041,7 @@
        "buf": "layers.6.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -254311,21 +254054,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l6.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -254457,7 +254185,7 @@
     },
     {
      "label": "l6.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -254467,21 +254195,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l6.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.6.gamma_lat"
@@ -254496,7 +254209,7 @@
     },
     {
      "label": "l6.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -254523,7 +254236,7 @@
     },
     {
      "label": "l6.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -254550,7 +254263,7 @@
     },
     {
      "label": "l6.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -254565,7 +254278,7 @@
     },
     {
      "label": "l6.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -254591,8 +254304,8 @@
      ]
     },
     {
-     "label": "l6.hidden",
-     "op": "land_add2",
+     "label": "l7.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -254610,18 +254323,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l7.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -254635,9 +254336,6 @@
       },
       {
        "i32": 1
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -254662,9 +254360,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -254935,9 +254630,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -254968,7 +254660,7 @@
     },
     {
      "label": "l7.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -254977,7 +254669,7 @@
        "buf": "layers.7.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -254990,21 +254682,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l7.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -255136,7 +254813,7 @@
     },
     {
      "label": "l7.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -255146,21 +254823,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l7.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.7.gamma_lat"
@@ -255175,7 +254837,7 @@
     },
     {
      "label": "l7.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -255202,7 +254864,7 @@
     },
     {
      "label": "l7.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -255229,7 +254891,7 @@
     },
     {
      "label": "l7.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -255244,7 +254906,7 @@
     },
     {
      "label": "l7.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -255270,8 +254932,8 @@
      ]
     },
     {
-     "label": "l7.hidden",
-     "op": "land_add2",
+     "label": "l8.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -255289,18 +254951,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l8.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -255316,16 +254966,13 @@
        "i32": 1
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l8.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -255352,7 +254999,7 @@
     },
     {
      "label": "l8.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -255649,9 +255296,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -255682,7 +255326,7 @@
     },
     {
      "label": "l8.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -255691,7 +255335,7 @@
        "buf": "layers.8.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -255704,21 +255348,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l8.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -255850,7 +255479,7 @@
     },
     {
      "label": "l8.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -255860,21 +255489,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l8.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.8.gamma_lat"
@@ -255889,7 +255503,7 @@
     },
     {
      "label": "l8.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -255916,7 +255530,7 @@
     },
     {
      "label": "l8.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -255943,7 +255557,7 @@
     },
     {
      "label": "l8.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -255958,7 +255572,7 @@
     },
     {
      "label": "l8.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -255984,8 +255598,8 @@
      ]
     },
     {
-     "label": "l8.hidden",
-     "op": "land_add2",
+     "label": "l9.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -256003,18 +255617,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l9.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -256030,16 +255632,13 @@
        "i32": 1
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l9.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -256066,7 +255665,7 @@
     },
     {
      "label": "l9.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -256363,9 +255962,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -256396,7 +255992,7 @@
     },
     {
      "label": "l9.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -256405,7 +256001,7 @@
        "buf": "layers.9.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -256418,21 +256014,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l9.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -256564,7 +256145,7 @@
     },
     {
      "label": "l9.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -256574,21 +256155,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l9.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.9.gamma_lat"
@@ -256603,7 +256169,7 @@
     },
     {
      "label": "l9.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -256630,7 +256196,7 @@
     },
     {
      "label": "l9.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -256657,7 +256223,7 @@
     },
     {
      "label": "l9.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -256672,7 +256238,7 @@
     },
     {
      "label": "l9.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -256698,8 +256264,8 @@
      ]
     },
     {
-     "label": "l9.hidden",
-     "op": "land_add2",
+     "label": "l10.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -256717,18 +256283,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l10.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -256744,16 +256298,13 @@
        "i32": 1
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l10.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -256780,7 +256331,7 @@
     },
     {
      "label": "l10.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -257077,9 +256628,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -257110,7 +256658,7 @@
     },
     {
      "label": "l10.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -257119,7 +256667,7 @@
        "buf": "layers.10.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -257132,21 +256680,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l10.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -257278,7 +256811,7 @@
     },
     {
      "label": "l10.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -257288,21 +256821,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l10.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.10.gamma_lat"
@@ -257317,7 +256835,7 @@
     },
     {
      "label": "l10.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -257344,7 +256862,7 @@
     },
     {
      "label": "l10.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -257371,7 +256889,7 @@
     },
     {
      "label": "l10.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -257386,7 +256904,7 @@
     },
     {
      "label": "l10.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -257412,8 +256930,8 @@
      ]
     },
     {
-     "label": "l10.hidden",
-     "op": "land_add2",
+     "label": "l11.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -257431,18 +256949,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l11.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -257456,9 +256962,6 @@
       },
       {
        "i32": 1
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -257483,9 +256986,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -257756,9 +257256,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -257789,7 +257286,7 @@
     },
     {
      "label": "l11.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -257798,7 +257295,7 @@
        "buf": "layers.11.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -257811,21 +257308,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l11.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -257957,7 +257439,7 @@
     },
     {
      "label": "l11.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -257967,21 +257449,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l11.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.11.gamma_lat"
@@ -257996,7 +257463,7 @@
     },
     {
      "label": "l11.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -258023,7 +257490,7 @@
     },
     {
      "label": "l11.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -258050,7 +257517,7 @@
     },
     {
      "label": "l11.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -258065,7 +257532,7 @@
     },
     {
      "label": "l11.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -258107,9 +257574,6 @@
        "buf": "hidden"
       },
       {
-       "i32": 1
-      },
-      {
        "var": "tokens"
       }
      ]
@@ -258134,19 +257598,13 @@
        "buf": "normed"
       },
       {
-       "i32": 1
-      },
-      {
-       "i32": 1
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l12.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -258173,7 +257631,7 @@
     },
     {
      "label": "l12.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -258470,9 +257928,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -258503,7 +257958,7 @@
     },
     {
      "label": "l12.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -258512,7 +257967,7 @@
        "buf": "layers.12.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -258525,21 +257980,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l12.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -258671,7 +258111,7 @@
     },
     {
      "label": "l12.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -258681,21 +258121,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l12.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.12.gamma_lat"
@@ -258710,7 +258135,7 @@
     },
     {
      "label": "l12.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -258737,7 +258162,7 @@
     },
     {
      "label": "l12.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -258764,7 +258189,7 @@
     },
     {
      "label": "l12.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -258779,7 +258204,7 @@
     },
     {
      "label": "l12.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -258805,8 +258230,8 @@
      ]
     },
     {
-     "label": "l12.hidden",
-     "op": "land_add2",
+     "label": "l13.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -258824,18 +258249,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l13.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -258851,16 +258264,13 @@
        "i32": 2
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l13.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -258887,7 +258297,7 @@
     },
     {
      "label": "l13.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -259184,9 +258594,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -259217,7 +258624,7 @@
     },
     {
      "label": "l13.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -259226,7 +258633,7 @@
        "buf": "layers.13.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -259239,21 +258646,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l13.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -259385,7 +258777,7 @@
     },
     {
      "label": "l13.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -259395,21 +258787,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l13.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.13.gamma_lat"
@@ -259424,7 +258801,7 @@
     },
     {
      "label": "l13.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -259451,7 +258828,7 @@
     },
     {
      "label": "l13.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -259478,7 +258855,7 @@
     },
     {
      "label": "l13.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -259493,7 +258870,7 @@
     },
     {
      "label": "l13.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -259519,8 +258896,8 @@
      ]
     },
     {
-     "label": "l13.hidden",
-     "op": "land_add2",
+     "label": "l14.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -259538,18 +258915,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l14.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -259565,16 +258930,13 @@
        "i32": 2
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l14.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -259601,7 +258963,7 @@
     },
     {
      "label": "l14.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -259898,9 +259260,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -259931,7 +259290,7 @@
     },
     {
      "label": "l14.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -259940,7 +259299,7 @@
        "buf": "layers.14.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -259953,21 +259312,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l14.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -260099,7 +259443,7 @@
     },
     {
      "label": "l14.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -260109,21 +259453,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l14.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.14.gamma_lat"
@@ -260138,7 +259467,7 @@
     },
     {
      "label": "l14.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -260165,7 +259494,7 @@
     },
     {
      "label": "l14.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -260192,7 +259521,7 @@
     },
     {
      "label": "l14.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -260207,7 +259536,7 @@
     },
     {
      "label": "l14.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -260233,8 +259562,8 @@
      ]
     },
     {
-     "label": "l14.hidden",
-     "op": "land_add2",
+     "label": "l15.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -260252,18 +259581,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l15.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -260277,9 +259594,6 @@
       },
       {
        "i32": 2
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -260304,9 +259618,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -260577,9 +259888,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -260610,7 +259918,7 @@
     },
     {
      "label": "l15.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -260619,7 +259927,7 @@
        "buf": "layers.15.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -260632,21 +259940,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l15.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -260778,7 +260071,7 @@
     },
     {
      "label": "l15.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -260788,21 +260081,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l15.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.15.gamma_lat"
@@ -260817,7 +260095,7 @@
     },
     {
      "label": "l15.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -260844,7 +260122,7 @@
     },
     {
      "label": "l15.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -260871,7 +260149,7 @@
     },
     {
      "label": "l15.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -260886,7 +260164,7 @@
     },
     {
      "label": "l15.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -260912,8 +260190,8 @@
      ]
     },
     {
-     "label": "l15.hidden",
-     "op": "land_add2",
+     "label": "l16.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -260931,18 +260209,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l16.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -260958,16 +260224,13 @@
        "i32": 2
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l16.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -260994,7 +260257,7 @@
     },
     {
      "label": "l16.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -261291,9 +260554,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -261324,7 +260584,7 @@
     },
     {
      "label": "l16.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -261333,7 +260593,7 @@
        "buf": "layers.16.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -261346,21 +260606,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l16.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -261492,7 +260737,7 @@
     },
     {
      "label": "l16.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -261502,21 +260747,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l16.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.16.gamma_lat"
@@ -261531,7 +260761,7 @@
     },
     {
      "label": "l16.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -261558,7 +260788,7 @@
     },
     {
      "label": "l16.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -261585,7 +260815,7 @@
     },
     {
      "label": "l16.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -261600,7 +260830,7 @@
     },
     {
      "label": "l16.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -261626,8 +260856,8 @@
      ]
     },
     {
-     "label": "l16.hidden",
-     "op": "land_add2",
+     "label": "l17.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -261645,18 +260875,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l17.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -261672,16 +260890,13 @@
        "i32": 2
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l17.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -261708,7 +260923,7 @@
     },
     {
      "label": "l17.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -262005,9 +261220,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -262038,7 +261250,7 @@
     },
     {
      "label": "l17.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -262047,7 +261259,7 @@
        "buf": "layers.17.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -262060,21 +261272,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l17.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -262206,7 +261403,7 @@
     },
     {
      "label": "l17.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -262216,21 +261413,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l17.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.17.gamma_lat"
@@ -262245,7 +261427,7 @@
     },
     {
      "label": "l17.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -262272,7 +261454,7 @@
     },
     {
      "label": "l17.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -262299,7 +261481,7 @@
     },
     {
      "label": "l17.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -262314,7 +261496,7 @@
     },
     {
      "label": "l17.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -262340,8 +261522,8 @@
      ]
     },
     {
-     "label": "l17.hidden",
-     "op": "land_add2",
+     "label": "l18.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -262359,18 +261541,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l18.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -262386,16 +261556,13 @@
        "i32": 2
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l18.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -262422,7 +261589,7 @@
     },
     {
      "label": "l18.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -262719,9 +261886,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -262752,7 +261916,7 @@
     },
     {
      "label": "l18.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -262761,7 +261925,7 @@
        "buf": "layers.18.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -262774,21 +261938,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l18.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -262920,7 +262069,7 @@
     },
     {
      "label": "l18.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -262930,21 +262079,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l18.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.18.gamma_lat"
@@ -262959,7 +262093,7 @@
     },
     {
      "label": "l18.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -262986,7 +262120,7 @@
     },
     {
      "label": "l18.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -263013,7 +262147,7 @@
     },
     {
      "label": "l18.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -263028,7 +262162,7 @@
     },
     {
      "label": "l18.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -263054,8 +262188,8 @@
      ]
     },
     {
-     "label": "l18.hidden",
-     "op": "land_add2",
+     "label": "l19.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -263073,18 +262207,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l19.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -263098,9 +262220,6 @@
       },
       {
        "i32": 2
-      },
-      {
-       "i32": 0
       },
       {
        "var": "tokens"
@@ -263125,9 +262244,6 @@
       },
       {
        "i32": 14400
-      },
-      {
-       "i32": 7168
       },
       {
        "i32": 14400
@@ -263398,9 +262514,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -263431,7 +262544,7 @@
     },
     {
      "label": "l19.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -263440,7 +262553,7 @@
        "buf": "layers.19.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -263453,21 +262566,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l19.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -263599,7 +262697,7 @@
     },
     {
      "label": "l19.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -263609,21 +262707,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l19.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.19.gamma_lat"
@@ -263638,7 +262721,7 @@
     },
     {
      "label": "l19.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -263665,7 +262748,7 @@
     },
     {
      "label": "l19.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -263692,7 +262775,7 @@
     },
     {
      "label": "l19.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -263707,7 +262790,7 @@
     },
     {
      "label": "l19.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -263733,8 +262816,8 @@
      ]
     },
     {
-     "label": "l19.hidden",
-     "op": "land_add2",
+     "label": "l20.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -263752,18 +262835,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l20.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -263779,16 +262850,13 @@
        "i32": 2
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l20.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -263815,7 +262883,7 @@
     },
     {
      "label": "l20.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -264112,9 +263180,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -264145,7 +263210,7 @@
     },
     {
      "label": "l20.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -264154,7 +263219,7 @@
        "buf": "layers.20.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -264167,21 +263232,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l20.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -264313,7 +263363,7 @@
     },
     {
      "label": "l20.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -264323,21 +263373,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l20.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.20.gamma_lat"
@@ -264352,7 +263387,7 @@
     },
     {
      "label": "l20.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -264379,7 +263414,7 @@
     },
     {
      "label": "l20.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -264406,7 +263441,7 @@
     },
     {
      "label": "l20.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -264421,7 +263456,7 @@
     },
     {
      "label": "l20.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -264447,8 +263482,8 @@
      ]
     },
     {
-     "label": "l20.hidden",
-     "op": "land_add2",
+     "label": "l21.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -264466,18 +263501,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l21.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -264493,16 +263516,13 @@
        "i32": 2
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l21.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -264529,7 +263549,7 @@
     },
     {
      "label": "l21.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -264826,9 +263846,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -264859,7 +263876,7 @@
     },
     {
      "label": "l21.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -264868,7 +263885,7 @@
        "buf": "layers.21.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -264881,21 +263898,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l21.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -265027,7 +264029,7 @@
     },
     {
      "label": "l21.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -265037,21 +264039,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l21.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.21.gamma_lat"
@@ -265066,7 +264053,7 @@
     },
     {
      "label": "l21.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -265093,7 +264080,7 @@
     },
     {
      "label": "l21.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -265120,7 +264107,7 @@
     },
     {
      "label": "l21.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -265135,7 +264122,7 @@
     },
     {
      "label": "l21.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -265161,8 +264148,8 @@
      ]
     },
     {
-     "label": "l21.hidden",
-     "op": "land_add2",
+     "label": "l22.res_in",
+     "op": "land_add2_attnres_rms",
      "args": [
       {
        "buf": "routed_partial"
@@ -265180,18 +264167,6 @@
        "i32": 1
       },
       {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l22.res_in",
-     "op": "attnres_rms",
-     "args": [
-      {
-       "buf": "hidden"
-      },
-      {
        "buf": "blocks"
       },
       {
@@ -265207,16 +264182,13 @@
        "i32": 2
       },
       {
-       "i32": 0
-      },
-      {
        "var": "tokens"
       }
      ]
     },
     {
      "label": "l22.qkvg",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -265243,7 +264215,7 @@
     },
     {
      "label": "l22.wsm",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -265540,9 +264512,6 @@
        "i32": 224
       },
       {
-       "i32": 7168
-      },
-      {
        "i32": 224
       }
      ]
@@ -265573,7 +264542,7 @@
     },
     {
      "label": "l22.lat_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -265582,7 +264551,7 @@
        "buf": "layers.22.w_lat_down"
       },
       {
-       "buf": "latent_partial"
+       "buf": "latent"
       },
       {
        "var": "tokens"
@@ -265595,21 +264564,6 @@
       },
       {
        "i32": 3584
-      }
-     ]
-    },
-    {
-     "label": "l22.latent",
-     "op": "land_n3584",
-     "args": [
-      {
-       "buf": "latent_partial"
-      },
-      {
-       "buf": "latent"
-      },
-      {
-       "var": "tokens"
       }
      ]
     },
@@ -265741,7 +264695,7 @@
     },
     {
      "label": "l22.finalize",
-     "op": "moe_finalize",
+     "op": "moe_finalize_rms",
      "args": [
       {
        "buf": "moe.fc2_out"
@@ -265751,21 +264705,6 @@
       },
       {
        "buf": "topk_weight"
-      },
-      {
-       "buf": "routed_latent"
-      },
-      {
-       "var": "tokens"
-      }
-     ]
-    },
-    {
-     "label": "l22.lat_norm",
-     "op": "rms",
-     "args": [
-      {
-       "buf": "routed_latent"
       },
       {
        "buf": "layers.22.gamma_lat"
@@ -265780,7 +264719,7 @@
     },
     {
      "label": "l22.lat_up",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "routed_latent_norm"
@@ -265807,7 +264746,7 @@
     },
     {
      "label": "l22.wsh",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "normed"
@@ -265834,7 +264773,7 @@
     },
     {
      "label": "l22.shared_situ",
-     "op": "land_situ_n6144",
+     "op": "situ_n6144",
      "args": [
       {
        "buf": "shared_partial"
@@ -265849,7 +264788,7 @@
     },
     {
      "label": "l22.sh_down",
-     "op": "gemm_f32",
+     "op": "gemm_bf16",
      "args": [
       {
        "buf": "shared_act"
@@ -265889,9 +264828,6 @@
       },
       {
        "buf": "hidden"
-      },
-      {
-       "i32": 1
       },
       {
        "var": "tokens"
@@ -266024,7 +264960,1946 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.8",
+     "label": "load.fill_f32.8",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.1.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.9",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.1.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.10",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.2.sw_attn.norm"
+      },
+      {
+       "buf": "layers.2.sw_attn.proj"
+      },
+      {
+       "buf": "layers.2.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.11",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.2.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.2.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.2.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.12",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.2.wsm.b"
+      },
+      {
+       "buf": "layers.2.wsm.f_a"
+      },
+      {
+       "buf": "layers.2.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.13",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.2.cw.q"
+      },
+      {
+       "buf": "layers.2.cw.k"
+      },
+      {
+       "buf": "layers.2.cw.v"
+      },
+      {
+       "buf": "layers.2.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.14",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.2.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.15",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.2.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.16",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.2.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.17",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.3.sw_attn.norm"
+      },
+      {
+       "buf": "layers.3.sw_attn.proj"
+      },
+      {
+       "buf": "layers.3.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.18",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.3.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.3.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.3.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_kvb_aug.19",
+     "op": "k3_kvb_aug",
+     "args": [
+      {
+       "buf": "layers.3.w_kv_b"
+      },
+      {
+       "buf": "layers.3.w_aug"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.20",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.3.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.21",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.3.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.22",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.3.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.23",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.4.sw_attn.norm"
+      },
+      {
+       "buf": "layers.4.sw_attn.proj"
+      },
+      {
+       "buf": "layers.4.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.24",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.4.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.4.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.4.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.25",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.4.wsm.b"
+      },
+      {
+       "buf": "layers.4.wsm.f_a"
+      },
+      {
+       "buf": "layers.4.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.26",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.4.cw.q"
+      },
+      {
+       "buf": "layers.4.cw.k"
+      },
+      {
+       "buf": "layers.4.cw.v"
+      },
+      {
+       "buf": "layers.4.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.27",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.4.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.28",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.4.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.29",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.4.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.30",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.5.sw_attn.norm"
+      },
+      {
+       "buf": "layers.5.sw_attn.proj"
+      },
+      {
+       "buf": "layers.5.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.31",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.5.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.5.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.5.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.32",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.5.wsm.b"
+      },
+      {
+       "buf": "layers.5.wsm.f_a"
+      },
+      {
+       "buf": "layers.5.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.33",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.5.cw.q"
+      },
+      {
+       "buf": "layers.5.cw.k"
+      },
+      {
+       "buf": "layers.5.cw.v"
+      },
+      {
+       "buf": "layers.5.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.34",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.5.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.35",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.5.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.36",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.5.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.37",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.6.sw_attn.norm"
+      },
+      {
+       "buf": "layers.6.sw_attn.proj"
+      },
+      {
+       "buf": "layers.6.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.38",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.6.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.6.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.6.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.39",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.6.wsm.b"
+      },
+      {
+       "buf": "layers.6.wsm.f_a"
+      },
+      {
+       "buf": "layers.6.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.40",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.6.cw.q"
+      },
+      {
+       "buf": "layers.6.cw.k"
+      },
+      {
+       "buf": "layers.6.cw.v"
+      },
+      {
+       "buf": "layers.6.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.41",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.6.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.42",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.6.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.43",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.6.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.44",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.7.sw_attn.norm"
+      },
+      {
+       "buf": "layers.7.sw_attn.proj"
+      },
+      {
+       "buf": "layers.7.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.45",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.7.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.7.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.7.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_kvb_aug.46",
+     "op": "k3_kvb_aug",
+     "args": [
+      {
+       "buf": "layers.7.w_kv_b"
+      },
+      {
+       "buf": "layers.7.w_aug"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.47",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.7.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.48",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.7.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.49",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.7.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.50",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.8.sw_attn.norm"
+      },
+      {
+       "buf": "layers.8.sw_attn.proj"
+      },
+      {
+       "buf": "layers.8.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.51",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.8.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.8.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.8.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.52",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.8.wsm.b"
+      },
+      {
+       "buf": "layers.8.wsm.f_a"
+      },
+      {
+       "buf": "layers.8.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.53",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.8.cw.q"
+      },
+      {
+       "buf": "layers.8.cw.k"
+      },
+      {
+       "buf": "layers.8.cw.v"
+      },
+      {
+       "buf": "layers.8.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.54",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.8.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.55",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.8.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.56",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.8.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.57",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.9.sw_attn.norm"
+      },
+      {
+       "buf": "layers.9.sw_attn.proj"
+      },
+      {
+       "buf": "layers.9.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.58",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.9.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.9.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.9.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.59",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.9.wsm.b"
+      },
+      {
+       "buf": "layers.9.wsm.f_a"
+      },
+      {
+       "buf": "layers.9.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.60",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.9.cw.q"
+      },
+      {
+       "buf": "layers.9.cw.k"
+      },
+      {
+       "buf": "layers.9.cw.v"
+      },
+      {
+       "buf": "layers.9.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.61",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.9.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.62",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.9.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.63",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.9.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.64",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.10.sw_attn.norm"
+      },
+      {
+       "buf": "layers.10.sw_attn.proj"
+      },
+      {
+       "buf": "layers.10.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.65",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.10.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.10.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.10.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.66",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.10.wsm.b"
+      },
+      {
+       "buf": "layers.10.wsm.f_a"
+      },
+      {
+       "buf": "layers.10.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.67",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.10.cw.q"
+      },
+      {
+       "buf": "layers.10.cw.k"
+      },
+      {
+       "buf": "layers.10.cw.v"
+      },
+      {
+       "buf": "layers.10.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.68",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.10.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.69",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.10.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.70",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.10.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.71",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.11.sw_attn.norm"
+      },
+      {
+       "buf": "layers.11.sw_attn.proj"
+      },
+      {
+       "buf": "layers.11.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.72",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.11.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.11.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.11.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_kvb_aug.73",
+     "op": "k3_kvb_aug",
+     "args": [
+      {
+       "buf": "layers.11.w_kv_b"
+      },
+      {
+       "buf": "layers.11.w_aug"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.74",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.11.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.75",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.11.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.76",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.11.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.77",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.12.sw_attn.norm"
+      },
+      {
+       "buf": "layers.12.sw_attn.proj"
+      },
+      {
+       "buf": "layers.12.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.78",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.12.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.12.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.12.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.79",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.12.wsm.b"
+      },
+      {
+       "buf": "layers.12.wsm.f_a"
+      },
+      {
+       "buf": "layers.12.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.80",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.12.cw.q"
+      },
+      {
+       "buf": "layers.12.cw.k"
+      },
+      {
+       "buf": "layers.12.cw.v"
+      },
+      {
+       "buf": "layers.12.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.81",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.12.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.82",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.12.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.83",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.12.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.84",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.13.sw_attn.norm"
+      },
+      {
+       "buf": "layers.13.sw_attn.proj"
+      },
+      {
+       "buf": "layers.13.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.85",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.13.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.13.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.13.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.86",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.13.wsm.b"
+      },
+      {
+       "buf": "layers.13.wsm.f_a"
+      },
+      {
+       "buf": "layers.13.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.87",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.13.cw.q"
+      },
+      {
+       "buf": "layers.13.cw.k"
+      },
+      {
+       "buf": "layers.13.cw.v"
+      },
+      {
+       "buf": "layers.13.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.88",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.13.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.89",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.13.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.90",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.13.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.91",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.14.sw_attn.norm"
+      },
+      {
+       "buf": "layers.14.sw_attn.proj"
+      },
+      {
+       "buf": "layers.14.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.92",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.14.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.14.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.14.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.93",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.14.wsm.b"
+      },
+      {
+       "buf": "layers.14.wsm.f_a"
+      },
+      {
+       "buf": "layers.14.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.94",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.14.cw.q"
+      },
+      {
+       "buf": "layers.14.cw.k"
+      },
+      {
+       "buf": "layers.14.cw.v"
+      },
+      {
+       "buf": "layers.14.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.95",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.14.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.96",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.14.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.97",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.14.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.98",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.15.sw_attn.norm"
+      },
+      {
+       "buf": "layers.15.sw_attn.proj"
+      },
+      {
+       "buf": "layers.15.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.99",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.15.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.15.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.15.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_kvb_aug.100",
+     "op": "k3_kvb_aug",
+     "args": [
+      {
+       "buf": "layers.15.w_kv_b"
+      },
+      {
+       "buf": "layers.15.w_aug"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.101",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.15.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.102",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.15.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.103",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.15.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.104",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.16.sw_attn.norm"
+      },
+      {
+       "buf": "layers.16.sw_attn.proj"
+      },
+      {
+       "buf": "layers.16.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.105",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.16.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.16.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.16.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.106",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.16.wsm.b"
+      },
+      {
+       "buf": "layers.16.wsm.f_a"
+      },
+      {
+       "buf": "layers.16.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.107",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.16.cw.q"
+      },
+      {
+       "buf": "layers.16.cw.k"
+      },
+      {
+       "buf": "layers.16.cw.v"
+      },
+      {
+       "buf": "layers.16.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.108",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.16.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.109",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.16.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.110",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.16.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.111",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.17.sw_attn.norm"
+      },
+      {
+       "buf": "layers.17.sw_attn.proj"
+      },
+      {
+       "buf": "layers.17.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.112",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.17.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.17.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.17.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.113",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.17.wsm.b"
+      },
+      {
+       "buf": "layers.17.wsm.f_a"
+      },
+      {
+       "buf": "layers.17.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.114",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.17.cw.q"
+      },
+      {
+       "buf": "layers.17.cw.k"
+      },
+      {
+       "buf": "layers.17.cw.v"
+      },
+      {
+       "buf": "layers.17.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.115",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.17.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.116",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.17.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.117",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.17.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.118",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.18.sw_attn.norm"
+      },
+      {
+       "buf": "layers.18.sw_attn.proj"
+      },
+      {
+       "buf": "layers.18.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.119",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.18.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.18.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.18.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.120",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.18.wsm.b"
+      },
+      {
+       "buf": "layers.18.wsm.f_a"
+      },
+      {
+       "buf": "layers.18.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.121",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.18.cw.q"
+      },
+      {
+       "buf": "layers.18.cw.k"
+      },
+      {
+       "buf": "layers.18.cw.v"
+      },
+      {
+       "buf": "layers.18.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.122",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.18.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.123",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.18.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.124",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.18.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.125",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.19.sw_attn.norm"
+      },
+      {
+       "buf": "layers.19.sw_attn.proj"
+      },
+      {
+       "buf": "layers.19.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.126",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.19.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.19.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.19.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_kvb_aug.127",
+     "op": "k3_kvb_aug",
+     "args": [
+      {
+       "buf": "layers.19.w_kv_b"
+      },
+      {
+       "buf": "layers.19.w_aug"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.128",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.19.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.129",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.19.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.130",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.19.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.131",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.20.sw_attn.norm"
+      },
+      {
+       "buf": "layers.20.sw_attn.proj"
+      },
+      {
+       "buf": "layers.20.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.132",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.20.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.20.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.20.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.133",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.20.wsm.b"
+      },
+      {
+       "buf": "layers.20.wsm.f_a"
+      },
+      {
+       "buf": "layers.20.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.134",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.20.cw.q"
+      },
+      {
+       "buf": "layers.20.cw.k"
+      },
+      {
+       "buf": "layers.20.cw.v"
+      },
+      {
+       "buf": "layers.20.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.135",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.20.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.136",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.20.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.137",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.20.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.138",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.21.sw_attn.norm"
+      },
+      {
+       "buf": "layers.21.sw_attn.proj"
+      },
+      {
+       "buf": "layers.21.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.139",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.21.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.21.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.21.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.140",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.21.wsm.b"
+      },
+      {
+       "buf": "layers.21.wsm.f_a"
+      },
+      {
+       "buf": "layers.21.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.141",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.21.cw.q"
+      },
+      {
+       "buf": "layers.21.cw.k"
+      },
+      {
+       "buf": "layers.21.cw.v"
+      },
+      {
+       "buf": "layers.21.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.142",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.21.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.143",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.21.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.144",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.21.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.145",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.22.sw_attn.norm"
+      },
+      {
+       "buf": "layers.22.sw_attn.proj"
+      },
+      {
+       "buf": "layers.22.sw_attn"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_scoring.146",
+     "op": "k3_scoring",
+     "args": [
+      {
+       "buf": "layers.22.sw_mlp.norm"
+      },
+      {
+       "buf": "layers.22.sw_mlp.proj"
+      },
+      {
+       "buf": "layers.22.sw_mlp"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_wsm.147",
+     "op": "k3_wsm",
+     "args": [
+      {
+       "buf": "layers.22.wsm.b"
+      },
+      {
+       "buf": "layers.22.wsm.f_a"
+      },
+      {
+       "buf": "layers.22.wsm"
+      }
+     ]
+    },
+    {
+     "label": "load.k3_conv_taps.148",
+     "op": "k3_conv_taps",
+     "args": [
+      {
+       "buf": "layers.22.cw.q"
+      },
+      {
+       "buf": "layers.22.cw.k"
+      },
+      {
+       "buf": "layers.22.cw.v"
+      },
+      {
+       "buf": "layers.22.cw"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_bf16.149",
+     "op": "fill_bf16",
+     "args": [
+      {
+       "buf": "layers.22.rs"
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.150",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.22.moe.alpha"
+      },
+      {
+       "f32": 4.0
+      }
+     ]
+    },
+    {
+     "label": "load.fill_f32.151",
+     "op": "fill_f32",
+     "args": [
+      {
+       "buf": "layers.22.moe.beta"
+      },
+      {
+       "f32": 25.0
+      }
+     ]
+    }
+   ]
+  },
+  "derive": {
+   "calls": [
+    {
+     "label": "load.k3_moe_w_shuffle.0",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266045,7 +266920,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.9",
+     "label": "load.k3_moe_sf_shuffle.1",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266066,7 +266941,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.10",
+     "label": "load.k3_moe_w_shuffle.2",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266087,7 +266962,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.11",
+     "label": "load.k3_moe_sf_shuffle.3",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266108,103 +266983,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.12",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.1.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.13",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.1.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.14",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.2.sw_attn.norm"
-      },
-      {
-       "buf": "layers.2.sw_attn.proj"
-      },
-      {
-       "buf": "layers.2.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.15",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.2.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.2.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.2.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.16",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.2.wsm.b"
-      },
-      {
-       "buf": "layers.2.wsm.f_a"
-      },
-      {
-       "buf": "layers.2.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.17",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.2.cw.q"
-      },
-      {
-       "buf": "layers.2.cw.k"
-      },
-      {
-       "buf": "layers.2.cw.v"
-      },
-      {
-       "buf": "layers.2.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.18",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.2.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.19",
+     "label": "load.k3_moe_w_shuffle.4",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266225,7 +267004,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.20",
+     "label": "load.k3_moe_sf_shuffle.5",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266246,7 +267025,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.21",
+     "label": "load.k3_moe_w_shuffle.6",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266267,7 +267046,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.22",
+     "label": "load.k3_moe_sf_shuffle.7",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266288,82 +267067,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.23",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.2.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.24",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.2.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.25",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.3.sw_attn.norm"
-      },
-      {
-       "buf": "layers.3.sw_attn.proj"
-      },
-      {
-       "buf": "layers.3.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.26",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.3.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.3.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.3.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_kvb_aug.27",
-     "op": "k3_kvb_aug",
-     "args": [
-      {
-       "buf": "layers.3.w_kv_b"
-      },
-      {
-       "buf": "layers.3.w_aug"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.28",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.3.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.29",
+     "label": "load.k3_moe_w_shuffle.8",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266384,7 +267088,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.30",
+     "label": "load.k3_moe_sf_shuffle.9",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266405,7 +267109,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.31",
+     "label": "load.k3_moe_w_shuffle.10",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266426,7 +267130,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.32",
+     "label": "load.k3_moe_sf_shuffle.11",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266447,103 +267151,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.33",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.3.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.34",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.3.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.35",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.4.sw_attn.norm"
-      },
-      {
-       "buf": "layers.4.sw_attn.proj"
-      },
-      {
-       "buf": "layers.4.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.36",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.4.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.4.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.4.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.37",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.4.wsm.b"
-      },
-      {
-       "buf": "layers.4.wsm.f_a"
-      },
-      {
-       "buf": "layers.4.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.38",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.4.cw.q"
-      },
-      {
-       "buf": "layers.4.cw.k"
-      },
-      {
-       "buf": "layers.4.cw.v"
-      },
-      {
-       "buf": "layers.4.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.39",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.4.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.40",
+     "label": "load.k3_moe_w_shuffle.12",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266564,7 +267172,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.41",
+     "label": "load.k3_moe_sf_shuffle.13",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266585,7 +267193,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.42",
+     "label": "load.k3_moe_w_shuffle.14",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266606,7 +267214,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.43",
+     "label": "load.k3_moe_sf_shuffle.15",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266627,103 +267235,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.44",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.4.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.45",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.4.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.46",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.5.sw_attn.norm"
-      },
-      {
-       "buf": "layers.5.sw_attn.proj"
-      },
-      {
-       "buf": "layers.5.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.47",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.5.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.5.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.5.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.48",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.5.wsm.b"
-      },
-      {
-       "buf": "layers.5.wsm.f_a"
-      },
-      {
-       "buf": "layers.5.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.49",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.5.cw.q"
-      },
-      {
-       "buf": "layers.5.cw.k"
-      },
-      {
-       "buf": "layers.5.cw.v"
-      },
-      {
-       "buf": "layers.5.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.50",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.5.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.51",
+     "label": "load.k3_moe_w_shuffle.16",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266744,7 +267256,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.52",
+     "label": "load.k3_moe_sf_shuffle.17",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266765,7 +267277,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.53",
+     "label": "load.k3_moe_w_shuffle.18",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266786,7 +267298,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.54",
+     "label": "load.k3_moe_sf_shuffle.19",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266807,103 +267319,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.55",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.5.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.56",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.5.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.57",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.6.sw_attn.norm"
-      },
-      {
-       "buf": "layers.6.sw_attn.proj"
-      },
-      {
-       "buf": "layers.6.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.58",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.6.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.6.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.6.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.59",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.6.wsm.b"
-      },
-      {
-       "buf": "layers.6.wsm.f_a"
-      },
-      {
-       "buf": "layers.6.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.60",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.6.cw.q"
-      },
-      {
-       "buf": "layers.6.cw.k"
-      },
-      {
-       "buf": "layers.6.cw.v"
-      },
-      {
-       "buf": "layers.6.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.61",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.6.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.62",
+     "label": "load.k3_moe_w_shuffle.20",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266924,7 +267340,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.63",
+     "label": "load.k3_moe_sf_shuffle.21",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266945,7 +267361,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.64",
+     "label": "load.k3_moe_w_shuffle.22",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -266966,7 +267382,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.65",
+     "label": "load.k3_moe_sf_shuffle.23",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -266987,82 +267403,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.66",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.6.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.67",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.6.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.68",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.7.sw_attn.norm"
-      },
-      {
-       "buf": "layers.7.sw_attn.proj"
-      },
-      {
-       "buf": "layers.7.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.69",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.7.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.7.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.7.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_kvb_aug.70",
-     "op": "k3_kvb_aug",
-     "args": [
-      {
-       "buf": "layers.7.w_kv_b"
-      },
-      {
-       "buf": "layers.7.w_aug"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.71",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.7.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.72",
+     "label": "load.k3_moe_w_shuffle.24",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -267083,7 +267424,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.73",
+     "label": "load.k3_moe_sf_shuffle.25",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -267104,7 +267445,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.74",
+     "label": "load.k3_moe_w_shuffle.26",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -267125,7 +267466,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.75",
+     "label": "load.k3_moe_sf_shuffle.27",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -267146,103 +267487,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.76",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.7.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.77",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.7.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.78",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.8.sw_attn.norm"
-      },
-      {
-       "buf": "layers.8.sw_attn.proj"
-      },
-      {
-       "buf": "layers.8.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.79",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.8.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.8.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.8.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.80",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.8.wsm.b"
-      },
-      {
-       "buf": "layers.8.wsm.f_a"
-      },
-      {
-       "buf": "layers.8.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.81",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.8.cw.q"
-      },
-      {
-       "buf": "layers.8.cw.k"
-      },
-      {
-       "buf": "layers.8.cw.v"
-      },
-      {
-       "buf": "layers.8.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.82",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.8.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.83",
+     "label": "load.k3_moe_w_shuffle.28",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -267263,7 +267508,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.84",
+     "label": "load.k3_moe_sf_shuffle.29",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -267284,7 +267529,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.85",
+     "label": "load.k3_moe_w_shuffle.30",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -267305,7 +267550,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.86",
+     "label": "load.k3_moe_sf_shuffle.31",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -267326,103 +267571,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.87",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.8.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.88",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.8.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.89",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.9.sw_attn.norm"
-      },
-      {
-       "buf": "layers.9.sw_attn.proj"
-      },
-      {
-       "buf": "layers.9.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.90",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.9.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.9.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.9.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.91",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.9.wsm.b"
-      },
-      {
-       "buf": "layers.9.wsm.f_a"
-      },
-      {
-       "buf": "layers.9.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.92",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.9.cw.q"
-      },
-      {
-       "buf": "layers.9.cw.k"
-      },
-      {
-       "buf": "layers.9.cw.v"
-      },
-      {
-       "buf": "layers.9.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.93",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.9.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.94",
+     "label": "load.k3_moe_w_shuffle.32",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -267443,7 +267592,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.95",
+     "label": "load.k3_moe_sf_shuffle.33",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -267464,7 +267613,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.96",
+     "label": "load.k3_moe_w_shuffle.34",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -267485,7 +267634,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.97",
+     "label": "load.k3_moe_sf_shuffle.35",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -267506,103 +267655,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.98",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.9.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.99",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.9.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.100",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.10.sw_attn.norm"
-      },
-      {
-       "buf": "layers.10.sw_attn.proj"
-      },
-      {
-       "buf": "layers.10.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.101",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.10.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.10.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.10.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.102",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.10.wsm.b"
-      },
-      {
-       "buf": "layers.10.wsm.f_a"
-      },
-      {
-       "buf": "layers.10.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.103",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.10.cw.q"
-      },
-      {
-       "buf": "layers.10.cw.k"
-      },
-      {
-       "buf": "layers.10.cw.v"
-      },
-      {
-       "buf": "layers.10.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.104",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.10.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.105",
+     "label": "load.k3_moe_w_shuffle.36",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -267623,7 +267676,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.106",
+     "label": "load.k3_moe_sf_shuffle.37",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -267644,7 +267697,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.107",
+     "label": "load.k3_moe_w_shuffle.38",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -267665,7 +267718,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.108",
+     "label": "load.k3_moe_sf_shuffle.39",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -267686,82 +267739,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.109",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.10.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.110",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.10.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.111",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.11.sw_attn.norm"
-      },
-      {
-       "buf": "layers.11.sw_attn.proj"
-      },
-      {
-       "buf": "layers.11.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.112",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.11.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.11.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.11.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_kvb_aug.113",
-     "op": "k3_kvb_aug",
-     "args": [
-      {
-       "buf": "layers.11.w_kv_b"
-      },
-      {
-       "buf": "layers.11.w_aug"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.114",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.11.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.115",
+     "label": "load.k3_moe_w_shuffle.40",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -267782,7 +267760,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.116",
+     "label": "load.k3_moe_sf_shuffle.41",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -267803,7 +267781,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.117",
+     "label": "load.k3_moe_w_shuffle.42",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -267824,7 +267802,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.118",
+     "label": "load.k3_moe_sf_shuffle.43",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -267845,103 +267823,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.119",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.11.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.120",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.11.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.121",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.12.sw_attn.norm"
-      },
-      {
-       "buf": "layers.12.sw_attn.proj"
-      },
-      {
-       "buf": "layers.12.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.122",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.12.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.12.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.12.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.123",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.12.wsm.b"
-      },
-      {
-       "buf": "layers.12.wsm.f_a"
-      },
-      {
-       "buf": "layers.12.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.124",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.12.cw.q"
-      },
-      {
-       "buf": "layers.12.cw.k"
-      },
-      {
-       "buf": "layers.12.cw.v"
-      },
-      {
-       "buf": "layers.12.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.125",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.12.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.126",
+     "label": "load.k3_moe_w_shuffle.44",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -267962,7 +267844,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.127",
+     "label": "load.k3_moe_sf_shuffle.45",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -267983,7 +267865,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.128",
+     "label": "load.k3_moe_w_shuffle.46",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -268004,7 +267886,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.129",
+     "label": "load.k3_moe_sf_shuffle.47",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -268025,103 +267907,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.130",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.12.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.131",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.12.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.132",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.13.sw_attn.norm"
-      },
-      {
-       "buf": "layers.13.sw_attn.proj"
-      },
-      {
-       "buf": "layers.13.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.133",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.13.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.13.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.13.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.134",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.13.wsm.b"
-      },
-      {
-       "buf": "layers.13.wsm.f_a"
-      },
-      {
-       "buf": "layers.13.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.135",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.13.cw.q"
-      },
-      {
-       "buf": "layers.13.cw.k"
-      },
-      {
-       "buf": "layers.13.cw.v"
-      },
-      {
-       "buf": "layers.13.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.136",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.13.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.137",
+     "label": "load.k3_moe_w_shuffle.48",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -268142,7 +267928,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.138",
+     "label": "load.k3_moe_sf_shuffle.49",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -268163,7 +267949,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.139",
+     "label": "load.k3_moe_w_shuffle.50",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -268184,7 +267970,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.140",
+     "label": "load.k3_moe_sf_shuffle.51",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -268205,103 +267991,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.141",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.13.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.142",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.13.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.143",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.14.sw_attn.norm"
-      },
-      {
-       "buf": "layers.14.sw_attn.proj"
-      },
-      {
-       "buf": "layers.14.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.144",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.14.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.14.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.14.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.145",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.14.wsm.b"
-      },
-      {
-       "buf": "layers.14.wsm.f_a"
-      },
-      {
-       "buf": "layers.14.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.146",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.14.cw.q"
-      },
-      {
-       "buf": "layers.14.cw.k"
-      },
-      {
-       "buf": "layers.14.cw.v"
-      },
-      {
-       "buf": "layers.14.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.147",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.14.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.148",
+     "label": "load.k3_moe_w_shuffle.52",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -268322,7 +268012,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.149",
+     "label": "load.k3_moe_sf_shuffle.53",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -268343,7 +268033,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.150",
+     "label": "load.k3_moe_w_shuffle.54",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -268364,7 +268054,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.151",
+     "label": "load.k3_moe_sf_shuffle.55",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -268385,82 +268075,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.152",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.14.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.153",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.14.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.154",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.15.sw_attn.norm"
-      },
-      {
-       "buf": "layers.15.sw_attn.proj"
-      },
-      {
-       "buf": "layers.15.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.155",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.15.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.15.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.15.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_kvb_aug.156",
-     "op": "k3_kvb_aug",
-     "args": [
-      {
-       "buf": "layers.15.w_kv_b"
-      },
-      {
-       "buf": "layers.15.w_aug"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.157",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.15.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.158",
+     "label": "load.k3_moe_w_shuffle.56",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -268481,7 +268096,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.159",
+     "label": "load.k3_moe_sf_shuffle.57",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -268502,7 +268117,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.160",
+     "label": "load.k3_moe_w_shuffle.58",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -268523,7 +268138,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.161",
+     "label": "load.k3_moe_sf_shuffle.59",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -268544,103 +268159,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.162",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.15.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.163",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.15.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.164",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.16.sw_attn.norm"
-      },
-      {
-       "buf": "layers.16.sw_attn.proj"
-      },
-      {
-       "buf": "layers.16.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.165",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.16.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.16.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.16.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.166",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.16.wsm.b"
-      },
-      {
-       "buf": "layers.16.wsm.f_a"
-      },
-      {
-       "buf": "layers.16.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.167",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.16.cw.q"
-      },
-      {
-       "buf": "layers.16.cw.k"
-      },
-      {
-       "buf": "layers.16.cw.v"
-      },
-      {
-       "buf": "layers.16.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.168",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.16.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.169",
+     "label": "load.k3_moe_w_shuffle.60",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -268661,7 +268180,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.170",
+     "label": "load.k3_moe_sf_shuffle.61",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -268682,7 +268201,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.171",
+     "label": "load.k3_moe_w_shuffle.62",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -268703,7 +268222,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.172",
+     "label": "load.k3_moe_sf_shuffle.63",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -268724,103 +268243,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.173",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.16.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.174",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.16.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.175",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.17.sw_attn.norm"
-      },
-      {
-       "buf": "layers.17.sw_attn.proj"
-      },
-      {
-       "buf": "layers.17.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.176",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.17.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.17.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.17.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.177",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.17.wsm.b"
-      },
-      {
-       "buf": "layers.17.wsm.f_a"
-      },
-      {
-       "buf": "layers.17.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.178",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.17.cw.q"
-      },
-      {
-       "buf": "layers.17.cw.k"
-      },
-      {
-       "buf": "layers.17.cw.v"
-      },
-      {
-       "buf": "layers.17.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.179",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.17.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.180",
+     "label": "load.k3_moe_w_shuffle.64",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -268841,7 +268264,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.181",
+     "label": "load.k3_moe_sf_shuffle.65",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -268862,7 +268285,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.182",
+     "label": "load.k3_moe_w_shuffle.66",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -268883,7 +268306,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.183",
+     "label": "load.k3_moe_sf_shuffle.67",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -268904,103 +268327,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.184",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.17.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.185",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.17.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.186",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.18.sw_attn.norm"
-      },
-      {
-       "buf": "layers.18.sw_attn.proj"
-      },
-      {
-       "buf": "layers.18.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.187",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.18.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.18.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.18.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.188",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.18.wsm.b"
-      },
-      {
-       "buf": "layers.18.wsm.f_a"
-      },
-      {
-       "buf": "layers.18.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.189",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.18.cw.q"
-      },
-      {
-       "buf": "layers.18.cw.k"
-      },
-      {
-       "buf": "layers.18.cw.v"
-      },
-      {
-       "buf": "layers.18.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.190",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.18.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.191",
+     "label": "load.k3_moe_w_shuffle.68",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -269021,7 +268348,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.192",
+     "label": "load.k3_moe_sf_shuffle.69",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -269042,7 +268369,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.193",
+     "label": "load.k3_moe_w_shuffle.70",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -269063,7 +268390,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.194",
+     "label": "load.k3_moe_sf_shuffle.71",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -269084,82 +268411,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.195",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.18.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.196",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.18.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.197",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.19.sw_attn.norm"
-      },
-      {
-       "buf": "layers.19.sw_attn.proj"
-      },
-      {
-       "buf": "layers.19.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.198",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.19.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.19.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.19.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_kvb_aug.199",
-     "op": "k3_kvb_aug",
-     "args": [
-      {
-       "buf": "layers.19.w_kv_b"
-      },
-      {
-       "buf": "layers.19.w_aug"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.200",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.19.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.201",
+     "label": "load.k3_moe_w_shuffle.72",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -269180,7 +268432,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.202",
+     "label": "load.k3_moe_sf_shuffle.73",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -269201,7 +268453,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.203",
+     "label": "load.k3_moe_w_shuffle.74",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -269222,7 +268474,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.204",
+     "label": "load.k3_moe_sf_shuffle.75",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -269243,103 +268495,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.205",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.19.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.206",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.19.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.207",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.20.sw_attn.norm"
-      },
-      {
-       "buf": "layers.20.sw_attn.proj"
-      },
-      {
-       "buf": "layers.20.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.208",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.20.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.20.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.20.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.209",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.20.wsm.b"
-      },
-      {
-       "buf": "layers.20.wsm.f_a"
-      },
-      {
-       "buf": "layers.20.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.210",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.20.cw.q"
-      },
-      {
-       "buf": "layers.20.cw.k"
-      },
-      {
-       "buf": "layers.20.cw.v"
-      },
-      {
-       "buf": "layers.20.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.211",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.20.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.212",
+     "label": "load.k3_moe_w_shuffle.76",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -269360,7 +268516,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.213",
+     "label": "load.k3_moe_sf_shuffle.77",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -269381,7 +268537,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.214",
+     "label": "load.k3_moe_w_shuffle.78",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -269402,7 +268558,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.215",
+     "label": "load.k3_moe_sf_shuffle.79",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -269423,103 +268579,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.216",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.20.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.217",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.20.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.218",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.21.sw_attn.norm"
-      },
-      {
-       "buf": "layers.21.sw_attn.proj"
-      },
-      {
-       "buf": "layers.21.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.219",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.21.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.21.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.21.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.220",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.21.wsm.b"
-      },
-      {
-       "buf": "layers.21.wsm.f_a"
-      },
-      {
-       "buf": "layers.21.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.221",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.21.cw.q"
-      },
-      {
-       "buf": "layers.21.cw.k"
-      },
-      {
-       "buf": "layers.21.cw.v"
-      },
-      {
-       "buf": "layers.21.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.222",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.21.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.223",
+     "label": "load.k3_moe_w_shuffle.80",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -269540,7 +268600,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.224",
+     "label": "load.k3_moe_sf_shuffle.81",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -269561,7 +268621,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.225",
+     "label": "load.k3_moe_w_shuffle.82",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -269582,7 +268642,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.226",
+     "label": "load.k3_moe_sf_shuffle.83",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -269603,103 +268663,7 @@
      ]
     },
     {
-     "label": "load.fill_f32.227",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.21.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.228",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.21.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.229",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.22.sw_attn.norm"
-      },
-      {
-       "buf": "layers.22.sw_attn.proj"
-      },
-      {
-       "buf": "layers.22.sw_attn"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_scoring.230",
-     "op": "k3_scoring",
-     "args": [
-      {
-       "buf": "layers.22.sw_mlp.norm"
-      },
-      {
-       "buf": "layers.22.sw_mlp.proj"
-      },
-      {
-       "buf": "layers.22.sw_mlp"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_wsm.231",
-     "op": "k3_wsm",
-     "args": [
-      {
-       "buf": "layers.22.wsm.b"
-      },
-      {
-       "buf": "layers.22.wsm.f_a"
-      },
-      {
-       "buf": "layers.22.wsm"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_conv_taps.232",
-     "op": "k3_conv_taps",
-     "args": [
-      {
-       "buf": "layers.22.cw.q"
-      },
-      {
-       "buf": "layers.22.cw.k"
-      },
-      {
-       "buf": "layers.22.cw.v"
-      },
-      {
-       "buf": "layers.22.cw"
-      }
-     ]
-    },
-    {
-     "label": "load.fill_bf16.233",
-     "op": "fill_bf16",
-     "args": [
-      {
-       "buf": "layers.22.rs"
-      }
-     ]
-    },
-    {
-     "label": "load.k3_moe_w_shuffle.234",
+     "label": "load.k3_moe_w_shuffle.84",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -269720,7 +268684,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.235",
+     "label": "load.k3_moe_sf_shuffle.85",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -269741,7 +268705,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_w_shuffle.236",
+     "label": "load.k3_moe_w_shuffle.86",
      "op": "k3_moe_w_shuffle",
      "args": [
       {
@@ -269762,7 +268726,7 @@
      ]
     },
     {
-     "label": "load.k3_moe_sf_shuffle.237",
+     "label": "load.k3_moe_sf_shuffle.87",
      "op": "k3_moe_sf_shuffle",
      "args": [
       {
@@ -269781,32 +268745,9 @@
        "i32": 0
       }
      ]
-    },
-    {
-     "label": "load.fill_f32.238",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.22.moe.alpha"
-      },
-      {
-       "f32": 4.0
-      }
-     ]
-    },
-    {
-     "label": "load.fill_f32.239",
-     "op": "fill_f32",
-     "args": [
-      {
-       "buf": "layers.22.moe.beta"
-      },
-      {
-       "f32": 25.0
-      }
-     ]
     }
-   ]
+   ],
+   "derive": true
   }
  }
 }

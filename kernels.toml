@@ -36,8 +36,13 @@ source = "source/flashinfer-moe-routing/kern_moe_routing.cu"
 build = "source/flashinfer-moe-routing/build.sh"
 
 [kernels."k3_kda_out_gate"]
-sha256 = "740b4ceb2d8de833c2c56d4e09ce565dcddcd54d921e34440e104716865ca9c4"
+sha256 = "837b8261348b9b238eb9cedfce4e176142c62e91be99cc33ad8ac476a6a5f54c"
 source = "source/k3_kda_out_gate.cu"
+
+[kernels."k3_kda_out_gate+PARTIAL_BF16=1"]
+sha256 = "663f5bb6b841d32049e549d801611132a3c157bdcabfcf20edd5aa0028200da8"
+source = "source/k3_kda_out_gate.cu"
+defines = { PARTIAL_BF16 = 1 }
 
 [kernels."k3_land"]
 sha256 = "2cd68c79bf3243f37d2f1406880060f610b4028f9e843bb356ea8ef0a0352fcc"
@@ -59,6 +64,15 @@ source = "source/k3_moe_prefill.cu"
 sha256 = "c3c33eaf60000c313ba839258a54b2748e0483439e3f3068fc3dfa84a60adf2c"
 source = "source/k3_prefill.cu"
 
+[kernels."k3_prefill_glue"]
+sha256 = "dd27dcf6d62d41fc30fffdec4f0cdf9840104e3ca16972e90936ff253332ef1e"
+source = "source/k3_prefill_glue.cu"
+
+[kernels."k3_prefill_glue+EXPERTS=896"]
+sha256 = "b1b95b12479cbf49b8e55b45c839fda9817a336749fe69535410ecd379498630"
+source = "source/k3_prefill_glue.cu"
+defines = { EXPERTS = 896 }
+
 [kernels."k3_residual"]
 sha256 = "d5d5d1fb3dda907822d99520b611fa77cab05bf11f165a1aa0d5e43d07cca8c8"
 source = "source/k3_residual.cu"
@@ -78,8 +92,13 @@ source = "source/k3_router_argmax.cu"
 defines = { EXPERTS = 896 }
 
 [kernels."k3_span_gather"]
-sha256 = "55a7dfc9a4a0cef1fb10e4919d49099c6796e25fcfde2e2fb5b3f8ca62c495ad"
+sha256 = "f9039b0e0aa0ba0140b60f0e0fbde391b6580205607b40fbaf9348057667d652"
 source = "source/k3_span_gather.cu"
+
+[kernels."k3_span_gather+PARTIAL_BF16=1"]
+sha256 = "94b9525ba655d1b4fdd03cd2373e7c007af1a5a9502c74c220d97f2421566522"
+source = "source/k3_span_gather.cu"
+defines = { PARTIAL_BF16 = 1 }
 
 [kernels."k3_span_state"]
 sha256 = "c55c411c7ec3b992b324078683897a8f71f6760ce2e3978730db300c0fa57d7b"

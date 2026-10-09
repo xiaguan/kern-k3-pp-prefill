@@ -29,7 +29,7 @@ from pinned import module
 
 H, I, TOPK = 3584, 3072, 16
 ALPHA, BETA = 4.0, 25.0
-GLUE, ROUTING = "k3_moe_prefill", "flashinfer_moe_routing"
+GLUE, PGLUE, ROUTING = "k3_moe_prefill", "k3_prefill_glue", "flashinfer_moe_routing"
 GLUE_MAX_E = 64
 FC1, FC2 = "trtllm_bmm_mxe4m3_mxe2m1_mxe4m3", "trtllm_bmm_bf16_mxe2m1_mxe4m3"
 SHAPE = "k3-prefill-16k-ep4"
@@ -49,8 +49,8 @@ def variants(names=None):
     return v1, v2
 
 
-def glue(entry, grid, block=256, params=None, args=None):
-    return {**index.variant(GLUE).module, "entry": entry, "grid": grid, "block": [block, 1, 1],
+def glue(entry, grid, block=256, params=None, args=None, mod=None):
+    return {**(mod or index.variant(GLUE).module), "entry": entry, "grid": grid, "block": [block, 1, 1],
             **({"params": params, "args": args} if params else {})}
 
 
@@ -60,6 +60,8 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
     runs over `quant_rows` rows and the combine writes `out_rows` rows (expressions). `steps` lists the
     calls of one layer."""
     v1, v2 = variants(names)
+    # The combine + latent norm (source/k3_prefill_glue.cu).
+    pglue = module(PGLUE, **({"EXPERTS": experts} if experts != 224 else {}))
     tile = v1.tags["tile"][1]
     assert v2.tags["tile"][1] == tile, "both GEMMs read one set of CTA tables"
     ctas = trtllm_bmm.ctas_bound(tokens, TOPK, local, tile)
@@ -115,6 +117,11 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
             "params": ["in buffer<bf16>", "in buffer<i32>", "in buffer<f32>", "out buffer<bf16>", "i32", "i32"],
             "impl": {"launches": [glue("kern_k3_moe_finalize", [out_rows, 1, 1])]},
         },
+        "moe_finalize_rms": {
+            "params": ["in buffer<bf16>", "in buffer<i32>", "in buffer<f32>", "in buffer<bf16>", "out buffer<bf16>",
+                       "i32", "i32"],
+            "impl": {"launches": [glue("kern_k3g_finalize_rms", [out_rows, 1, 1], block=H // 8, mod=pglue)]},
+        },
     }
     assert trtllm_bmm.params(v1) == ["a", "sf_a", "b", "sf_b", "c", "sf_c", "route_map", "alpha", "beta",
                                      "num_non_exiting", "total_padded", "cta_batch", "cta_limit"]
@@ -143,15 +150,19 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
              "args": [ids, b("blockoff"), T, rank, i32(local), b("route_map"), b("exp2perm")]},
         ]
 
-    def steps(q, sf, ids, wts, w13s, w13_sfs, w2s, w2_sfs, alpha, beta, out, rank=None, label=""):
+    def steps(q, sf, ids, wts, w13s, w13_sfs, w2s, w2_sfs, alpha, beta, out, rank=None, gamma=None, label=""):
+        """One layer's calls; with `gamma` the combine's row is normed by it (the latent norm) before `out`."""
         T = dim(tokens)
+        combine = ({"label": label + "finalize", "op": "moe_finalize_rms",
+                    "args": [b("fc2_out"), b("exp2perm"), wts, gamma, out, T, i32(H)]} if gamma else
+                   {"label": label + "finalize", "op": "moe_finalize",
+                    "args": [b("fc2_out"), b("exp2perm"), wts, out, T, i32(H)]})
         return [
             *routing(ids, rank, label),
             {"label": label + "fc1", "op": "moe_fc1",
              "args": [w13s, w13_sfs, q, sf, b("fc1_out"), b("fc1_sf"), b("route_map"), alpha, beta, *tables]},
             {"label": label + "fc2", "op": "moe_fc2", "args": [w2s, w2_sfs, b("fc1_out"), b("fc1_sf"), b("fc2_out"), *tables]},
-            {"label": label + "finalize", "op": "moe_finalize",
-             "args": [b("fc2_out"), b("exp2perm"), wts, out, T, i32(H)]},
+            combine,
         ]
 
     return {"buffers": buffers, "ops": ops, "quant_step": quant_step, "steps": steps, "tile": tile,
