@@ -34,6 +34,11 @@
 //! started right after a synchronous step so the ranks start together.
 //! `--profile R@N,...` brackets three replays at R rows and context N with
 //! cuProfilerStart/Stop (nsys `--capture-range=cudaProfilerApi`).
+//!
+//! Teacher-forced, `--every 0` keeps no logits and reads none back, so the
+//! step is timed as the bench times it (token write to `next_token`), over
+//! real text: `step.r<rank>.json` holds the p10/p50/p90 of the steps from
+//! `--warmup` on, and `--profile-at S` brackets steps S..S+3.
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -60,6 +65,7 @@ struct Args {
     warmup: usize,
     iters: usize,
     profile: Vec<(usize, u64)>,
+    profile_at: Option<usize>,
 }
 
 fn args() -> anyhow::Result<Args> {
@@ -81,6 +87,7 @@ fn args() -> anyhow::Result<Args> {
         warmup: 5,
         iters: 50,
         profile: Vec::new(),
+        profile_at: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -103,6 +110,7 @@ fn args() -> anyhow::Result<Args> {
             "--bench" => a.bench = v()?.split(',').map(str::parse).collect::<Result<_, _>>()?,
             "--warmup" => a.warmup = v()?.parse()?,
             "--iters" => a.iters = v()?.parse()?,
+            "--profile-at" => a.profile_at = Some(v()?.parse()?),
             "--profile" => {
                 a.profile = v()?
                     .split(',')
@@ -279,8 +287,13 @@ fn main() -> anyhow::Result<()> {
     let mut dumped = vec![Vec::new(); dumps.len()];
     let (mut next, mut logits, mut top) = (Vec::new(), Vec::new(), Vec::<f64>::new());
     let t1 = Instant::now();
+    let mut times = Vec::new();
     for s in 0..steps {
         let p = s as u64;
+        if a.profile_at == Some(s) {
+            unsafe { cudarc::driver::sys::cuProfilerStart() };
+        }
+        let t = Instant::now();
         let tok: Vec<i64> = (0..b).map(|r| ids[r * steps + s]).collect();
         rt.write_input_at("token_ids", &le(&tok, i64::to_le_bytes), &vars)?;
         if paged {
@@ -295,13 +308,19 @@ fn main() -> anyhow::Result<()> {
         rt.issue("decode", &vars)?;
         rt.synchronize()?;
         next.extend_from_slice(&rt.read_output("next_token")?[..b * 8]);
-        if me == 0 {
+        times.push(t.elapsed().as_secs_f64() * 1e3);
+        if a.profile_at.map(|p| p + 3) == Some(s + 1) {
+            unsafe { cudarc::driver::sys::cuProfilerStop() };
+        }
+        if me == 0 && a.every > 0 {
             let l = rt.read_buffer_prefix("logits", b * vocab * 4)?;
             let f: Vec<f32> = l.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
             top.extend(f.chunks_exact(vocab).flat_map(top2));
             if (s + 1) % a.every == 0 {
                 logits.extend(l);
             }
+        }
+        if me == 0 {
             for ((name, n), d) in dumps.iter().zip(&mut dumped) {
                 d.extend(rt.read_buffer_prefix(name, *n)?);
             }
@@ -319,6 +338,16 @@ fn main() -> anyhow::Result<()> {
     }
     let how = if a.graph { "graph" } else { "eager" };
     println!("rank {me}: {steps} steps x {b} rows, {ms:.1} ms per step ({how}, with readback)");
+    if a.every == 0 {
+        let mut t: Vec<f64> = times[a.warmup.min(steps - 1)..].to_vec();
+        t.sort_by(f64::total_cmp);
+        let (p10, p50, p90) = (quantile(&t, 0.1), quantile(&t, 0.5), quantile(&t, 0.9));
+        println!("rank {me} teacher-forced rows {b}: step p10/p50/p90 {p10:.2}/{p50:.2}/{p90:.2} ms");
+        std::fs::write(
+            a.out.join(format!("step.r{me}.json")),
+            format!("{{\"rows\": {b}, \"steps\": {steps}, \"p10\": {p10:.3}, \"p50\": {p50:.3}, \"p90\": {p90:.3}}}\n"),
+        )?;
+    }
     Ok(())
 }
 
