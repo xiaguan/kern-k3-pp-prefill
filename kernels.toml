@@ -35,9 +35,24 @@ prebuilt = "prebuilt/flashinfer_moe_routing.cubin"
 source = "source/flashinfer-moe-routing/kern_moe_routing.cu"
 build = "source/flashinfer-moe-routing/build.sh"
 
+[kernels."k3_conv_silu+HEADS=12"]
+sha256 = "d4ec42f005eea245a18c88761717db54e30421a7158c57b6028b0c19a472a08b"
+source = "source/k3_conv_silu.cu"
+defines = { HEADS = 12 }
+
+[kernels."k3_kda_core+HEADS=12"]
+sha256 = "42fc31d9c4300caaace896def74f0804bf527adc58aabaf70b96c2012f8620ca"
+source = "source/k3_kda_core.cu"
+defines = { HEADS = 12 }
+
 [kernels."k3_kda_out_gate"]
 sha256 = "837b8261348b9b238eb9cedfce4e176142c62e91be99cc33ad8ac476a6a5f54c"
 source = "source/k3_kda_out_gate.cu"
+
+[kernels."k3_kda_out_gate+HEADS=12"]
+sha256 = "0f8596191a55cefabafdd79b283a8ad8a68dea39256502570bd1ea901d963de2"
+source = "source/k3_kda_out_gate.cu"
+defines = { HEADS = 12 }
 
 [kernels."k3_kda_out_gate+PARTIAL_BF16=1"]
 sha256 = "663f5bb6b841d32049e549d801611132a3c157bdcabfcf20edd5aa0028200da8"
@@ -52,9 +67,19 @@ source = "source/k3_land.cu"
 sha256 = "2b244a6333a73248b64291e27cd0d5d3198a5ce5e2d275c6c819a2183d468eb5"
 source = "source/k3_mla_prep.cu"
 
+[kernels."k3_mla_prep+INNER=1536+MLA_FUSED=3648"]
+sha256 = "e6bf47cabf0afacab4aeac76d6e55b4295a0b068b744d84bdd8972c09d7e62ab"
+source = "source/k3_mla_prep.cu"
+defines = { INNER = 1536, MLA_FUSED = 3648 }
+
 [kernels."k3_mla_v2"]
 sha256 = "63caf8c109f83a79d622ffca2f05174472e628df858cc3823d4e86d88c4c3608"
 source = "source/k3_mla_v2.cu"
+
+[kernels."k3_mla_vup_gate+HEADS=12"]
+sha256 = "a6b673b9fa7595089c49b403cdf23c8d0224bab53b0b9224fc6392afe87c09c6"
+source = "source/k3_mla_vup_gate.cu"
+defines = { HEADS = 12 }
 
 [kernels."k3_moe_prefill"]
 sha256 = "6b4d144e735a4b08d29bf8d6e302107a4d1396a6967b0b6d342fe263ff6c8bca"
