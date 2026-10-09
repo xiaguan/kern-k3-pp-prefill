@@ -179,3 +179,7 @@ defines = { HEADS = 12, LDS = 6400, WSM_FA = 12, WSM_LDS = 6400 }
 sha256 = "13de5ccb7c287ab9fbd8abd23aeaa84bc3eb4c61f1479a26652f6d8aae00b59f"
 source = "source/k3_conv_silu.cu"
 defines = { HEADS = 12, LDS = 6400 }
+
+[kernels."k3_mla_absorb_mma"]
+sha256 = "9612d4dab1ad4584414211f8ecffd778f747a32ff057b128971f0765ad634d7c"
+source = "source/k3_mla_absorb_mma.cu"

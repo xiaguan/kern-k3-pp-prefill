@@ -654,9 +654,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         **({
         "mla_absorb": {
             "params": ["in buffer<f32>", "in buffer<bf16>", "out buffer<bf16>", "i32"],
-            "impl": {"launches": [launch("k3_mla_absorb", "kern_k3_mla_absorb", var=OG,
-                                         **({"grid": [{"ceil_div": [OG, 8]}, HEADS, 8], "defines": {"GROUPS": 1}}
-                                            if dcp else {}))]},
+            # DCP: every rank absorbs the whole batch's 96 heads, at most `seqs` rows (tensor cores)
+            "impl": {"launches": [launch("k3_mla_absorb_mma", "kern_k3_mla_absorb_mma", grid=[1, HEADS, 8],
+                                         block=[128, 1, 1]) if dcp
+                                  else launch("k3_mla_absorb", "kern_k3_mla_absorb", var=OG)]},
         },
         "mla_vup_gate": {
             "params": ["in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32"],
@@ -1636,6 +1637,8 @@ def main():
     names = tuple(a.moe_variants.split(",")) if a.moe_variants else None
     stage = ":" in a.layers
     first, end = map(int, a.layers.split(":")) if stage else (0, int(a.layers))
+    if a.dcp and a.seqs > 64:
+        ap.error("--dcp absorbs on tensor cores for at most 64 rows (k3_mla_absorb_mma BMAX)")
     json.dump(build(range(first, end), a.ranks, a.max_ctx, a.seqs, a.tp, a.mla_split_max, a.span_max, a.chunk, names,
                     stage, a.experts, a.state_per_layer, a.pack, a.dcp, a.peer_ar), sys.stdout, indent=1)
     print()

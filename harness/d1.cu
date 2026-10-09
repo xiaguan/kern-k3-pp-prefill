@@ -288,6 +288,46 @@ static int run_vup_gate(const Opt& o, CUmodule m) {
 }
 
 // ======================================================================
+// absorb: q_abs [B, 96, 576] = bf16(q_h) . W_UK_h (rows h*256+0..128 of
+// w_kv_b) | bf16(q_h rope), q_h from the f32 partial. --cubin2 times the
+// scalar kernel (GROUPS=1, its decode geometry) beside it.
+// ======================================================================
+static int run_absorb(const Opt& o, CUmodule m, CUmodule old) {
+  const int B = o.B, Hh = 96, LAT = 512, NOPE = 128, QW = 192, ROW = 576;
+  Rng r(o.seed);
+  auto q = rand_f32((size_t)B * Hh * QW, r, 0.0, 1.0);
+  auto w = rand_bf16((size_t)Hh * 256 * LAT, r, 0.044);
+  std::vector<double> ref((size_t)B * Hh * ROW);
+  parallel_for(B * Hh, [&](int bh) {
+    int b = bh / Hh, h = bh % Hh;
+    const float* qh = &q[((size_t)b * Hh + h) * QW];
+    for (int j = 0; j < LAT; ++j) {
+      double acc = 0;
+      for (int d = 0; d < NOPE; ++d) acc += (double)b2f(f2b(qh[d])) * b2f(w[((size_t)h * 256 + d) * LAT + j]);
+      ref[(size_t)bh * ROW + j] = b2f(f2b((float)acc));
+    }
+    for (int k = 0; k < QW - NOPE; ++k) ref[(size_t)bh * ROW + LAT + k] = b2f(f2b(qh[NOPE + k]));
+  });
+  CUdeviceptr dq = dput(q), dw = dput(w), dout = dpoison(ref.size() * 2);
+  CUfunction f = getfn(m, "kern_k3_mla_absorb_mma");
+  int Bv = B;
+  void* args[] = {&dq, &dw, &dout, &Bv};
+  std::printf("  launch             grid(1,96,8) block 128\n");
+  launch(f, 1, Hh, 8, 128, args);
+  cmp_bf16("q_abs", dget<bf16>(dout, ref.size()), ref);
+  double t = time_us(o.reps, [&] { CU(cuLaunchKernel(f, 1, Hh, 8, 128, 1, 1, 0, 0, args, nullptr)); });
+  double bytes = (double)Hh * NOPE * LAT * 2 + (double)B * Hh * (QW * 4 + ROW * 2);
+  std::printf("  TIME               median %8.2f us   %.2f MB   %.1f GB/s\n", t, bytes / 1e6, bytes / t / 1e3);
+  if (old) {
+    CUfunction g = getfn(old, "kern_k3_mla_absorb");
+    unsigned gx = (B + 7) / 8;
+    double t0 = time_us(o.reps, [&] { CU(cuLaunchKernel(g, gx, Hh, 8, 128, 1, 1, 0, 0, args, nullptr)); });
+    std::printf("  TIME scalar        median %8.2f us   grid(%u,96,8)\n", t0, gx);
+  }
+  return g_fail;
+}
+
+// ======================================================================
 // dcp: fixup / pack / combine over NRANKS members.
 // ======================================================================
 namespace dcp {
@@ -711,6 +751,7 @@ int main(int argc, char** argv) {
   if (!o.cubin2.empty()) CU(cuModuleLoad(&glue, o.cubin2.c_str()));
   int rc;
   if (o.kernel == "vup_gate") rc = run_vup_gate(o, m);
+  else if (o.kernel == "absorb") rc = run_absorb(o, m, glue);
   else if (o.kernel == "dcp") rc = dcp::run(o, m);
   else if (o.kernel == "routing" && glue) rc = routing::run(o, m, glue);
   else {
