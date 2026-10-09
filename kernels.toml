@@ -149,3 +149,8 @@ upstream = "flashinfer-cubin 0.6.18, bundle 2d6a5a029eefcc388ec0ceb87efb55d8bcce
 [kernels."weight_prep"]
 sha256 = "040f51b01c421b9c69a2090034ff1bc4741e40c02f5ea52bd04a3e62e5c1af4d"
 source = "source/weight_prep.cu"
+
+[kernels."peer_allreduce_bf16+NRANKS=8"]
+sha256 = "fa6a18d7a315427ecf3fbfdf8fa9528de62d2173221718c1c4e55af0bbe38f54"
+source = "source/peer_allreduce_bf16.cu"
+defines = { NRANKS = 8 }

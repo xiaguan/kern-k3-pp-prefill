@@ -316,7 +316,7 @@ def mla_attn_op(batch_max, page_stride, split_max, shared_table=False, batch=T):
 
 
 def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, chunk_max=0, moe_variants=None,
-          stage=False, experts=224, per_layer=False, pack=1, dcp=False):
+          stage=False, experts=224, per_layer=False, pack=1, dcp=False, peer_ar=False):
     """`layers`: the range of model layers; `stage`: a pipeline stage of them
     (no embedding unless it starts at 0, no head unless it ends at the last);
     `experts`: the checkpoint's routed experts (CHECKPOINTS); `per_layer`:
@@ -324,7 +324,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     them, so `kern cut` can drop the layers a stage does not run; `pack`:
     the prefill's sequences per call, packed back to back (see `--pack`);
     `dcp`: the decode step as a replicated batch over the `tp` group (see
-    `--dcp`)."""
+    `--dcp`); `peer_ar`: a DCP step's sums by the group's Lamport one-shot
+    (source/peer_allreduce_bf16.cu) instead of NCCL."""
     first, end = layers.start, layers.stop
     assert 0 <= first < end <= LAYERS
     assert not stage or (chunk_max > 0 and tp == 1), "a pipeline stage is a TP1 prefill-only manifest"
@@ -754,6 +755,20 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                                     [T, hl // 4, 1])
         ops["nccl_alltoall_bf16"] = nccl("alltoall", "bf16")
         ops["nccl_allreduce_bf16"] = nccl("allreduce", "bf16")
+    if xchg and peer_ar:
+        # `--peer-ar`: one kernel, every rank's partial pushed into every
+        # peer's Lamport stage over NVLink (one hop, no ring), summed in f32.
+        ops["tp_allreduce_bf16"] = {
+            "params": ["in buffer<bf16>", "out buffer<bf16>", "inout buffer<u8>", "in buffer<u64>",
+                       "inout buffer<i32>", "out buffer<i32>", "i32", "i64", "i64", "i64", "i64", "i64"],
+            "impl": {"launches": [launch("peer_allreduce_bf16", "kern_peer_allreduce_bf16", defines={"NRANKS": tp},
+                                         grid=[2 * TP_AR_GRID, 1, 1], block=[512, 1, 1])]},
+        }
+        ops["tp_lamport_init_bf16"] = {
+            "params": ["inout buffer<u8>", "i64"],
+            "impl": {"launches": [launch("peer_allreduce_bf16", "kern_peer_lamport_init_bf16", defines={"NRANKS": tp},
+                                         grid=[256, 1, 1], block=[256, 1, 1])]},
+        }
     if coll:
         # This rank's block of the chunk's token ids, and the rows of a
         # chunk-wide buffer past the chunk (k3_prefill.cu).
@@ -836,7 +851,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         **(bp or mp)["buffers"],
     }
     ag_region = own_max * H * 4 // 8  # packs: the widest gathered row is the f32 attention landing
-    ar_stage = tp * min(rows_max, ONESHOT_MAX_ROWS) * H * 4  # bytes: one Lamport stage, `tp` slots of f32 [rows, H]
+    # bytes: one Lamport stage, `tp` slots of f32 [rows, H], or of a DCP step's widest bf16 sum: a MoE
+    # layer's, the routed latent's `seqs_max` rows, then the shared expert's
+    ar_stage = tp * seqs_max * (LATENT + H) * 2 if dcp else tp * min(rows_max, ONESHOT_MAX_ROWS) * H * 4
     if tray:
         buffers.update({
             "tp_sym": {"dtype": "u8", "shape": [2 * tp * ag_region * 16], "kind": "carry", "export": True},
@@ -856,6 +873,13 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     # The tray batch's blocks: rank q's rows are tray rows [tp_blocks[q], tp_blocks[q+1]),
     # the last entry the tray's `rows`: the caller's deal of its batch
     # (peer_collective.cu "own rows first").
+    if xchg and peer_ar:
+        buffers.update({
+            "tp_ar_lamport": {"dtype": "u8", "shape": [3 * ar_stage], "kind": "carry", "export": True},
+            "tp_ar_lamport_peers": {"dtype": "u64", "shape": [tp], "kind": "peer", "of": "tp_ar_lamport", "group": "tp"},
+            "tp_ar_state": {"dtype": "i32", "shape": [8], "kind": "carry"},
+            "tp_err": {"dtype": "i32", "shape": [1], "kind": "output", "fill": "error"},
+        })
     if tray:
         buffers["tp_blocks"] = {"dtype": "i32", "shape": [tp + 1], "kind": "input", "fill": "blocks",
                                 "domain": {"min": 0, "max": rows_max, "monotone": True}}
@@ -1114,11 +1138,19 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
              b("tp_blocks"), {"rank": "tp"}, {"var": R}, i32(H), i64(ar_stage), i32(0), i64(TP_TIMEOUT_NS))
         return whole
 
-    def summed(label, partial, whole, count):
-        """A DCP group's bf16 sum of `partial` in `whole` by NCCL; `partial` itself in a group of one."""
+    def summed(label, partial, whole, count, second=None):
+        """A DCP group's bf16 sum of `partial` in `whole` by NCCL or the Lamport one-shot; `partial` itself in
+        a group of one. `second` (at, count): a second run of elements, summed by the one-shot in the same
+        exchange; NCCL sums everything up to its end."""
         if not xchg:
             return partial
-        step(label, "nccl_allreduce_bf16", partial, whole, {"expr": count})
+        at2, n2 = second or (0, 0)
+        if peer_ar:
+            step(label, "tp_allreduce_bf16", partial, whole, b("tp_ar_lamport"), b("tp_ar_lamport_peers"),
+                 b("tp_ar_state"), b("tp_err"), {"rank": "tp"}, {"expr": count}, i64(at2), {"expr": n2} if second else i64(0),
+                 i64(ar_stage), i64(TP_TIMEOUT_NS))
+        else:
+            step(label, "nccl_allreduce_bf16", partial, whole, {"expr": {"add": [at2, n2]} if second else count})
         return whole
 
     def span_kda(L, w, line, KB, S, kda="kda"):
@@ -1357,8 +1389,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                     proj(L + "wsh", b("normed"), w("wsh"), b("shared_partial"), 2 * sh_l, H, m=RB)
                     land_situ(L + "shared_situ", b("shared_partial"), b("shared_act"), sh_l, RB)
                     proj(L + "sh_down", b("shared_act"), w("sh_down"), b("moe_flat", shared_at), H, sh_l, m=RB)
-                    moe = summed(L + "reduce_mlp", b("moe_flat"), b("moe_sum"),
-                                 {"add": [seqs_max * LATENT, {"mul": [T, H]}]})["buf"]
+                    # the routed latent's `tokens` rows, then the shared expert's
+                    moe = summed(L + "reduce_mlp", b("moe_flat"), b("moe_sum"), {"mul": [T, LATENT]},
+                                 (seqs_max * LATENT, {"mul": [T, H]}))["buf"]
                     step(L + "lat_norm", "rms", b(moe), w("gamma_lat"), b("routed_latent_norm"), i32(LATENT), RB)
                     proj(L + "lat_up", b("routed_latent_norm"), w("w_lat_up"), b("routed_partial"), H, LATENT, m=RB)
                     closing = (L + "hidden", b("routed_partial"), b(moe, shared_at), 1)
@@ -1484,10 +1517,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         programs["prefill"] = kern_manifest.program(emit(False, chunk=True), groups=seqs_max, rows=T, context=CTX)
     # Run once after the peers are imported: the Lamport stages must read
     # -0.0 before the first allreduce, and a carry starts at zero.
-    if tray:
+    if tray or (xchg and peer_ar):
+        init = "tp_lamport_init_bf16" if dcp else "tp_lamport_init"
         programs["tp_init"] = kern_manifest.program(
-            [{"label": "tp_init", "op": "tp_lamport_init", "args": [b("tp_ar_lamport"), i64(3 * ar_stage)]}],
-            once=True)
+            [{"label": "tp_init", "op": init, "args": [b("tp_ar_lamport"), i64(3 * ar_stage)]}], once=True)
     m = {
         "schema_version": kern_manifest.SCHEMA_VERSION,
         "model": f"{CHECKPOINTS[experts]}/" + (f"l{first}-{end}" if stage else f"{end}l") + f"/ep{ranks}"
@@ -1536,12 +1569,14 @@ def main():
     ap.add_argument("--dcp", action="store_true",
                     help="the decode step as one replicated batch over the tp group (--tp == --ranks): KV dealt by "
                          "position, KDA by heads, every tp-th expert per rank")
+    ap.add_argument("--peer-ar", action="store_true",
+                    help="a DCP step's sums by the Lamport one-shot over the group's peers instead of NCCL")
     a = ap.parse_args()
     names = tuple(a.moe_variants.split(",")) if a.moe_variants else None
     stage = ":" in a.layers
     first, end = map(int, a.layers.split(":")) if stage else (0, int(a.layers))
     json.dump(build(range(first, end), a.ranks, a.max_ctx, a.seqs, a.tp, a.mla_split_max, a.span_max, a.chunk, names,
-                    stage, a.experts, a.state_per_layer, a.pack, a.dcp), sys.stdout, indent=1)
+                    stage, a.experts, a.state_per_layer, a.pack, a.dcp, a.peer_ar), sys.stdout, indent=1)
     print()
 
 
