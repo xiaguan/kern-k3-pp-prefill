@@ -9,7 +9,7 @@
 // Entries (docs/k3-kernel-abi.md section K6):
 //
 //   extern "C" __global__ void kern_k3_router_topk(
-//       const f32*  S,      // [B, EXPERTS]  router GEMM f32 partial
+//       const f32*  S,      // [B, LDS]  router GEMM f32 partial in columns 0 .. EXPERTS (LDS = EXPERTS)
 //       const f32*  bias,   // [EXPERTS]
 //       const bf16* rs,     // [1]  routed_scaling
 //       int*        idx,    // [B, TOPK=16]
@@ -68,6 +68,10 @@
 #define ROUTER_LANES 32
 #define ROUTER_PER_LANE (EXPERTS / ROUTER_LANES) /* 7 */
 #define ROUTER_THREADS ((EXPERTS + 255) / 256 * 256)
+// S's row stride: its own width, or a fused GEMM's whose first columns it is.
+#ifndef LDS
+#define LDS EXPERTS
+#endif
 static_assert(EXPERTS % ROUTER_LANES == 0, "experts per lane");
 
 typedef unsigned int u32;
@@ -117,7 +121,7 @@ extern "C" __global__ void __launch_bounds__(ROUTER_THREADS, 1) kern_k3_router_t
   if (b >= B) return;
 
   if (t < EXPERTS) {
-    float sg = 1.0f / (1.0f + expf(-S[(long long)b * EXPERTS + t]));
+    float sg = 1.0f / (1.0f + expf(-S[(long long)b * LDS + t]));
     s_sig[t] = sg;
     s_ord[t] = ord_f32(sg + bias[t]);
   }

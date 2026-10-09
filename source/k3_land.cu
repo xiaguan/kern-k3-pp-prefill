@@ -27,7 +27,8 @@
 //
 // land: o[b,i] = bf16( p[b*ldc + off + i] ),  i < n         one landing.
 //
-// land_situ (gate in the first n columns, up in the next n; ldc == 2n):
+// land_situ (gate in the first n columns, up in the next n; ldc == 2n, or
+// SITU_LDS when the pair sits inside a fused GEMM's wider row):
 //        g = f32(bf16( p[b*2n + i] ));  u = f32(bf16( p[b*2n + n + i] ))
 //        act[b,i] = bf16( 4*tanh(g/4) * sigmoid(g) * 25*tanh(u/25) )
 //      Three landings: both operands land to bf16 *before* the activation (the
@@ -212,7 +213,11 @@ extern "C" __global__ void __launch_bounds__(1024, 2) kern_k3_land_situ(
     const float* __restrict__ p, __nv_bfloat16* __restrict__ act, int n, int B) {
   const int b = blockIdx.x;
   if (b >= B) return;
+#ifdef SITU_LDS
+  const float* __restrict__ pg = p + (long long)b * SITU_LDS;
+#else
   const float* __restrict__ pg = p + (long long)b * 2 * n;
+#endif
   const float* __restrict__ pu = pg + n;
   __nv_bfloat16* __restrict__ orow = act + (long long)b * n;
   const int stride = gridDim.y * blockDim.x;

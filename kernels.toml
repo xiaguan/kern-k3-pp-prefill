@@ -154,3 +154,28 @@ source = "source/weight_prep.cu"
 sha256 = "fa6a18d7a315427ecf3fbfdf8fa9528de62d2173221718c1c4e55af0bbe38f54"
 source = "source/peer_allreduce_bf16.cu"
 defines = { NRANKS = 8 }
+
+[kernels."k3_mla_absorb+GROUPS=1"]
+sha256 = "9c1aef3502974d3a14a5614d172f3e7e3596163faedf637e99ffe0a226703813"
+source = "source/k3_mla_absorb.cu"
+defines = { GROUPS = 1 }
+
+[kernels."k3_router_argmax+EXPERTS=896+LDS=6016"]
+sha256 = "4576ad55a17ded2a6173f833fb9e9164131d6c6ab3cce8589a4c697dc9a423a4"
+source = "source/k3_router_argmax.cu"
+defines = { EXPERTS = 896, LDS = 6016 }
+
+[kernels."k3_land+SITU_LDS=6016"]
+sha256 = "977666d6b5764ba3a57010ec26cc4ed083124effb130d97a3e2a0c938fea93f3"
+source = "source/k3_land.cu"
+defines = { SITU_LDS = 6016 }
+
+[kernels."k3_kda_core+HEADS=12+LDS=6400+WSM_FA=12+WSM_LDS=6400"]
+sha256 = "6e0ef3d6b86268d40efaef4a2ba8d3c4686f4f09b0b6d23f4739211e295d4d90"
+source = "source/k3_kda_core.cu"
+defines = { HEADS = 12, LDS = 6400, WSM_FA = 12, WSM_LDS = 6400 }
+
+[kernels."k3_conv_silu+HEADS=12+LDS=6400"]
+sha256 = "13de5ccb7c287ab9fbd8abd23aeaa84bc3eb4c61f1479a26652f6d8aae00b59f"
+source = "source/k3_conv_silu.cu"
+defines = { HEADS = 12, LDS = 6400 }

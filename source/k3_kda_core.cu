@@ -82,8 +82,19 @@
 #define KD 128
 #define INNER (HEADS * KD)
 #define KDA_FUSED (4 * INNER)
-#define WSM 256
+// Row strides of the gate partial and the wsm partial, and where f_a starts in
+// the latter: the whole-model layout by default; one fused GEMM's row (qkvg,
+// then beta's HEADS columns and f_a's 128, padded to 256) with LDS = WSM_LDS =
+// 4 * INNER + 256 and WSM_FA = HEADS.
+#ifndef LDS
+#define LDS KDA_FUSED
+#endif
+#ifndef WSM_LDS
+#define WSM_LDS 256
+#endif
+#ifndef WSM_FA
 #define WSM_FA 96
+#endif
 #define LB (-5.0f)
 #define RMS_EPS 1e-5f
 #define L2_EPS 1e-6f
@@ -185,8 +196,8 @@ extern "C" __global__ __launch_bounds__(128) void kern_k3_kda_core(
   sh_kn[d] = knd;
 
   // ---- beta, f_a -> f_b projection, the decay gate ----
-  const float beta = sigmoidf_(__bfloat162float(__float2bfloat16(wsm_partial[(size_t)b * WSM + h])));
-  sh_flow[d + ((d >> 3) << 2)] = __bfloat162float(__float2bfloat16(wsm_partial[(size_t)b * WSM + WSM_FA + d]));
+  const float beta = sigmoidf_(__bfloat162float(__float2bfloat16(wsm_partial[(size_t)b * WSM_LDS + h])));
+  sh_flow[d + ((d >> 3) << 2)] = __bfloat162float(__float2bfloat16(wsm_partial[(size_t)b * WSM_LDS + WSM_FA + d]));
   __syncthreads();
 
   // ga[d] = sum_j flow[j] * w_f_b[base+d, j].  This head's 128x128 bf16 tile is
@@ -314,6 +325,6 @@ extern "C" __global__ __launch_bounds__(128) void kern_k3_kda_core(
   const float atot = block_sum(af * af, sh_red);
   const bf16 o = __float2bfloat16(af * rsqrtf(atot / (float)KD + RMS_EPS) * gamma_o[d]);
   const bf16 g = __float2bfloat16(
-      sigmoidf_(__bfloat162float(__float2bfloat16(gate_partial[(size_t)b * KDA_FUSED + 3 * INNER + base + d]))));
+      sigmoidf_(__bfloat162float(__float2bfloat16(gate_partial[(size_t)b * LDS + 3 * INNER + base + d]))));
   out[(size_t)b * INNER + base + d] = __hmul(o, g);
 }

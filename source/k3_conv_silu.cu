@@ -70,6 +70,10 @@
 #endif
 #define K2_INNER (HEADS * 128)
 #define K2_KDA_FUSED (4 * K2_INNER)
+// the partial's row stride: its own width, or a fused GEMM's wider row
+#ifndef LDS
+#define LDS K2_KDA_FUSED
+#endif
 #define K2_REC_BYTES ((long long)HEADS * 128 * 128 * 4)
 #define K2_WIN_BYTES ((long long)3 * K2_INNER * 2)
 
@@ -104,7 +108,7 @@ extern "C" __global__ __launch_bounds__(K2_BLOCK) void kern_k3_conv_silu(
   const int c = (int)(blockIdx.z * K2_BLOCK + threadIdx.x) * K2_VEC;
 
   const float* __restrict__ pin =
-      partial + (long long)b * K2_KDA_FUSED + (long long)s * K2_INNER + c;
+      partial + (long long)b * LDS + (long long)s * K2_INNER + c;
   const float* __restrict__ cwp = cw + (long long)(s * 4) * K2_INNER + c;
   __nv_bfloat16* __restrict__ win =
       (__nv_bfloat16*)((char*)kda_base + (long long)line_index[b] * line_bytes +
