@@ -16,7 +16,11 @@ through `exp2perm`, does not.
 
 Interface: `ids` i32 [tokens, 16] global expert ids | `counts` i32 [2 * experts,
 at least 512] scratch | `cta_batch`, `cta_limit` i32 [ctas] | `num_non_exiting`,
-`total_padded` i32 [1] | `route_map` i32 [padded] | `exp2perm` i32 [tokens, 16].
+`total_padded` i32 [1] | `route_map` i32 [padded] | `exp2perm` i32 [tokens, 16]
+| and, for a rank holding a slice of `local` experts, `first` i32, the global id
+of its first expert (EP8 decode: 112 * rank). The tables then cover the slice
+only: `cta_batch` holds local expert indices and `exp2perm` is -1 for every
+expanded id routed to another rank's expert, which kern's finalize skips.
 """
 SIZE = 192
 MAX_EXPERTS, TOPK = 1024, 16
@@ -40,12 +44,14 @@ def counts_len(experts):
     return max(512, 2 * experts)
 
 
-def op(module, experts, tokens, tokens_max, tile):
-    """The routing op of one rank holding all `experts` experts, over `tokens` (a var name or an expression,
-    at most `tokens_max`) routed into `tile`-row CTA tiles."""
-    assert experts <= MAX_EXPERTS and tile & (tile - 1) == 0
+def op(module, experts, tokens, tokens_max, tile, local=None):
+    """The routing op of one rank holding `local` of the `experts` experts (all of them by default), over
+    `tokens` (a var name or an expression, at most `tokens_max`) routed into `tile`-row CTA tiles."""
+    local = local or experts
+    sliced = local < experts
+    assert experts <= MAX_EXPERTS and tile & (tile - 1) == 0 and 0 < local <= experts
     assert -(-TOPK * tokens_max // PER_CTA) <= 1024, "the kernels' grids are capped at 1024 CTAs"
-    P = {n: i for i, n in enumerate(PARAMS)}
+    P = {n: i for i, n in enumerate(PARAMS + ["first"] * sliced)}
     T = {int: "i32", str: "var"}.get(type(tokens), "expr")
     ptr = lambda f, p: {"at": OFF[f], "param": P[p]}
     i32 = lambda f, v: {"at": OFF[f], "i32": v}
@@ -56,7 +62,9 @@ def op(module, experts, tokens, tokens_max, tile):
         ptr("mPtrCtaIdxXyToBatchIdx", "cta_batch"), ptr("mPtrCtaIdxXyToMnLimit", "cta_limit"),
         ptr("mPtrNumNonExitingCtas", "num_non_exiting"), ptr("mPtrTopKIds", "ids"),
         {"at": OFF["mNumTokens"], T: tokens}, i32("mNumExperts", experts), i32("mPaddingLog2", tile.bit_length() - 1),
-        i32("mTileTokensDim", tile), i32("mLocalExpertsStartIdx", 0), i32("mNumLocalExperts", experts),
+        i32("mTileTokensDim", tile),
+        {"at": OFF["mLocalExpertsStartIdx"], "param": P["first"]} if sliced else i32("mLocalExpertsStartIdx", 0),
+        i32("mNumLocalExperts", local),
         *({"at": OFF["mTopK"] + 4 * j, "i32": w} for j, w in enumerate(TOPK_DIV)),
     ]
     pack = {"pack": {"size": SIZE, "fields": sorted(fields, key=lambda f: f["at"])}}
@@ -64,7 +72,7 @@ def op(module, experts, tokens, tokens_max, tile):
     launch = lambda entry, grid: {**module, "entry": entry, "grid": [grid, 1, 1], "block": [THREADS, 1, 1],
                                   "params": [f"bytes<{SIZE}>"], "args": [pack]}
     return {
-        "params": ["in buffer<i32>", *["out buffer<i32>"] * 7],
+        "params": ["in buffer<i32>", *["out buffer<i32>"] * 7, *["i32"] * sliced],
         "impl": {"launches": [launch(INIT, -(-counts_len(experts) // THREADS)), launch(HISTOGRAM, expanded),
                               launch(OFFSETS, expanded)]},
     }
