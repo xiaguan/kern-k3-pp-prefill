@@ -156,9 +156,11 @@ static std::vector<float> rand_f32(size_t n, Rng& r, double mu, double sd) {
 static bool g_fail = false;
 
 // Against a reference the kernel's inputs already differ from by their own
-// rounding (the DCP partials are bf16), only the relative RMS bound applies.
+// rounding, only a relative RMS bound applies: the bf16 partials and the bf16
+// output are two roundings of at most 2^-9 each, hence 4e-3 against unsharded
+// attention, 2e-3 for the CPU merge alone.
 template <class G, class R>
-static void cmp_rms(const char* name, size_t n, G got, R ref) {
+static void cmp_rms(const char* name, size_t n, G got, R ref, double bound) {
   double max_abs = 0, se = 0, sr = 0;
   for (size_t i = 0; i < n; ++i) {
     double e = std::fabs(got(i) - ref(i));
@@ -167,7 +169,7 @@ static void cmp_rms(const char* name, size_t n, G got, R ref) {
     sr += ref(i) * ref(i);
   }
   double rms = sr > 0 ? std::sqrt(se / sr) : std::sqrt(se / (double)(n ? n : 1));
-  bool ok = rms <= 2e-3;
+  bool ok = rms <= bound;
   g_fail |= !ok;
   std::printf("  %-18s n=%-10zu max|err|=%.3e  (relRMS only) relRMS=%.3e  %s\n", name, n, max_abs, rms,
               ok ? "PASS" : "FAIL");
@@ -435,7 +437,7 @@ int selftest(const Opt& o) {
   for (int me = 0; me < NRANKS; me += NRANKS - 1)
     cmp_rms(me ? "merge vs whole m7" : "merge vs whole m0", (size_t)c.B * HL * LAT,
             [&, m = merge(ps, me, c.B)](size_t i) { return m[i]; },
-            [&, w = whole(c, me)](size_t i) { return w[i]; });
+            [&, w = whole(c, me)](size_t i) { return w[i]; }, 2e-3);
   return g_fail;
 }
 
@@ -489,7 +491,7 @@ int run(const Opt& o, CUmodule m) {
       if (me == 0 || me == NRANKS - 1) {
         std::snprintf(name, sizeof name, "vs whole m%d", me);
         auto w = whole(c, me);
-        cmp_rms(name, got.size(), [&](size_t i) { return (double)b2f(got[i]); }, [&](size_t i) { return w[i]; });
+        cmp_rms(name, got.size(), [&](size_t i) { return (double)b2f(got[i]); }, [&](size_t i) { return w[i]; }, 4e-3);
       }
       CU(cuMemFree(drecv));
       CU(cuMemFree(dout));

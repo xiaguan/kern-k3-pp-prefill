@@ -37,6 +37,15 @@ r() {
   return 0
 }
 
+# A host without nvcc runs the binaries a host with one built into $out.
+build() {
+  if [ -x "$bin/nvcc" ]; then
+    "$bin/nvcc" -O2 -std=c++17 -arch=sm_103a "$1" -o "$2" -lcuda || exit 2
+  else
+    [ -x "$2" ] || { echo "no nvcc here and no prebuilt $2" >&2; exit 2; }
+  fi
+}
+
 cubin() {
   local f="$build/$1.cubin"
   [ -f "$f" ] || { echo "missing $f: run scripts/build.py" >&2; exit 2; }
@@ -68,7 +77,7 @@ tp8() {
       "$KERN/tools/k3-harness/ref.h" > "$h/ref.h"
   [ "$(grep -c '^  HEADS = 12,\|^  EXPERTS = 896,\|REC_BYTES = (long long)HEADS' "$h/ref.h")" -eq 3 ] \
     || { echo "ref.h no longer has the constants this patch rewrites" >&2; exit 2; }
-  "$bin/nvcc" -O2 -std=c++17 -arch=sm_103a "$h/harness.cu" -o "$h/harness" -lcuda || exit 2
+  build "$h/harness.cu" "$h/harness"
   local run=(r "$h/harness" --reps "$reps")
   for B in 1 2 8 64; do
     "${run[@]}" --kernel conv_silu --cubin "$(cubin k3_conv_silu+HEADS=12)" --B "$B" --grid "$B,3,3" --block 128,1,1
@@ -77,12 +86,12 @@ tp8() {
     "${run[@]}" --kernel mla_prep --cubin "$(cubin k3_mla_prep+INNER=1536+MLA_FUSED=3648)" --B "$B"
     "${run[@]}" --kernel mla_prep --cubin "$(cubin k3_mla_prep+INNER=1536+MLA_FUSED=3648)" --B "$B" \
       --grid "$B,3,1" --block 512,1,1 --nmla 2 --layer 1
-    "${run[@]}" --kernel router_topk --cubin "$(cubin k3_router_argmax+EXPERTS=896)" --B "$B"
+    "${run[@]}" --kernel router_topk --cubin "$(cubin k3_router_argmax+EXPERTS=896)" --B "$B" --block 1024,1,1
   done
 }
 
 d1() {
-  "$bin/nvcc" -O2 -std=c++17 -arch=sm_103a "$here/d1.cu" -o "$out/d1" -lcuda || exit 2
+  build "$here/d1.cu" "$out/d1"
   local run=(r "$out/d1" --reps "$reps")
   for B in 1 2 8 48 64; do
     "${run[@]}" --kernel vup_gate --cubin "$(cubin k3_mla_vup_gate+HEADS=12)" --heads 12 --B "$B"
