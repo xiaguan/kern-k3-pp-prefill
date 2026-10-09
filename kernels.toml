@@ -40,6 +40,10 @@ sha256 = "d4ec42f005eea245a18c88761717db54e30421a7158c57b6028b0c19a472a08b"
 source = "source/k3_conv_silu.cu"
 defines = { HEADS = 12 }
 
+[kernels."k3_dcp"]
+sha256 = "bb04305d61990db3538dc5caf167ef4e493db7a2c8d90965fcc74e3c6d4286a7"
+source = "source/k3_dcp.cu"
+
 [kernels."k3_kda_core+HEADS=12"]
 sha256 = "42fc31d9c4300caaace896def74f0804bf527adc58aabaf70b96c2012f8620ca"
 source = "source/k3_kda_core.cu"
