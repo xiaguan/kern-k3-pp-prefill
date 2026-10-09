@@ -118,7 +118,8 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
         "moe_fc2": trtllm_bmm.op(v2, H, I, local, tokens, rows_max, ctas, ctas_max),
         "moe_finalize": {
             "params": ["in buffer<bf16>", "in buffer<i32>", "in buffer<f32>", "out buffer<bf16>", "i32", "i32"],
-            "impl": {"launches": [glue("kern_k3_moe_finalize", [out_rows, 1, 1])]},
+            # one 16-byte column vector per thread: at 256 a row took two passes over its 16 picks
+            "impl": {"launches": [glue("kern_k3_moe_finalize", [out_rows, 1, 1], block=H // 8)]},
         },
         "moe_finalize_rms": {
             "params": ["in buffer<bf16>", "in buffer<i32>", "in buffer<f32>", "in buffer<bf16>", "out buffer<bf16>",
