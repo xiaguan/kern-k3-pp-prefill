@@ -13,9 +13,10 @@ up, SiTU, mxfp8 out), FC2 (bf16 out per permuted row), and the top-k combine
 into a chunk-wide bf16 partial whose rows past the chunk are zero, ready for
 the reduce-scatter. A rank of a tray routes its slice with the glue's
 deterministic tables (at most 64 local experts); a rank holding every expert
-(a pipeline stage, 224 or 896 of them) routes with FlashInfer's kernels
-(flashinfer_moe_routing_abi.py), whose tables are the same up
-to the order of rows within an expert.
+(a pipeline stage, 224 or 896 of them) or every `stride`-th one (a decode
+rank of a replicated batch: 112 of 896, rank r holding r, r + 8, ...) routes
+with FlashInfer's kernels (flashinfer_moe_routing_abi.py), whose tables are
+the same up to the order of rows within an expert.
 The expert weights are the checkpoint's mxfp4 tensors row-shuffled once
 after load (`k3_moe_w_shuffle` / `k3_moe_sf_shuffle`, once.py): FC1's rows
 are [up; gate] before the shuffle, so the kernel's pair (x0, x1) is (up, gate)
@@ -54,11 +55,11 @@ def glue(entry, grid, block=256, params=None, args=None, mod=None):
             **({"params": params, "args": args} if params else {})}
 
 
-def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, prefix="", names=None):
+def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, prefix="", names=None, stride=None):
     """The ops and workspace buffers for `local` of `experts` experts over `tokens` (the chunk's token count: a var
     name or an expression, at most `tokens_max`) routed from an activation of `rows_max` rows; the quant
     runs over `quant_rows` rows and the combine writes `out_rows` rows (expressions). `steps` lists the
-    calls of one layer."""
+    calls of one layer. `stride`: the rank holds experts `rank + j * stride`, routed by FlashInfer."""
     v1, v2 = variants(names)
     # The combine + latent norm (source/k3_prefill_glue.cu).
     pglue = module(PGLUE, **({"EXPERTS": experts} if experts != 224 else {}))
@@ -73,10 +74,11 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
     i32 = lambda v: {"i32": v}
     dim = lambda x: {"var": x} if isinstance(x, str) else {"expr": x}
     whole = local == experts
-    assert whole or local <= GLUE_MAX_E, f"the glue routes at most {GLUE_MAX_E} local experts, not {local}"
+    flash = whole or stride is not None
+    assert flash or local <= GLUE_MAX_E, f"the glue routes at most {GLUE_MAX_E} local experts, not {local}"
     buffers = {
         **({n("counts"): {"dtype": "i32", "shape": [flashinfer_moe_routing.counts_len(experts)], "kind": "workspace"}}
-           if whole else
+           if flash else
            {n("blockcount"): {"dtype": "i32", "shape": [blocks_max, local], "kind": "workspace"},
             n("blockoff"): {"dtype": "i32", "shape": [blocks_max, local], "kind": "workspace"}}),
         n("cta_batch"): {"dtype": "i32", "shape": [ctas_max], "kind": "workspace"},
@@ -94,8 +96,9 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
             "params": ["in buffer<bf16>", "out buffer<u8>", "out buffer<u8>", "i32", "i32"],
             "impl": {"launches": [glue("kern_k3_moe_quant", [{"ceil_div": [{"mul": [quant_rows, H // 32]}, 256]}, 1, 1])]},
         },
-        **({"moe_routing": flashinfer_moe_routing.op(module(ROUTING), experts, tokens, tokens_max, tile)}
-           if whole else {
+        **({"moe_routing": flashinfer_moe_routing.op(module(ROUTING), experts, tokens, tokens_max, tile,
+                                                     local=local, stride=stride or 1)}
+           if flash else {
             "moe_route_count": {
                 "params": ["in buffer<i32>", "i32", "i32", "i32", "out buffer<i32>"],
                 "impl": {"launches": [glue("kern_k3_moe_route_count", [blocks, 1, 1])]},
@@ -134,12 +137,13 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
         return {"label": label + "moe_quant", "op": "moe_quant", "args": [x, q, sf, rows, i32(H)]}
 
     def routing(ids, rank, label):
-        """The routing tables of this rank's experts; `rank` is unused when the rank holds them all."""
+        """The routing tables of this rank's experts; `rank` is unused when the rank holds them all, the first
+        expert's id when it holds every `stride`-th one."""
         T = dim(tokens)
-        if whole:
+        if flash:
             return [{"label": label + "routing", "op": "moe_routing",
                      "args": [ids, b("counts"), b("cta_batch"), b("cta_limit"), b("num_non_exiting"),
-                              b("total_padded"), b("route_map"), b("exp2perm")]}]
+                              b("total_padded"), b("route_map"), b("exp2perm"), *([rank] if not whole else [])]}]
         return [
             {"label": label + "route_count", "op": "moe_route_count",
              "args": [ids, T, rank, i32(local), b("blockcount")]},

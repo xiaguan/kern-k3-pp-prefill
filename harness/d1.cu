@@ -23,7 +23,9 @@
 // to show the combine alone keeps empty partials out.
 //
 // routing runs FlashInfer's three precomputed-top-k routing kernels for the
-// rank's 112 of 896 experts (mLocalExpertsStartIdx = 112 * rank) and kern's
+// rank's 112 of 896 experts — a contiguous slice (mLocalExpertsStartIdx =
+// 112 * rank) or, with --stride 8, every 8th from the rank's index (start =
+// rank, mLocalExpertsStrideLog2 = 3, the DCP decode's deal) — and kern's
 // finalize over the tables: counts, CTA tables and totals exact against the
 // host model, every expanded id of a foreign expert -1, every local one a
 // distinct row inside its expert's tile-padded segment that routes back to its
@@ -243,7 +245,7 @@ static double time_us(int reps, const std::function<void()>& body) {
 
 struct Opt {
   std::string kernel, cubin, cubin2;
-  int B = 8, heads = 12, ctx = 515, rank = 3, tile = 16, reps = 50;
+  int B = 8, heads = 12, ctx = 515, rank = 3, tile = 16, stride = 1, reps = 50;
   uint64_t seed = 1234;
   bool selftest = false;
 };
@@ -522,7 +524,8 @@ enum {
   mIsPow2 = 1, mPtrExpertCounts = 8, mPtrPermutedIdxSize = 16, mPtrExpandedIdxToPermutedIdx = 24,
   mPtrPermutedIdxToTokenIdx = 40, mPtrCtaIdxXyToBatchIdx = 48, mPtrCtaIdxXyToMnLimit = 56,
   mPtrNumNonExitingCtas = 64, mPtrTopKIds = 80, mNumTokens = 96, mNumExperts = 100, mPaddingLog2 = 104,
-  mTileTokensDim = 108, mLocalExpertsStartIdx = 112, mNumLocalExperts = 120, mTopK = 176,
+  mTileTokensDim = 108, mLocalExpertsStartIdx = 112, mLocalExpertsStrideLog2 = 116, mNumLocalExperts = 120,
+  mTopK = 176,
 };
 const int32_t TOPK_DIV[4] = {16, -2147483647, 3, 1};
 const char* INIT = "_ZN3moe3dev7routing23routingInitExpertCountsINS1_18routingPrecomputed12KernelParamsIfLi1024ELi16EEEEEvT_";
@@ -533,13 +536,13 @@ const char* OFFS =
 
 // Distinct top-16 ids per token; every fourth token takes as many of the
 // rank's own experts as it can (16), the rest draw uniformly over all 896.
-std::vector<int> make_ids(int T, int first, Rng& r) {
+std::vector<int> make_ids(int T, int first, int stride, Rng& r) {
   std::vector<int> ids((size_t)T * TOPK);
   for (int t = 0; t < T; ++t) {
     std::vector<char> taken(EXPERTS, 0);
     for (int k = 0; k < TOPK; ++k) {
       int e;
-      do e = (t % 4 == 0) ? first + (int)r.below(LOCAL) : (int)r.below(EXPERTS);
+      do e = (t % 4 == 0) ? first + stride * (int)r.below(LOCAL) : (int)r.below(EXPERTS);
       while (taken[e]);
       taken[e] = 1;
       ids[(size_t)t * TOPK + k] = e;
@@ -549,25 +552,28 @@ std::vector<int> make_ids(int T, int first, Rng& r) {
 }
 
 int run(const Opt& o, CUmodule m, CUmodule glue) {
-  const int T = o.B, tile = o.tile, first = LOCAL * o.rank;
-  int log2 = 0;
+  const int T = o.B, tile = o.tile, stride = o.stride, first = stride == 1 ? LOCAL * o.rank : o.rank;
+  int log2 = 0, slog2 = 0;
   while ((1 << log2) < tile) ++log2;
-  if ((1 << log2) != tile) {
-    std::fprintf(stderr, "--tile must be a power of two\n");
+  while ((1 << slog2) < stride) ++slog2;
+  if ((1 << log2) != tile || (1 << slog2) != stride || LOCAL * stride > EXPERTS) {
+    std::fprintf(stderr, "--tile and --stride must be powers of two, --stride at most %d\n", EXPERTS / LOCAL);
     return 2;
   }
+  // the rank's local index of global expert e, or -1
+  auto local = [&](int e) { return e >= first && (e - first) % stride == 0 && (e - first) / stride < LOCAL ? (e - first) / stride : -1; };
   Rng r(o.seed);
-  auto ids = make_ids(T, first, r);
+  auto ids = make_ids(T, first, stride, r);
   const int expanded = T * TOPK, filled = std::min(LOCAL, expanded);
   const int ctas_max = filled + (expanded - filled + tile - 1) / tile, padded = ctas_max * tile;
   const int counts_len = std::max(512, 2 * EXPERTS);
-  std::printf("  routing            T=%d rank=%d (experts %d..%d) tile=%d ctas_max=%d\n", T, o.rank, first,
-              first + LOCAL - 1, tile, ctas_max);
+  std::printf("  routing            T=%d rank=%d (experts %d..%d step %d) tile=%d ctas_max=%d\n", T, o.rank, first,
+              first + stride * (LOCAL - 1), stride, tile, ctas_max);
 
   // host model: counts, tile-padded segments, CTA tables
   std::vector<int> count(LOCAL, 0), off(LOCAL + 1, 0);
   for (int e : ids)
-    if (e >= first && e < first + LOCAL) ++count[e - first];
+    if (local(e) >= 0) ++count[local(e)];
   for (int e = 0; e < LOCAL; ++e) off[e + 1] = off[e] + (count[e] + tile - 1) / tile;
   const int nne = off[LOCAL];
   std::vector<int> cta_batch(nne), cta_limit(nne);
@@ -597,6 +603,7 @@ int run(const Opt& o, CUmodule m, CUmodule glue) {
   put32(mPaddingLog2, log2);
   put32(mTileTokensDim, tile);
   put32(mLocalExpertsStartIdx, first);
+  put32(mLocalExpertsStrideLog2, slog2);
   put32(mNumLocalExperts, LOCAL);
   for (int j = 0; j < 4; ++j) put32(mTopK + 4 * j, TOPK_DIV[j]);
   void* args[] = {p.data()};
@@ -619,7 +626,7 @@ int run(const Opt& o, CUmodule m, CUmodule glue) {
   std::string why;
   for (int t = 0; t < T && why.empty(); ++t)
     for (int k = 0; k < TOPK && why.empty(); ++k) {
-      int e = ids[(size_t)t * TOPK + k] - first, row = e2p[(size_t)t * TOPK + k];
+      int e = local(ids[(size_t)t * TOPK + k]), row = e2p[(size_t)t * TOPK + k];
       char buf[160];
       if (e < 0 || e >= LOCAL) {
         if (row != -1) std::snprintf(buf, sizeof buf, "token %d k %d: foreign expert got row %d", t, k, row), why = buf;
@@ -677,6 +684,7 @@ int main(int argc, char** argv) {
     else if (a == "--ctx") o.ctx = std::stoi(next());
     else if (a == "--rank") o.rank = std::stoi(next());
     else if (a == "--tile") o.tile = std::stoi(next());
+    else if (a == "--stride") o.stride = std::stoi(next());
     else if (a == "--reps") o.reps = std::stoi(next());
     else if (a == "--seed") o.seed = std::stoull(next());
     else if (a == "--selftest") o.selftest = true;
@@ -709,7 +717,7 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "--kernel vup_gate | dcp | routing (routing also needs --cubin2 k3_moe_prefill.cubin)\n");
     return 2;
   }
-  std::printf("RESULT\t%s\tB=%d\theads=%d\tctx=%d\trank=%d\ttile=%d\t%s\n", o.kernel.c_str(), o.B, o.heads, o.ctx,
-              o.rank, o.tile, rc ? "FAIL" : "PASS");
+  std::printf("RESULT\t%s\tB=%d\theads=%d\tctx=%d\trank=%d\ttile=%d\tstride=%d\t%s\n", o.kernel.c_str(), o.B, o.heads,
+              o.ctx, o.rank, o.tile, o.stride, rc ? "FAIL" : "PASS");
   return rc ? 1 : 0;
 }

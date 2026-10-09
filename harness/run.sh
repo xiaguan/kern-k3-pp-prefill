@@ -11,7 +11,7 @@
 #         (HEADS 12, EXPERTS 896; its sources untouched, the copy's ref.h
 #         patched) over the HEADS=12 / EXPERTS=896 / INNER=1536 variants
 #   d1    harness/d1.cu: vup_gate at 12 heads, the DCP fixup / pack / combine
-#         over 8 simulated members, FlashInfer routing of a 112-expert slice
+#         over 8 simulated members, FlashInfer routing of a 112-expert slice (contiguous and every 8th)
 #         with kern's finalize
 # Prints one RESULT line per run and a summary; exit 1 if anything fails.
 set -uo pipefail
@@ -102,8 +102,10 @@ d1() {
   for T in 1 8 48 64; do
     for rank in 0 3 7; do
       for tile in 8 16; do
-        "${run[@]}" --kernel routing --cubin "$(cubin flashinfer_moe_routing)" --cubin2 "$(cubin k3_moe_prefill)" \
-          --B "$T" --rank "$rank" --tile "$tile"
+        for stride in 1 8; do
+          "${run[@]}" --kernel routing --cubin "$(cubin flashinfer_moe_routing)" --cubin2 "$(cubin k3_moe_prefill)" \
+            --B "$T" --rank "$rank" --tile "$tile" --stride "$stride"
+        done
       done
     done
   done

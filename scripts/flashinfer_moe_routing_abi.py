@@ -18,9 +18,13 @@ Interface: `ids` i32 [tokens, 16] global expert ids | `counts` i32 [2 * experts,
 at least 512] scratch | `cta_batch`, `cta_limit` i32 [ctas] | `num_non_exiting`,
 `total_padded` i32 [1] | `route_map` i32 [padded] | `exp2perm` i32 [tokens, 16]
 | and, for a rank holding a slice of `local` experts, `first` i32, the global id
-of its first expert (EP8 decode: 112 * rank). The tables then cover the slice
-only: `cta_batch` holds local expert indices and `exp2perm` is -1 for every
-expanded id routed to another rank's expert, which kern's finalize skips.
+of its first expert. The slice is `first + j * stride` for j in 0..local
+(`stride` a power of two): a contiguous slice (stride 1, `first` = local *
+rank) or a dealt one (stride = the group size, `first` = rank, which a
+manifest passes as `{"rank": g}` with no arithmetic). The tables then cover
+the slice only: `cta_batch` holds local expert indices j and `exp2perm` is -1
+for every expanded id routed to another rank's expert, which kern's finalize
+skips.
 """
 SIZE = 192
 MAX_EXPERTS, TOPK = 1024, 16
@@ -29,7 +33,8 @@ OFF = {
     "mIsPow2": 1, "mPtrExpertCounts": 8, "mPtrPermutedIdxSize": 16, "mPtrExpandedIdxToPermutedIdx": 24,
     "mPtrPermutedIdxToTokenIdx": 40, "mPtrCtaIdxXyToBatchIdx": 48, "mPtrCtaIdxXyToMnLimit": 56,
     "mPtrNumNonExitingCtas": 64, "mPtrTopKIds": 80, "mNumTokens": 96, "mNumExperts": 100, "mPaddingLog2": 104,
-    "mTileTokensDim": 108, "mLocalExpertsStartIdx": 112, "mNumLocalExperts": 120, "mTopK": 176,
+    "mTileTokensDim": 108, "mLocalExpertsStartIdx": 112, "mLocalExpertsStrideLog2": 116,
+    "mNumLocalExperts": 120, "mTopK": 176,
 }
 TOPK_DIV = [16, -2147483647, 3, 1]
 PARAMS = ["ids", "counts", "cta_batch", "cta_limit", "num_non_exiting", "total_padded", "route_map", "exp2perm"]
@@ -44,12 +49,14 @@ def counts_len(experts):
     return max(512, 2 * experts)
 
 
-def op(module, experts, tokens, tokens_max, tile, local=None):
-    """The routing op of one rank holding `local` of the `experts` experts (all of them by default), over
-    `tokens` (a var name or an expression, at most `tokens_max`) routed into `tile`-row CTA tiles."""
+def op(module, experts, tokens, tokens_max, tile, local=None, stride=1):
+    """The routing op of one rank holding `local` of the `experts` experts (all of them by default; a slice
+    `stride` apart), over `tokens` (a var name or an expression, at most `tokens_max`) routed into
+    `tile`-row CTA tiles."""
     local = local or experts
     sliced = local < experts
-    assert experts <= MAX_EXPERTS and tile & (tile - 1) == 0 and 0 < local <= experts
+    assert experts <= MAX_EXPERTS and tile & (tile - 1) == 0 and 0 < local * stride <= experts
+    assert stride & (stride - 1) == 0 and (sliced or stride == 1)
     assert -(-TOPK * tokens_max // PER_CTA) <= 1024, "the kernels' grids are capped at 1024 CTAs"
     P = {n: i for i, n in enumerate(PARAMS + ["first"] * sliced)}
     T = {int: "i32", str: "var"}.get(type(tokens), "expr")
@@ -64,6 +71,7 @@ def op(module, experts, tokens, tokens_max, tile, local=None):
         {"at": OFF["mNumTokens"], T: tokens}, i32("mNumExperts", experts), i32("mPaddingLog2", tile.bit_length() - 1),
         i32("mTileTokensDim", tile),
         {"at": OFF["mLocalExpertsStartIdx"], "param": P["first"]} if sliced else i32("mLocalExpertsStartIdx", 0),
+        *([i32("mLocalExpertsStrideLog2", stride.bit_length() - 1)] if stride > 1 else []),
         i32("mNumLocalExperts", local),
         *({"at": OFF["mTopK"] + 4 * j, "i32": w} for j, w in enumerate(TOPK_DIV)),
     ]
