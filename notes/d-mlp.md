@@ -78,11 +78,14 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 - The head was 370 us a step (every member computing all 163840 logits from a 2.35 GB weight). SGLang's
   captured graph for this group runs it vocab-parallel (a 1/8 GEMM, then a logits all-gather); now so do we,
   with the logits gathered to member 0 only (the caller reads member 0's) and the argmax by key exchange.
-- **The 26.6 ms/step check (orchestrator, 21:24) did not reproduce** in 14 checks of an instrumented build
-  (work/dbg: device printf when the first-call handshake, an all-reduce poll or the head's key wait passes
-  100 ms, then 5 ms; cubins swapped into a copy of the manifest). All 14 ran at 3.3-3.8 ms/step. Over 100 ms:
-  only the handshake at step 0 (0.15-0.2 s, start skew, once). Over 5 ms: a few dozen all-reduce polls a run
-  at 5-9 ms (ranks waiting for member 0, whose host reads and scans 4 x 163840 logits after every check
-  step); the head's key wait never. 15 s over 640 steps is ~23 ms every step on every rank, which none of
-  the kernels' waits showed; host-side contention is the likelier cause.
+- **The slow checks (26.6 ms/step, orchestrator 21:24) are one member's late start, not the kernels.**
+  Caught with an instrumented build (work/dbg, work/catch_slow.sh: device printf when the first-call
+  handshake, an all-reduce poll or the head's key wait passes 5 ms, with the rank waited on): in a 12.7
+  ms/step run every member waited 6.0 s in the first-call handshake for member 4, and nothing else waited
+  over 5 ms in the whole run (6 s / 640 steps = the extra 9.4 ms/step). All members logged "loaded" at
+  8.1 s; the 6 s went into member 4's setup after load (leases, tables, the first graph capture and
+  instantiation) before its first all-reduce. Before the handshake that same skew tripped the 2 s
+  deadline and gave wrong values; now it costs only startup time. Steady state: in normal runs a few
+  dozen all-reduce polls a run wait 5-9 ms (members waiting for member 0, whose host reads and scans
+  4 x 163840 logits after every check step); the head's key wait never passed 5 ms.
 
