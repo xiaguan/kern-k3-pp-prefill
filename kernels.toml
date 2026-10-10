@@ -214,3 +214,8 @@ defines = { QBF16 = 1 }
 [kernels."k3_ar_fused"]
 sha256 = "003609e9ee8a847251958e5667c9c6a98310e24541a530529dc8637e52e896af"
 source = "source/k3_ar_fused.cu"
+
+[kernels."k3_head+NRANKS=8"]
+sha256 = "2e2faf55285df2762a45442710d88c22ccce26b490719069edd592f7bceb7a4b"
+source = "source/k3_head.cu"
+defines = { NRANKS = 8 }

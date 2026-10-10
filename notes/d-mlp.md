@@ -27,6 +27,7 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 | embedding copies 16-byte vectors, 4 in flight a thread (was one bf16 a thread an iteration: 15 us for 8 rows) | 13.1 | 4.050 | bit-identical (D and P check) |
 | head argmax in one launch (`kern_k3_argmax_f32_fused`: 16 busy 256-thread blocks a row, the row's last block takes the max) | 13.1 | 4.041 | bit-identical |
 | embedding gather + layer 0's `attnres_rms_first` → `kern_k3_embed_rms` (nb = 0: snapshot + rms of the gathered row) | 13.0 | 4.040 | bit-identical |
+| vocab-parallel lm_head (SGLang's layout for this group): each member's 20480-row slice GEMM, `kern_k3_head_argmax` copies the slice into member 0's full logits and exchanges one argmax key per row (3 stages, zero = not arrived) | 13.0 | 3.742 | lm_head GEMM at N = 20480 (another cuBLAS kernel): logits relRMS 1e-5 vs main, 0 flips |
 
 ## Findings
 
@@ -72,4 +73,6 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
   skew + NVLink latency), not by the push.
 - Two-shot all-reduce for 36-48 rows estimated at ~0.4% weighted (one-shot pushes 7x the partial; only the
   large row counts are bandwidth-bound). Not done.
-- Per-step leftovers: lm_head GEMM 370 us (replicated on every rank, out of scope), mla_split_plan (d-attn).
+- The head was 370 us a step (every member computing all 163840 logits from a 2.35 GB weight). SGLang's
+  captured graph for this group runs it vocab-parallel (a 1/8 GEMM, then a logits all-gather); now so do we,
+  with the logits gathered to member 0 only (the caller reads member 0's) and the argmax by key exchange.

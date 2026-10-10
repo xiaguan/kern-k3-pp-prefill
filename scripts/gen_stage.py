@@ -574,6 +574,22 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             "params": ["in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32", "i32", "i32"],
             "impl": {"launches": [{"entry": "extern:cublaslt_bf16_tn"}]},
         }} if dcp else {}),
+        # a DCP group's vocab-parallel head (k3_head.cu): the slices to member 0, the members' keys exchanged
+        **({"head_argmax": {
+            "params": ["in buffer<f32>", "out buffer<f32>", "in buffer<u64>", "out buffer<i64>", "inout buffer<i32>",
+                       "inout buffer<u8>", "in buffer<u64>", "inout buffer<i32>", "out buffer<i32>", "i32", "i32", "i64",
+                       "i32"],
+            "impl": {
+                "scratch": {"pkey": {"dtype": "i64", "shape": [R, 16]}},
+                "launches": [launch("k3_head", "kern_k3_head_argmax", grid=[R, 16, 1], block=[256, 1, 1], var=R,
+                                    defines={"NRANKS": tp},
+                                    params=["in buffer<f32>", "out buffer<f32>", "in buffer<u64>", "out buffer<i64>",
+                                            "inout buffer<i32>", "out buffer<i64>", "inout buffer<u8>", "in buffer<u64>",
+                                            "inout buffer<i32>", "out buffer<i32>", "i32", "i32", "i64", "i32"],
+                                    args=[*({"param": i} for i in range(5)), {"scratch": "pkey"},
+                                          *({"param": i} for i in range(5, 13))])],
+            },
+        }} if tp > 1 and dcp and head else {}),
         # the head's argmax in one launch, the row's last block taking the max of its parts
         "argmax_f32": {
             "params": ["in buffer<f32>", "out buffer<i64>", "inout buffer<i32>", "i32"],
@@ -1072,7 +1088,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
     if head:
         weight("gamma_final", [H], [seg(HF + "model.norm.weight")])
         scoring("sw_out", HF + "model.output_attn_res_")
-        weight("w_lm", [V, H], [seg(HF + "lm_head.weight")])
+        # a DCP group's head is vocab-parallel: this member's rows of it (k3_head.cu)
+        weight("w_lm", [V // tp if xchg else V, H], [seg(HF + "lm_head.weight", rows=shard(V // tp) if xchg else None)])
     for n in ["hidden", "prefix2", "normed"]:
         work(n, H, var=RW)
     buffers["blocks"] = {"dtype": "bf16", "shape": [RW, NB_MAX, H], "kind": "workspace"}
@@ -1210,6 +1227,16 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         work("logits", V, "f32", var=tp * seqs_max if tray else "seqs")
         if decode:
             buffers["argmax_done"] = {"dtype": "i32", "shape": [rows_max], "kind": "carry"}
+        if xchg:
+            # every member's slice of the logits lands in member 0's whole row, which the caller reads;
+            # the members' best keys change hands through 3 stages of [tp, 64] u64
+            buffers["logits"] = {"dtype": "f32", "shape": [seqs_max, V], "kind": "carry", "export": True}
+            buffers["logits_peers"] = {"dtype": "u64", "shape": [tp], "kind": "peer", "of": "logits", "group": "tp"}
+            work("logits_part", V // tp, "f32", var="seqs")
+            buffers["head_keys"] = {"dtype": "u8", "shape": [3 * tp * 64 * 8], "kind": "carry", "export": True}
+            buffers["head_keys_peers"] = {"dtype": "u64", "shape": [tp], "kind": "peer", "of": "head_keys",
+                                          "group": "tp"}
+            buffers["head_state"] = {"dtype": "i32", "shape": [8], "kind": "carry"}
 
     # ---- program
     prog = []
@@ -1662,8 +1689,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             gemm("out.lm_head", b("normed_last"), b("w_lm"), b("logits"), V, H, m=i32(1))
             step("out.argmax", "argmax_f32_one", b("logits"), b("next_token"), i32(V))
         else:
-            gemm("out.lm_head", b("normed"), b("w_lm"), b("logits"), V, H, m=RB)
-            step("out.argmax", "argmax_f32", b("logits"), b("next_token"), b("argmax_done"), i32(V))
+            if xchg:
+                gemm("out.lm_head", b("normed"), b("w_lm"), b("logits_part"), V // tp, H, m=RB)
+                step("out.argmax", "head_argmax", b("logits_part"), b("logits"), b("logits_peers"), b("next_token"),
+                     b("argmax_done"), b("head_keys"), b("head_keys_peers"), b("head_state"), b("tp_err"),
+                     {"rank": "tp"}, i32(V // tp), i64(TP_TIMEOUT_NS), RB)
+            else:
+                gemm("out.lm_head", b("normed"), b("w_lm"), b("logits"), V, H, m=RB)
+                step("out.argmax", "argmax_f32", b("logits"), b("next_token"), b("argmax_done"), i32(V))
         return prog
 
     for i in layers:
