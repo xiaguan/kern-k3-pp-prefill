@@ -9,11 +9,12 @@
 // Contract: docs/k3-kernel-abi.md section K9.
 //
 //   extern "C" __global__ void kern_k3_span_gather(
-//       const part* partial,       // [rows, KDA_FUSED]  rows at..at+span read; f32, or bf16 with
+//       const part* partial,       // [rows, LDP]  q | k | v | g, rows at..at+span read; f32, or bf16 with
 //                                  // -DPARTIAL_BF16 (the GEMM landed it, so bf16() below is exact)
 //       const float* cw,           // [3 stream][4 tap][INNER]
 //       void* kda_base, const int* line_index, long long line_bytes,  // line_index[at]'s line
-//       const part* wsm_partial,   // [rows, WSM=256]  col h = b_proj, 96.. = f_a
+//       const part* wsm_partial,   // [rows, LDW]  col h = b_proj, 96.. = f_a
+//         (LDP = KDA_FUSED, LDW = WSM; both K9_LD when one projection made q | k | v | g | wsm)
 //       bf16* span_q, bf16* span_k, bf16* span_v,   // [span, INNER]
 //       bf16* span_beta,           // [HEADS * span]   h*span + i
 //       bf16* span_flow,           // [span, 128]
@@ -46,6 +47,13 @@
 #define K9_WIN_BYTES ((long long)3 * K9_INNER * 2)
 #define K9_WSM 256
 #define K9_WSM_FA 96
+#ifdef K9_LD  // q | k | v | g and wsm as one projection: both slices of its K9_LD-wide rows
+#define K9_LDP K9_LD
+#define K9_LDW K9_LD
+#else
+#define K9_LDP K9_KDA_FUSED
+#define K9_LDW K9_WSM
+#endif
 #define K9_BLOCK 128
 #define K9_VEC 4
 #define K9_ROWS 8
@@ -86,7 +94,7 @@ __device__ __forceinline__ void k9_input(const part_t* __restrict__ partial, con
   if (i < 0) {
     k9_unpack(*(const uint2*)(win + (size_t)(i + 3) * K9_INNER + c), x);
   } else {
-    const part_t* p = partial + (size_t)i * K9_KDA_FUSED + (size_t)s * K9_INNER + c;
+    const part_t* p = partial + (size_t)i * K9_LDP + (size_t)s * K9_INNER + c;
 #ifdef PARTIAL_BF16
     k9_unpack(*(const uint2*)p, x);
 #else
@@ -113,13 +121,13 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather(
     int span) {
   const int at = span_at[0];
   const int row0 = blockIdx.z * K9_ROWS;
-  partial += (size_t)at * K9_KDA_FUSED;
-  wsm_partial += (size_t)at * K9_WSM;
+  partial += (size_t)at * K9_LDP;
+  wsm_partial += (size_t)at * K9_LDW;
   if (blockIdx.y == 3) {
     // 16 threads per row: thread k writes flow[8k..8k+8) and beta for heads k, k+16, ...
     const int i = row0 + (threadIdx.x >> 4), k = threadIdx.x & 15;
     if (i >= span) return;
-    const part_t* row = wsm_partial + (size_t)i * K9_WSM;
+    const part_t* row = wsm_partial + (size_t)i * K9_LDW;
     for (int h = k; h < HEADS; h += 16) span_beta[(size_t)h * span + i] = k9_land(row[h]);
     bf16 f[8];
 #pragma unroll
@@ -230,7 +238,7 @@ __device__ __forceinline__ void k9_unpack8(uint4 raw, float* x) {
 __device__ __forceinline__ uint4 k9_tap(const part_t* __restrict__ partial, const bf16* win, int bos, int s, int c,
                                         int i) {
   return i < bos ? *(const uint4*)(win + (size_t)(i - bos + 3) * K9_INNER + c)
-                 : *(const uint4*)(partial + (size_t)i * K9_KDA_FUSED + (size_t)s * K9_INNER + c);
+                 : *(const uint4*)(partial + (size_t)i * K9_LDP + (size_t)s * K9_INNER + c);
 }
 
 __device__ __forceinline__ void k9_cp_async(unsigned smem, const void* gmem) {
@@ -326,10 +334,10 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_packe
     const int lane = threadIdx.x & 31, w = threadIdx.x >> 5;
     for (int i = lane; i < rows; i += 32)
       for (int h = w; h < HEADS; h += 4)
-        span_beta[(size_t)h * span + row0 + i] = k9_land(wsm_partial[(size_t)(row0 + i) * K9_WSM + h]);
+        span_beta[(size_t)h * span + row0 + i] = k9_land(wsm_partial[(size_t)(row0 + i) * K9_LDW + h]);
     for (int r = threadIdx.x >> 4; r < rows; r += K9_BLOCK / 16) {
       const int k = threadIdx.x & 15;
-      const part_t* row = wsm_partial + (size_t)(row0 + r) * K9_WSM + K9_WSM_FA + k * 8;
+      const part_t* row = wsm_partial + (size_t)(row0 + r) * K9_LDW + K9_WSM_FA + k * 8;
       bf16 f[8];
 #pragma unroll
       for (int e = 0; e < 8; ++e) f[e] = k9_land(row[e]);
@@ -356,7 +364,7 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_packe
   k9_unpack8(k9_tap(partial, win, bos, s, c, row0 - 3), t0);
   k9_unpack8(k9_tap(partial, win, bos, s, c, row0 - 2), t1);
   k9_unpack8(k9_tap(partial, win, bos, s, c, row0 - 1), t2);
-  const part_t* src = partial + (size_t)row0 * K9_KDA_FUSED + (size_t)s * K9_INNER + c;
+  const part_t* src = partial + (size_t)row0 * K9_LDP + (size_t)s * K9_INNER + c;
   bf16* dst = out + (size_t)row0 * K9_INNER + c;
   if (rows == K9_PROWS && row0 + K9_PROWS <= next) {
     // The common block: whole, inside one sequence. Each thread streams its
@@ -366,14 +374,14 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_packe
     __shared__ uint4 ring[K9_PUNROLL][K9_BLOCK];
     const unsigned slot0 = (unsigned)__cvta_generic_to_shared(&ring[0][threadIdx.x]);
 #pragma unroll
-    for (int r = 0; r < K9_PUNROLL; ++r) k9_cp_async(slot0 + r * K9_BLOCK * 16, src + (size_t)r * K9_KDA_FUSED);
+    for (int r = 0; r < K9_PUNROLL; ++r) k9_cp_async(slot0 + r * K9_BLOCK * 16, src + (size_t)r * K9_LDP);
     for (int r0 = 0; r0 < K9_PROWS; r0 += K9_PUNROLL) {
 #pragma unroll
       for (int r = 0; r < K9_PUNROLL; ++r) {
         asm volatile("cp.async.wait_group %0;" ::"n"(K9_PUNROLL - 1));
         const uint4 x = ring[r][threadIdx.x];
         if (r0 + K9_PUNROLL + r < K9_PROWS)
-          k9_cp_async(slot0 + r * K9_BLOCK * 16, src + (size_t)(r0 + K9_PUNROLL + r) * K9_KDA_FUSED);
+          k9_cp_async(slot0 + r * K9_BLOCK * 16, src + (size_t)(r0 + K9_PUNROLL + r) * K9_LDP);
         else
           asm volatile("cp.async.commit_group;");
         *(uint4*)(dst + (size_t)(r0 + r) * K9_INNER) = k9_conv_row(x, wt, t0, t1, t2);
@@ -392,7 +400,7 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_packe
       k9_unpack8(k9_tap(partial, win, bos, s, c, i - 2), t1);
       k9_unpack8(k9_tap(partial, win, bos, s, c, i - 1), t2);
     }
-    *(uint4*)(dst + (size_t)r * K9_INNER) = k9_conv_row(*(const uint4*)(src + (size_t)r * K9_KDA_FUSED), wt, t0, t1, t2);
+    *(uint4*)(dst + (size_t)r * K9_INNER) = k9_conv_row(*(const uint4*)(src + (size_t)r * K9_LDP), wt, t0, t1, t2);
   }
 }
 #endif

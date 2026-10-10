@@ -443,6 +443,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
     # at 6284 columns cuBLAS falls off its nvjet kernels to one twice as slow.
     kfused = 4 * hl * HEAD_DIM + WSM if xchg else 0
     kfuse_defs = {"LDS": kfused} if kfused else {}
+    # A packed chunk's too: q | k | v | g | wsm, the gather and the recurrence's gate reading their
+    # slices of the one row (-DK9_LD, -DK12_LD).
+    pfused = fused_l + WSM if chunk and pack > 1 else 0
     # This rank's MLA heads: the prefill shards them like the KDA's (q_b,
     # kv_b, the gate and o_proj cut per head); a decode tray batch runs
     # every head on its own rows. A DCP member runs every head's q side over
@@ -762,10 +765,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                        "out buffer<bf16>", "in buffer<i64>", "i32", "i32", "out buffer<i32>", "out buffer<i32>"],
             "impl": {"launches": [
                 launch("k3_span_gather", "kern_k3_span_gather_packed", grid=[{"add": [conv_blocks, 1]}, 1, 1],
-                       block=[128, 1, 1], defines=part_defs)]},
+                       block=[128, 1, 1], defines={**part_defs, "K9_LD": pfused})]},
         }
         ops["flash_kda"] = varlen_abi.kda_op(hl, run_max, pack, module(varlen_abi.KDA_MODULE),
-                                             module("k3_kda_rec", **(kda_defs or {})), SV, "seqs")
+                                             module("k3_kda_rec", **(kda_defs or {}), K12_LD=pfused), SV, "seqs")
         ops["fmha_lens"] = {
             "params": ["in buffer<i32>", "in buffer<i64>", "out buffer<i32>", "i32", "i32", "i32"],
             "impl": {"launches": [launch("k3_prefill", "kern_k3_fmha_lens_varlen", grid=[1, 1, 1], block=[32, 1, 1])]},
@@ -1159,9 +1162,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         # The all-gather lays every rank's `own_max` rows in rank order.
         work("normed_all", H, var=tp * own_max)
         work("attn_own", H, var=own_max)
-    work("kda_partial", kfused or fused_l, kpart, var=KV)
-    if not kfused:
+    work("kda_partial", kfused or pfused or fused_l, kpart, var=KV)
+    if not (kfused or pfused):
         work("wsm_partial", WSM, kpart, var=KV)
+    wsm_part = b("kda_partial", fused_l * (2 if kpart == "bf16" else 4)) if kfused or pfused else b("wsm_partial")
     work("gated", gate_l)
     if mla and not packed:
         work("mla_gate", gate_l)
@@ -1353,7 +1357,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         if packed:
             N = {"var": "seqs"}
             step(L + "span_gather", "span_gather", b("kda_partial"), w("cw"), {"state": kda}, line, i64(line_l),
-                 b("wsm_partial"), b("span_q"), b("span_k"), b("span_v"), b("span_beta"), b("span_flow"),
+                 wsm_part, b("span_q"), b("span_k"), b("span_v"), b("span_beta"), b("span_flow"),
                  b("cu_seqlens"), N, S, b("span_tile_prefix"), b("span_progress"))
             step(L + "span_g", "gemm_bf16", b("span_flow"), w("w_f_b"), b("span_g"), S, i32(inner_l), i32(HEAD_DIM),
                  i32(inner_l))
@@ -1564,12 +1568,11 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                 line = b("kda.line_index", kda_k * (seqs_max if packed else rows_max) * 4)
                 kda_k += 1
                 KB = {"var": KV}
-                if kfused:
-                    proj(L + "qkvg", normed_all, w("wkda"), b("kda_partial"), kfused, H, m=KB, dt=kpart)
+                if kfused or pfused:
+                    proj(L + "qkvg", normed_all, w("wkda"), b("kda_partial"), kfused or pfused, H, m=KB, dt=kpart)
                 else:
                     proj(L + "qkvg", normed_all, w("wbig"), b("kda_partial"), fused_l, H, m=KB, dt=kpart)
                     proj(L + "wsm", normed_all, w("wsm"), b("wsm_partial"), WSM, H, m=KB, dt=kpart)
-                wsm_part = b("kda_partial", fused_l * 4) if kfused else b("wsm_partial")
                 if chunk:
                     span_kda(L, w, line, KB, S, kda_of(i))
                     span_out_gate(L, w, S)
@@ -1778,8 +1781,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         else:
             # This rank's heads of every per-head axis (docs/multi-gpu.md E5).
             qkvg = [seg(a + f"{x}_proj.weight", rows=shard(inner_l)) for x in "qkvg"]
-            if kfused:
-                weight(n + "wkda", [kfused, H],
+            if kfused or pfused:
+                weight(n + "wkda", [kfused or pfused, H],
                        qkvg + [seg(a + "b_proj.weight", rows=shard(hl)), seg(a + "f_a_proj.weight"),
                                seg(a + "f_a_proj.weight", rows=[0, WSM - hl - HEAD_DIM])])
             else:

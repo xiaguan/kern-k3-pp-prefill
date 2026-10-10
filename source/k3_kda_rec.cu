@@ -13,7 +13,7 @@
 //       const bf16* beta,       // [HEADS, span]  beta logits (span_beta)
 //       const float* ws_gt,     // [HEADS * tiles][128]
 //       void* kda_base, const int* line_index, long long line_bytes,  // sequence j's line line_index[j]
-//       const bf16* partial,    // [rows, 4 * INNER]  q | k | v | gate projections
+//       const bf16* partial,    // [rows, K12_LD]  q | k | v | gate projections (then wsm's, if K12_LD > 4 * INNER)
 //       const float* gamma_o,   // [128]
 //       bf16* raw,              // [rows, INNER]  the ungated output (q's buffer, which kernel 1 has read)
 //       bf16* gated,            // [rows, INNER]  rows span_at[0] + i
@@ -49,6 +49,9 @@
 #endif
 #define K12_INNER (HEADS * 128)
 #define K12_FUSED (4 * K12_INNER)
+#ifndef K12_LD  // partial's row stride: q | k | v | gate, then wsm when one projection made both
+#define K12_LD K12_FUSED
+#endif
 #define K12_REC_BYTES ((long long)HEADS * 128 * 128 * 4)
 #define K12_WIN_BYTES ((long long)3 * K12_INNER * 2)
 #define K12_STAGES 8
@@ -476,7 +479,7 @@ __device__ __forceinline__ void k12_gate(int e, int nseq, const long long* cu_se
           k12_cp_async(ro + buf * 4096 + ((c - c0) * 2 + half) * 256 + 16 * k,
                        raw + (bos + r) * K12_INNER + h * 128 + 8 * k);
           k12_cp_async(ro + buf * 4096 + 2048 + ((c - c0) * 2 + half) * 256 + 16 * k,
-                       partial + (at + bos + r) * K12_FUSED + 3 * K12_INNER + h * 128 + 8 * k);
+                       partial + (at + bos + r) * K12_LD + 3 * K12_INNER + h * 128 + 8 * k);
         }
       }
       asm volatile("cp.async.commit_group;" ::: "memory");
@@ -550,7 +553,7 @@ extern "C" __global__ void __launch_bounds__(K12_THREADS, 1) kern_k3_kda_rec(
 #pragma unroll
         for (int k = 0; k < 3; ++k) {
           const int i = len - 3 + k;
-          nt[k] = i >= 0 ? *(const uint2*)(partial + (bos + i) * K12_FUSED + s * K12_INNER + h * 128 + 4 * lane)
+          nt[k] = i >= 0 ? *(const uint2*)(partial + (bos + i) * K12_LD + s * K12_INNER + h * 128 + 4 * lane)
                          : *(const uint2*)(win + (i + 3) * K12_INNER);
         }
 #pragma unroll
