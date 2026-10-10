@@ -7,7 +7,8 @@ Check: `loop/d/check loop/out/d-l4-tp8.json` (~20 s on a free pool). Bench: `loo
 
 D 16 layers: 24.7 -> 12.9 launches/layer, 4.562 -> 3.52 ms/step weighted (all runs' work; main dcf6ec0 3.581,
 plus this branch's L2 prefetch in the all-reduces).
-Real 93-layer step at 128k: 23.88 -> 19.54 ms (24 rows), 30.87 -> 26.42 ms (48 rows) before the prefetch.
+Real 93-layer step at 128k: 23.88 -> 19.23 ms (24 rows), 30.87 -> 25.92 ms (48 rows); the L2 prefetch's share of
+that, same session: 19.60 -> 19.23 and 26.43 -> 25.92 (-1.9% each).
 
 ## Roofline of the real D step (93 layers, 128k context, 2026-10-10 23:00 UTC)
 
@@ -150,6 +151,8 @@ L2 prefetch trials (same-session A/B against the committed one-range per-line fo
   isolated); in the all-reduces, chunks dealt consecutively by thread put ~650 on one SM: 13.9 ms/step (the
   bulk unit drains slowly, the GEMMs after it crawl too); dealt over the blocks: 3.564 one range / 3.590 two.
   No better than per-line.
+- `land_add2_attnres_rms` launched on 152 blocks, the blocks past B prefetching the first 48 MB of the next
+  qkvg / wfu weight: 3.527 vs 3.535, flat (the kernel lasts ~7 us; qkvg did not get measurably faster).
 
 ## Findings
 
