@@ -358,8 +358,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
     # chunk, a lone rank's (EP1, a pipeline stage) over all its experts, a
     # DCP rank's over its every tp-th expert for every row of the batch.
     bmm = coll or (chunk and ranks == 1) or dcp
-    # A lone rank's chunk routes every expert: the top-k, quant, tables and the shared activation are one call
-    # (k3_moe_route.cu).
+    # A lone rank's chunk routes every expert: lat_down and the shared expert's gate | up are one GEMM, the
+    # top-k, quant, tables and the shared activation one call (k3_moe_route.cu).
     lone = bmm and not coll and not dcp
     assert bmm or experts == 224, "MegaMoE is built for the pruned checkpoint's 224 experts"
     span_max = 0 if chunk else min(span_max, tp * seqs_max)
@@ -1165,7 +1165,11 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
     work("topk_weight", TOPK, "f32", var=OV)
     if not chunk and not front:
         work("latent_partial", LATENT, "f32", var=OV)
-    work("latent", LATENT, var=OV)
+    if lone:
+        # lat_down | the shared expert's gate | up, one GEMM's rows
+        work("moe_front", LATENT + 2 * sh_l, var=OV)
+    else:
+        work("latent", LATENT, var=OV)
     # A lone rank's combine writes the normed row straight away.
     if not bmm or coll:
         work("routed_latent", LATENT, var=OV)
@@ -1180,7 +1184,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         work("moe_partial", LATENT, var=tp * own_max)
     work("routed_latent_norm", LATENT, var=RW)
     work("routed_partial", H, part, var=RW)
-    if not front:
+    if not front and not lone:
         work("shared_partial", 2 * sh_l, part, var=RW)
     work("shared_act", sh_l, var=RW)
     if not dcp:
@@ -1548,10 +1552,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                     if not lone:
                         step(L + "topk", "router_topk", b("router_partial"), w("bias"), w("rs"), b("topk_idx"),
                              b("topk_weight"), OB)
-                    if chunk:
-                        proj(L + "lat_down", b("normed"), w("w_lat_down"), b("latent"), LATENT, H, m=OB)
                     if lone:
-                        proj(L + "wsh", b("normed"), w("wsh"), b("shared_partial"), 2 * sh_l, H, m=RB)
+                        proj(L + "front", b("normed"), w("w_moe_front"), b("moe_front"), LATENT + 2 * sh_l, H, m=OB)
+                    elif chunk:
+                        proj(L + "lat_down", b("normed"), w("w_lat_down"), b("latent"), LATENT, H, m=OB)
                     else:
                         gemm(L + "lat_down", b("normed"), w("w_lat_down"), b("latent_partial"), LATENT, H, m=OB)
                         land(L + "latent", b("latent_partial"), b("latent"), LATENT, 0, LATENT)
@@ -1596,9 +1600,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                 elif bmm:
                     # the top-k, the latent's mxfp8 and the routing tables in one call; the combine lands its
                     # row and norms it (lat_norm) in one pass
-                    prog.append(bp["route_step"](b("router_partial"), w("bias"), w("rs"), b("latent"), LATENT,
-                                                 b("shared_partial"), 2 * sh_l, b("latent_q"), b("latent_sf"),
-                                                 b("topk_idx"), b("topk_weight"), b("shared_act"), label=L))
+                    prog.append(bp["route_step"](b("router_partial"), w("bias"), w("rs"), b("moe_front"),
+                                                 LATENT + 2 * sh_l, b("moe_front", LATENT * 2), LATENT + 2 * sh_l,
+                                                 b("latent_q"), b("latent_sf"), b("topk_idx"), b("topk_weight"),
+                                                 b("shared_act"), label=L))
                     prog.extend(bp["steps"](b("latent_q"), b("latent_sf"), b("topk_idx"), b("topk_weight"),
                                             w("moe.w13s"), w("moe.w13_sfs"), w("moe.w2s"), w("moe.w2_sfs"),
                                             w("moe.alpha"), w("moe.beta"), b("routed_latent_norm"),
@@ -1710,11 +1715,15 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             weight(n + "bias", [experts], [seg(e + "gate.e_score_correction_bias")], "f32")
             carry(n + "rs", [1])
             once.call("fill_bf16", [buf(n + "rs"), i32(1), {"f32": 1.0}], 1)
-            if not front:
+            if lone:
+                weight(n + "w_moe_front", [LATENT + 2 * sh_l, H],
+                       [seg(e + "routed_expert_down_proj.weight"), seg(e + "shared_experts.gate_proj.weight"),
+                        seg(e + "shared_experts.up_proj.weight")])
+            elif not front:
                 weight(n + "w_lat_down", [LATENT, H], [seg(e + "routed_expert_down_proj.weight")])
             weight(n + "w_lat_up", [H, LATENT], [seg(e + "routed_expert_up_proj.weight")])
             weight(n + "gamma_lat", [LATENT], [seg(e + "routed_expert_norm.weight")])
-            if not front:
+            if not front and not lone:
                 gate_up(n + "wsh", e + "shared_experts.gate_proj.weight", e + "shared_experts.up_proj.weight", sh_l)
             weight(n + "sh_down", [H, sh_l], [seg(e + "shared_experts.down_proj.weight", cols=mlp_shard(sh_l))])
             if bmm:
