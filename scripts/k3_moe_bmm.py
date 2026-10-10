@@ -224,7 +224,8 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
         ]
 
     return {"buffers": buffers, "ops": ops, "quant_step": quant_step, "route_step": route_step,
-            "route_init_step": route_init_step, "steps": steps, "tile": tile,
+            "route_init_step": route_init_step, "route_sync_words": 2 + 2 * experts * (1 + ROUTE_ROWS // 256 + ROUTE_ROWS // 32),
+            "steps": steps, "tile": tile,
             "padded_max": padded_max}
 
 

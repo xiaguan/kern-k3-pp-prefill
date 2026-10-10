@@ -20,8 +20,12 @@
 //         reads the hidden it just made from registers.
 //     grid (B, 1, 1)   block (448, 1, 1)   smem 0 dynamic
 //
-//   kern_k3g_embed_rms(ids, table, hidden, blocks, gamma, normed, B)
-//         layer 0's K1a with the embedding gather: the row from the table, hidden and snapshot 0.
+//   kern_k3g_embed_rms(ids, table, hidden, blocks, gamma, normed, seq_lens, cu_q, lens, nseq, ns, sync,
+//                      sync_words, B)
+//         layer 0's K1a with the embedding gather: the row from the table, hidden and snapshot 0;
+//         and the stage's setup (zero_share below): the MoE routing state zeroed, the FMHA's tables.
+//   kern_k3g_attnres_rms_setup(prefix, blocks, sw, gamma, normed, nb, snapshot, sync, sync_words, B)
+//         K1a where a later stage starts, the routing state zeroed alongside.
 //
 //   [K1c] kern_k3g_land_add2(p1, p2, prefix2, hidden, two, B)
 //         K1c alone, before a snapshot layer and at a stage's end.
@@ -277,14 +281,36 @@ extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_attnres_rms(
 // ---------------------------------------------------------------- K1a, first layer
 // The chunk's embedding gather and layer 0's mix and norm (nb == 0: the mix is the row): hidden and
 // snapshot 0 are the embedding row, normed its rms by gamma.
+// A stage's setup rides along in its first launch: the MoE routing state (k3_moe_route.cu's barrier and
+// tables) zeroed, each block its share of the `words`, and for the packed prefill's stage 0 the FMHA's
+// length tables (k3_prefill.cu's kern_k3_fmha_lens_varlen) by block 0.
+__device__ __forceinline__ void zero_share(unsigned* __restrict__ p, int words, int B, int t) {
+  const int per = (words + B - 1) / B, lo = blockIdx.x * per, hi = min(lo + per, words);
+  for (int i = lo + t; i < hi; i += blockDim.x) p[i] = 0u;
+}
+
 extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_embed_rms(
     const long long* __restrict__ ids, const bf16_t* __restrict__ table, bf16_t* __restrict__ hidden,
-    bf16_t* __restrict__ blocks, const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int B) {
+    bf16_t* __restrict__ blocks, const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed,
+    const int* __restrict__ seq_lens, const long long* __restrict__ cu_q, int* __restrict__ lens, int nseq, int ns,
+    unsigned* __restrict__ sync, int sync_words, int B) {
   __shared__ RowSmem s;
   const int b = blockIdx.x;
   if (b >= B) return;
   const int t = threadIdx.x;
   zero_pads(s, t);
+  zero_share(sync, sync_words, B, t);
+  if (b == 0 && t == 0) {
+    int kv = 0;
+    for (int j = 0; j < nseq; ++j) {
+      lens[j] = seq_lens[j];
+      lens[ns + j] = (int)cu_q[j];
+      lens[2 * ns + j] = kv;
+      kv += seq_lens[j];
+    }
+    lens[ns + nseq] = (int)cu_q[nseq];
+    lens[2 * ns + nseq] = kv;
+  }
 
   const bf16_t* __restrict__ row = table + ids[b] * KH;
   V8 pv[RGROUPS];
@@ -297,6 +323,27 @@ extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_embed_rms(
   }
 
   attnres_rms_row(blocks + (size_t)b * KNB_MAX * KH, pv, nullptr, gamma, normed + (size_t)b * KH, 0, t, s);
+}
+
+extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_attnres_rms_setup(
+    const bf16_t* __restrict__ prefix, bf16_t* __restrict__ blocks, const float* __restrict__ sw,
+    const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int nb, int snapshot, unsigned* __restrict__ sync,
+    int sync_words, int B) {
+  __shared__ RowSmem s;
+  const int b = blockIdx.x;
+  if (b >= B) return;
+  const int t = threadIdx.x;
+  zero_pads(s, t);
+  zero_share(sync, sync_words, B, t);
+
+  V8 pv[RGROUPS];
+#pragma unroll
+  for (int k = 0; k < RGROUPS; ++k) pv[k] = ldv(prefix + (size_t)b * KH + (t + k * RTHREADS) * 8);
+  if (snapshot && nb < KNB_MAX)
+#pragma unroll
+    for (int k = 0; k < RGROUPS; ++k) stv(blocks + ((size_t)b * KNB_MAX + nb) * KH + (t + k * RTHREADS) * 8, pv[k]);
+
+  attnres_rms_row(blocks + (size_t)b * KNB_MAX * KH, pv, sw, gamma, normed + (size_t)b * KH, nb, t, s);
 }
 
 // ---------------------------------------------------------------- K1b

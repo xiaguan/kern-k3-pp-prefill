@@ -521,9 +521,19 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         **({"embed_rms": {
             "params": ["in buffer<i64>", "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "in buffer<bf16>",
                        "out buffer<bf16>", "i32"],
-            "impl": {"launches": [launch("k3_ar_fused", "kern_k3_embed_rms", grid=[RV, 1, 1], block=[1024, 1, 1]) if dcp
-                                  else residual(None, "kern_k3g_embed_rms")]},
-        }} if embed and (dcp or (chunk and not coll)) else {}),
+            "impl": {"launches": [launch("k3_ar_fused", "kern_k3_embed_rms", grid=[RV, 1, 1], block=[1024, 1, 1])]},
+        }} if embed and dcp else {}),
+        # A packed lone chunk's: also its stage's setup, the MoE routing state zeroed and the FMHA's tables.
+        **({"embed_rms_setup": {
+            "params": ["in buffer<i64>", "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "in buffer<bf16>",
+                       "out buffer<bf16>", "in buffer<i32>", "in buffer<i64>", "out buffer<i32>", "i32", "i32",
+                       "out buffer<u32>", "i32", "i32"],
+            "impl": {"launches": [residual(None, "kern_k3g_embed_rms")]},
+        }, "attnres_rms_setup": {
+            "params": ["in buffer<bf16>", "inout buffer<bf16>", "in buffer<f32>", "in buffer<bf16>", "out buffer<bf16>",
+                       "i32", "i32", "out buffer<u32>", "i32", "i32"],
+            "impl": {"launches": [residual(None, "kern_k3g_attnres_rms_setup")]},
+        }} if lone and packed else {}),
         # ... and the MLA split plan (k3_mla_split_plan) in the same launch, a row's per block
         **({"embed_rms_plan": {
             "params": ["in buffer<i64>", "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "in buffer<bf16>",
@@ -1378,8 +1388,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             step("in.blocks", "copy_rows", b("blocks"), b("blocks_in"), i32(NB_MAX * H), i32(NB_MAX * H),
                  i32(blocks_in * H))
         if packed:
-            step("fmha_lens", "fmha_lens", b("seq_lens"), b("cu_seqlens"), b("fmha_lens"), {"var": "seqs"},
-                 i32(pack + 1))
+            if not (lone and embed):  # a lone chunk's stage 0 makes them in its embedding's launch
+                step("fmha_lens", "fmha_lens", b("seq_lens"), b("cu_seqlens"), b("fmha_lens"), {"var": "seqs"},
+                     i32(pack + 1))
         elif chunk:
             step("fmha_lens", "fmha_lens", b("seq_lens"), b("fmha_lens"), B)
         elif mla and not (dcp and embed):  # a DCP step plans in its embedding's launch
@@ -1443,16 +1454,25 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             elif embed and dcp and mla and i == first:
                 step(L + "res_in", "embed_rms_plan", b("token_ids"), b("embed"), b("hidden"), b("blocks"),
                      w("gamma_in"), b("normed"), b("seq_lens"), b("mla_bsk"), i32(mla_split_max), RB)
-            elif embed and (dcp or (chunk and not coll)) and i == first:
+            elif embed and dcp and i == first:
                 step(L + "res_in", "embed_rms", b("token_ids"), b("embed"), b("hidden"), b("blocks"), w("gamma_in"),
                      b("normed"), RB)
+            elif lone and packed and embed and i == first:
+                step(L + "res_in", "embed_rms_setup", b("token_ids"), b("embed"), b("hidden"), b("blocks"),
+                     w("gamma_in"), b("normed"), b("seq_lens"), b("cu_seqlens"), b("fmha_lens"), {"var": "seqs"},
+                     i32(pack + 1), b("moe.route_sync"), i32(bp["route_sync_words"]), RB)
+            elif lone and packed and snapshot:
+                close()
+                step(L + "res_in", "attnres_rms_setup", b("hidden"), b("blocks"), w("sw_attn"), w("gamma_in"),
+                     b("normed"), i32(nb_in), i32(1), b("moe.route_sync"), i32(bp["route_sync_words"]), RB)
             else:
                 close()
                 step(L + "res_in", "attnres_rms" if nb_in > 0 else "attnres_rms_first", b("hidden"), b("blocks"),
                      w("sw_attn") if nb_in > 0 else w("sw_mlp"),
                      w("gamma_in"), b("normed"), i32(nb_in), i32(int(snapshot)), RB)
-            # A stage's MoE routing state, zeroed where a stage starts (lone: k3_moe_route.cu).
-            if lone and (i == first or snapshot):
+            # A stage's MoE routing state, zeroed where a stage starts (lone: k3_moe_route.cu), by the
+            # stage's first launch when it is a packed chunk's
+            if lone and (i == first or snapshot) and not (packed and (snapshot or (embed and i == first))):
                 prog.append(bp["route_init_step"](label=L))
             # attention over every row of the chunk
             normed_all = all_rows(L + "gather_normed", b("normed"), b("normed_all"))
