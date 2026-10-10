@@ -1,5 +1,9 @@
 # d-attn: the attention half of a D layer (KDA, MLA, DCP exchange)
 
+The D lane closed at 21:04 UTC (sections from "State" on). The orchestrator
+then moved this run to P's MLA attention (`mla_fmha`): see "P: MLA attention"
+at the end.
+
 ## State
 
 | | launches/layer (d-l16-tp8) | D weighted cost |
@@ -287,3 +291,79 @@ Gaps between graph nodes are ~0.2 us: a launch costs its ramp, not a gap.
    of the TP8 bench; `check` profiles the teacher-forced run) are the
    tools; a debug cubin can be swapped into a copied manifest by sha
    (cache blobs) to printf from inside a real TP8 run.
+
+# P: MLA attention (`mla_fmha`), from 21:04 UTC
+
+Bench `loop/p/bench loop/out/p-stage0.json` (WITHGPU_HOSTS=tray07), check
+`loop/p/check loop/out/p-l12.json`. The check's 2048-row chunks never take
+the split path below; `work/p/check.sh` is the same check with
+`PREFILL=3000 CHUNK=400` (chunks 3-6 split). `work/p/bench.sh` benches any
+workload (`work/p/wl-waves.toml`), `work/p/ops.py` / `work/p/diff.py` read
+per-op times out of a report.
+
+## State
+
+| | P stage 0 weighted (same host A/B) | launches/layer (p-l12, counted) |
+|---|---|---|
+| main 9850876 | 123.47 / 124.08 ms/item | 17.7 |
+| fmha split for 129-512-row calls | 122.63 / 123.52 (-0.57%) | 18.0 (+1 exclusive `when` launch a MLA layer) |
+
+## What the kernel is and what it reaches
+
+- `fmhaSm103aKernel_QkvBfloat16OBfloat16HQk192HV128SeparateQkvCausalVarSeqQ256Kv128PersistentContext`
+  from FlashInfer 0.6.18's TRT-LLM gen bundle: an sm_103a tcgen05/TMEM
+  kernel, 512 threads, 199 KB smem (one CTA an SM), Q tile 256 x KV tile
+  128, grid (ceil(rows / 256), heads, seqs), one CTA a (q tile, head). The
+  only build we have: kernelMetaInfo.h lists Static / SkipsSoftmax / Dense
+  variants, but every cubin under $K3_REF/trtllm/.../fmha/cubin is a
+  130-byte git-LFS pointer. No context variant splits KV over CTAs.
+  FlashInfer's cake_fmha (generated CUDA source) is head_dim 128 only.
+- It writes softmax stats when ptrSoftmaxStats (param byte 1112) is set:
+  float2 (max of the scaled score in natural-log units, sum) per (token,
+  head); lse2 = log2(e) * max + log2(sum) matches an f32 reference to 2e-6.
+- FLOP rate (rows x (ctx + causal half) x 96 x 320 x 2 over its time): main's
+  stage-0 bench 1.33 PF at 8192 @0, 1.50 PF at 8192 @64k-196k, 1.39 PF at
+  4096 @64k, 0.63 PF at 354 @128k. cuBLAS reaches 2.0 PF on the stage's big
+  GEMMs (kern's calibration 1.91). One GPU, harness: 1.61-1.65 PF at 8192
+  rows, linear in rows (7680 / 7936 / 8192 rows: 57.96 / 60.82 / 62.81 ms,
+  no wave step); sustained for 150 calls it is power-capped: 1.35-1.41 kW,
+  SM clock 1.80-1.97 GHz, 63.5-64 ms. The stage bench reads 66-69.6 ms for
+  the same call (more power from the rest of the stage, other GPUs).
+- So at 8192 rows it is at the power cap, about 95% of the "1.6 PF
+  effective" number. Splitting KV did not help there (harness: 8192 @196k
+  -0.6..+0.9% with the merge; empty extra FMHA sequences cost +3%).
+- Small calls are the loss: a 129-512-row call is 96 or 192 CTAs of one
+  whole context each on 152 SMs (256 / 354 / 512 / 768 rows @128k: 2.29 /
+  4.10 / 4.14 / 4.12 ms).
+
+## Done
+
+- **KV split of a short call's heaviest sequence** (5a65c15): three causal
+  pieces, N keys [c + 1, P + Lq) as is, R keys c .. 1 reversed with its q
+  rows reversed (reversing both turns the end-aligned mask into a moving
+  start: row i sees [i + 1, c]), A keys [0, Lq) with a second q copy (row i
+  sees [0, i]); c = ctx / 3 (a greedy list-scheduling model says 1/3 for
+  1 and 2 q tiles; harness optimum c ~ 0.3 ctx at 354 rows: 4.10 -> 3.00
+  ms). Any such split needs Lq - 1 duplicated keys and two extra q row
+  ranges (cum_q / cum_kv are spans: the mask is aligned to the cum_kv
+  span, so spans cannot overlap or have gaps). The lens kernel plans it,
+  the prep gathers in piece order and writes the extra q_norm rows (q_b
+  runs T + 1024 rows), the gate merges with the stats. `when` routes the
+  split launch to 129-512 rows.
+  Bench FMHA at 354 @128k 4.47 -> 3.24 ms a layer. Overheads: q_b +27-33
+  us a call at every size (fixed +1024 rows: kern's expressions cannot
+  shrink it for big calls), expand +130 us at 354 rows.
+
+## Ideas / not done
+
+- Expansion without the k_pe identity block (w_aug is [30720, 576]: 6144
+  output columns are k_pe copies, K 576 vs 512 for the rest: ~30% of the
+  expand's FLOPs, the expand is ~4.4% of the weighted P score). Needs a
+  per-head strided (batched) GEMM to leave the 64 k_pe columns of each
+  320-column head alone; kern's cublaslt extern has row strides but no
+  batch. Runtime proposal: a batched/strided-C GEMM extern.
+- Packed multi-sequence calls run grid z = seqs with x = ceil(tokens / 256)
+  each, so most CTAs are empty; the harness shows empty FMHA sequences cost
+  3-5% at long contexts. The bench has one sequence a call; real traffic
+  packs up to 16. Worth a look by whoever owns the packing (grid x per
+  sequence is the kernel's, not ours).
