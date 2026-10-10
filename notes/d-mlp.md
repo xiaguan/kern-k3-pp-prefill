@@ -149,6 +149,8 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 
 | the MLA split plan (in `embed_rms_plan`) fills the 1-3 waves of least modelled time instead of one wave: 48 rows 1 -> 3 splits | 12.9 | 3.525 (same session 3.529; 48 rows / 128k 4.89 -> 4.83; 93 layers at 48 rows 25.92 -> 25.55) | bit-identical in d/check (plan unchanged at 4 rows); 3-split LSE merge at 48 rows |
 
+| moe_front: one `atom.acq_rel.gpu` hand-off instead of fence + atomic + fence; the routing tables slot each id with a shared atomic (no 32 x 112 histogram) | 12.9 | 3.517 (same session 3.529) | bit-identical (an expert's row order only permutes independent GEMM rows) |
+
 L2 prefetch trials (same-session A/B against the committed one-range per-line form, 3.535):
 - prefetch at kernel entry in every block, and in `land_add2_attnres_rms` (B blocks: ~100k lines an SM at 8
   rows): 3.834. An SM issues prefetches at ~1 a clock or slower; keep the count per SM small.
@@ -158,10 +160,23 @@ L2 prefetch trials (same-session A/B against the committed one-range per-line fo
   isolated); in the all-reduces, chunks dealt consecutively by thread put ~650 on one SM: 13.9 ms/step (the
   bulk unit drains slowly, the GEMMs after it crawl too); dealt over the blocks: 3.564 one range / 3.590 two.
   No better than per-line.
+- `kda_core` prefetching o_proj's 22 MB at entry (its prologue leaves HBM idle): 3.536 vs 3.530, flat. o_proj
+  (5.8 us) is ramp-bound, not bandwidth-bound; the prefetch pays only before the 51-86 MB GEMMs.
 - `land_add2_attnres_rms` launched on 152 blocks, the blocks past B prefetching the first 48 MB of the next
   qkvg / wfu weight: 3.527 vs 3.535, flat (the kernel lasts ~7 us; qkvg did not get measurably faster).
 
 ## Findings
+
+- **kda_core** (`work/h/kda_bench.cu`: the D variant on one GPU, 8 rotating state sets; event overhead ~4.2 us):
+  ~3.6 us of prologue (conv, two block sums, the w_f_b GEMV out of L2, decay, a third block sum: 3-4 dependent
+  round trips), then the state loop at 5.5 TB/s (24 rows) / 6.2 TB/s (48), i.e. at HBM. Tried, no gain: the
+  state's first half staged into shared memory by cp.async at entry (overlapping the prologue): equal in the
+  harness and the bench (the state traffic is the loop's whole cost either way), and it costs 146-155
+  registers (3 blocks an SM: two waves at 48 rows) or spills at 128. As a programmatic dependent (`pdl: true`,
+  wait at entry) it starts ~1.1 us before cuBLAS's split-K reduce ends, but that alone is neutral (3.534 vs
+  3.530); staging the state into that window hits the same register wall. Left as is.
+- **moe_front** phases (harness, 24 rows, before ad22557): load + quant + situ + hand-off 2.9 us, two-level
+  top-k 1.8, the last block's tables 1.6. After: 5.88 us.
 
 - **Step-0 deadline misses were an init race.** The Lamport kernels' 2 s deadline fired at step 0 in some
   4-layer checks (tp_err = 1 + a rank; seen with `--dump` of a copy of the manifest whose `tp_err` is
