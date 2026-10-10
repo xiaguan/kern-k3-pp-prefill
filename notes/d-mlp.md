@@ -15,3 +15,4 @@ the pool is free). main 2026-10-10: 24.7 launches/layer, 4.562 ms/step.
 |---|---|---|---|
 | main | 24.7 | 4.562 | |
 | closing `land_add2` + next `attnres_rms` → `kern_k3_land_add2_attnres_rms` (1024-thread row, snapshot layers too) | 23.7 | 4.558 | bit-identical |
+| `router_topk_front` + `land_n3584` + `moe_quant` + `moe_routing` (3) + `situ_front` → `kern_k3_moe_front` (row per block; warp 0 picks while warps 1-20 quantise + situ; the last block builds the tables, deterministic order) | 18.1 | 4.394 | bit-identical |

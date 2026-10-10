@@ -677,15 +677,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                                          block=[-(-experts // 256) * 256, 1, 1],
                                          defines={"EXPERTS": experts} if experts != 224 else None)]},
         },
-        **({"router_topk_front": {
-            "params": ["in buffer<f32>", "in buffer<f32>", "in buffer<bf16>", "out buffer<i32>", "out buffer<f32>", "i32"],
-            "impl": {"launches": [launch("k3_router_argmax", "kern_k3_router_topk", var=OG,
-                                         block=[-(-experts // 256) * 256, 1, 1],
-                                         defines={"EXPERTS": experts, "LDS": front})]},
-        }, "situ_front": {
-            "params": ["in buffer<f32>", "out buffer<bf16>", "i32", "i32"],
-            "impl": {"launches": [launch("k3_land", "kern_k3_land_situ", grid=per_row(sh_l), block=[256, 1, 1], var=RV,
-                                         defines={"SITU_LDS": front})]},
+        **({"moe_front": {
+            # router top-k + latent land / mxfp8 + shared situ, then the last row's block builds the routing tables
+            "params": ["in buffer<f32>", "in buffer<f32>", "in buffer<bf16>", "out buffer<i32>", "out buffer<f32>",
+                       "out buffer<u8>", "out buffer<u8>", "out buffer<bf16>", "inout buffer<i32>",
+                       *["out buffer<i32>"] * 6, "i32", "i32"],
+            "impl": {"launches": [launch("k3_moe_front", "kern_k3_moe_front", var=OG, grid=[T, 1, 1],
+                                         block=[1024, 1, 1],
+                                         defines={"EXPERTS": experts, "LDS": front, "SH": sh_l, "STRIDE": tp})]},
         }} if front else {}),
         **({"rms": {
             "params": ["in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32"],
@@ -1086,6 +1085,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         buffers["fmha_scratch"] = {"dtype": "u8", "shape": [trtllm_fmha_abi.SCRATCH_BYTES], "kind": "workspace"}
     if front:
         work("front_partial", front, "f32", var=OV)
+        buffers["moe_done"] = {"dtype": "i32", "shape": [1], "kind": "carry"}
     else:
         work("router_partial", experts, "f32", var=OV)
     work("topk_idx", TOPK, "i32", var=OV)
@@ -1402,9 +1402,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
             else:
                 if front:
                     gemm(L + "front", b("normed"), w("w_front"), b("front_partial"), front, H, m=OB)
-                    step(L + "topk", "router_topk_front", b("front_partial"), w("bias"), w("rs"), b("topk_idx"),
-                         b("topk_weight"), OB)
-                    land(L + "latent", b("front_partial"), b("latent"), LATENT, experts, front)
+                    step(L + "moe_front", "moe_front", b("front_partial"), w("bias"), w("rs"), b("topk_idx"),
+                         b("topk_weight"), b("latent_q"), b("latent_sf"), b("shared_act"), b("moe_done"),
+                         *(b("moe." + n) for n in ("cta_batch", "cta_limit", "num_non_exiting", "total_padded",
+                                                   "route_map", "exp2perm")), {"rank": "tp"}, OB)
                 else:
                     gemm(L + "router", b("normed"), w("w_router"), b("router_partial"), experts, H, m=OB)
                     step(L + "topk", "router_topk", b("router_partial"), w("bias"), w("rs"), b("topk_idx"),
@@ -1428,15 +1429,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                     # Every row through this member's experts, the routed latent's partial and the shared
                     # expert's side by side in one buffer, one bf16 all-reduce of both (rows past
                     # `tokens` of the latent's block are the combine's zeros), the latent normed, up.
-                    step(L + "moe_quant", "moe_quant", b("latent"), b("latent_q"), b("latent_sf"), OB, i32(LATENT))
+                    if not front:
+                        step(L + "moe_quant", "moe_quant", b("latent"), b("latent_q"), b("latent_sf"), OB, i32(LATENT))
                     prog.extend(bp["steps"](b("latent_q"), b("latent_sf"), b("topk_idx"), b("topk_weight"),
                                             w("moe.w13s"), w("moe.w13_sfs"), w("moe.w2s"), w("moe.w2_sfs"),
-                                            w("moe.alpha"), w("moe.beta"), b("moe_flat"), {"rank": "tp"}, label=L))
+                                            w("moe.alpha"), w("moe.beta"), b("moe_flat"), {"rank": "tp"}, label=L,
+                                            routed=bool(front)))
                     shared_at = seqs_max * LATENT * 2
-                    if front:
-                        step(L + "shared_situ", "situ_front", b("front_partial", (experts + LATENT) * 4),
-                             b("shared_act"), i32(sh_l), RB)
-                    else:
+                    if not front:
                         proj(L + "wsh", b("normed"), w("wsh"), b("shared_partial"), 2 * sh_l, H, m=RB)
                         land_situ(L + "shared_situ", b("shared_partial"), b("shared_act"), sh_l, RB)
                     proj(L + "sh_down", b("shared_act"), w("sh_down"), b("moe_flat", shared_at), H, sh_l, m=RB)
@@ -1607,6 +1607,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     # The op table covers every form; a manifest keeps the ops its programs call.
     called = {c["op"] for p in programs.values() for c in p["calls"]}
     m["ops"] = {k: v for k, v in ops.items() if k in called}
+    # ... and the workspaces they name.
+    named = set()
+    walk = lambda a: (named.add(a["buf"]) if "buf" in a else None) if isinstance(a, dict) else None
+    for p in programs.values():
+        for c in p["calls"]:
+            for a in c["args"]:
+                walk(a)
+    m["buffers"] = {k: v for k, v in m["buffers"].items() if v["kind"] != "workspace" or k in named}
     return kern_manifest.normalize(m)
 
 

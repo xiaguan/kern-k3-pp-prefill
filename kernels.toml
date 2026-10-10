@@ -160,15 +160,7 @@ sha256 = "9c1aef3502974d3a14a5614d172f3e7e3596163faedf637e99ffe0a226703813"
 source = "source/k3_mla_absorb.cu"
 defines = { GROUPS = 1 }
 
-[kernels."k3_router_argmax+EXPERTS=896+LDS=6016"]
-sha256 = "4576ad55a17ded2a6173f833fb9e9164131d6c6ab3cce8589a4c697dc9a423a4"
-source = "source/k3_router_argmax.cu"
-defines = { EXPERTS = 896, LDS = 6016 }
 
-[kernels."k3_land+SITU_LDS=6016"]
-sha256 = "977666d6b5764ba3a57010ec26cc4ed083124effb130d97a3e2a0c938fea93f3"
-source = "source/k3_land.cu"
-defines = { SITU_LDS = 6016 }
 
 [kernels."k3_kda_core+HEADS=12+LDS=6400+WSM_FA=12+WSM_LDS=6400"]
 sha256 = "6e0ef3d6b86268d40efaef4a2ba8d3c4686f4f09b0b6d23f4739211e295d4d90"
@@ -193,3 +185,8 @@ defines = { KDA_CONV = 1 }
 sha256 = "55587f0859bdaa094ae607d2474f455ca4285c859f04753bfcdc0a5d150d2f6f"
 source = "source/k3_kda_core.cu"
 defines = { HEADS = 12, KDA_CONV = 1, LDS = 6400, WSM_FA = 12, WSM_LDS = 6400 }
+
+[kernels."k3_moe_front+EXPERTS=896+LDS=6016+SH=768+STRIDE=8"]
+sha256 = "152bc92d09e5c126ceee712d18db9d53ac203c44e3b3c4a7cd9391d9fe51383d"
+source = "source/k3_moe_front.cu"
+defines = { EXPERTS = 896, LDS = 6016, SH = 768, STRIDE = 8 }

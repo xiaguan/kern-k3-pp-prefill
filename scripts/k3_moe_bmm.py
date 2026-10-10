@@ -155,15 +155,17 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
              "args": [ids, b("blockoff"), T, rank, i32(local), b("route_map"), b("exp2perm")]},
         ]
 
-    def steps(q, sf, ids, wts, w13s, w13_sfs, w2s, w2_sfs, alpha, beta, out, rank=None, gamma=None, label=""):
-        """One layer's calls; with `gamma` the combine's row is normed by it (the latent norm) before `out`."""
+    def steps(q, sf, ids, wts, w13s, w13_sfs, w2s, w2_sfs, alpha, beta, out, rank=None, gamma=None, label="",
+              routed=False):
+        """One layer's calls; with `gamma` the combine's row is normed by it (the latent norm) before `out`;
+        `routed`: the tables are already built (the DCP step's moe_front)."""
         T = dim(tokens)
         combine = ({"label": label + "finalize", "op": "moe_finalize_rms",
                     "args": [b("fc2_out"), b("exp2perm"), wts, gamma, out, T, i32(H)]} if gamma else
                    {"label": label + "finalize", "op": "moe_finalize",
                     "args": [b("fc2_out"), b("exp2perm"), wts, out, T, i32(H)]})
         return [
-            *routing(ids, rank, label),
+            *([] if routed else routing(ids, rank, label)),
             {"label": label + "fc1", "op": "moe_fc1",
              "args": [w13s, w13_sfs, q, sf, b("fc1_out"), b("fc1_sf"), b("route_map"), alpha, beta, *tables]},
             {"label": label + "fc2", "op": "moe_fc2", "args": [w2s, w2_sfs, b("fc1_out"), b("fc1_sf"), b("fc2_out"), *tables]},
