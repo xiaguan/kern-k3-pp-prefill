@@ -49,22 +49,27 @@
 //   Summation order is q = 0 .. NRANKS - 1, so the result is the same bytes on
 //   every run.
 //
-// kern_k3_dcp_exchange is the DSL decode's split reduction and the four
-// steps above in one launch: fixup, pack, the all-to-all and combine, with
-// the group's peer-mapped Lamport stages for the wire instead of NCCL
-// (TensorRT-LLM's one-shot protocol, as peer_allreduce_bf16.cu runs it).
+// kern_k3_dcp_exchange is the DSL decode's split reduction, the four steps
+// above and the v-up + gate of this member's heads (k3_mla_vup_gate.cu) in
+// one launch: fixup, pack, the all-to-all and combine, with the group's
+// peer-mapped Lamport stages for the wire instead of NCCL (TensorRT-LLM's
+// one-shot protocol, as peer_allreduce_bf16.cu runs it).
 //
 //   extern "C" __global__ void kern_k3_dcp_exchange(
 //       const float* acc_o,                    // [R][M_TILE][split_max][LAT]  the splits' normalized o
 //       const float* acc_lse,                  // [R][M_TILE][split_max]       their log2-sum-exp
 //       const int* seq_lens, const int* bsk,   // [R]  positions held, splits asked for
 //       int split_max,
-//       bf16* o,                               // [R, HL, LAT]
+//       const bf16* w_kv_b,                    // [HL*256, LAT]  W_UV = rows j*256+128..256
+//       const bf16* mla_gate,                  // [R, HL*128]
+//       bf16* gated,                           // [R, HL*128]
 //       uint8_t* lamport,                      // 3 stages of `stage_bytes`
 //       const unsigned long long* peers,       // [NRANKS] every member's `lamport`
 //       int* state, int* err,                  // [8] zeroed carry; sticky 1 + the late member
 //       int rank, int R, long long stage_bytes, long long timeout_ns);
 //   grid: any grid whose blocks are all resident at once   block 256
+//   dynamic smem 64 KB: two QROWS-row quarters of a merge item's W_UV, staged by cp.async
+//   while it waits and while the quarter before is in use
 //
 //   The splits merge as the DSL's reduction kernel does: row b ran
 //   S = ceil(t / ceil(t / bsk[b])) splits of its t = ceil(seq_lens[b] / 128)
@@ -80,7 +85,10 @@
 //   travels as o = 0, lse = -inf, so the receiver merges exactly as combine
 //   does. Every block sends, re-poisons its share of the stage the previous
 //   call used, then merges; the stages rotate through state[2] as the
-//   all-reduce's do.
+//   all-reduce's do. A merge item is one local head of RB rows: the rows'
+//   o land in bf16 (as combine stored them) in shared memory, then
+//   gated[b, j*128 + dv] = bf16(sum_c W_UV_j[dv, c] * o[c]) * bf16(sigmoid(gate)),
+//   the sum f32 over a warp's 32 lanes, 16 columns each.
 //
 //   nvcc -cubin -arch=sm_103a source/k3_dcp.cu
 #include <cuda_bf16.h>
@@ -167,6 +175,8 @@ extern "C" __global__ void __launch_bounds__(256) kern_k3_dcp_combine(const bf16
 }
 
 #define REC (LANES + 1)
+#define NOPE 128
+#define RB (256 / LANES)   // rows of a merge item
 #define M_TILE 128
 #define LOG2E 1.4426950408889634f
 
@@ -215,6 +225,23 @@ __device__ __forceinline__ float word_lse(uint4 v) {
   return __uint_as_float((v.x & 0xffu) | (v.y & 0xffu) << 8 | (v.z & 0xffu) << 16 | (v.w & 0xffu) << 24);
 }
 
+#define QROWS (NOPE / 4)
+
+// Quarter q of head j's W_UV (rows QROWS * q.., [QROWS][LAT] bf16, 32 KB) into buffer q % 2 of `sw`, one
+// cp.async group in flight until wait_w.
+__device__ __forceinline__ void stage_w(uint4* sw, const bf16* w_kv_b, int j, int q) {
+  const uint4* g = reinterpret_cast<const uint4*>(w_kv_b + ((long long)j * 256 + NOPE + q * QROWS) * LAT);
+  uint4* d = sw + (q % 2) * (QROWS * LAT / 8);
+  for (int i = threadIdx.x; i < QROWS * LAT / 8; i += blockDim.x)
+    asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"((uint32_t)__cvta_generic_to_shared(d + i)),
+                 "l"(g + i));
+  asm volatile("cp.async.commit_group;");
+}
+
+// All but the latest `pending` groups of this thread have landed.
+template <int pending>
+__device__ __forceinline__ void wait_w() { asm volatile("cp.async.wait_group %0;" ::"n"(pending) : "memory"); }
+
 // Spins until the vector at p has arrived; `fail` takes 1 + `from` past the deadline.
 __device__ __forceinline__ uint4 await(const uint4* p, int from, long long timeout_ns, int& fail) {
   unsigned long long t0 = 0;
@@ -233,7 +260,9 @@ __device__ __forceinline__ uint4 await(const uint4* p, int from, long long timeo
 
 extern "C" __global__ void __launch_bounds__(256, 1) kern_k3_dcp_exchange(
     const float* __restrict__ acc_o, const float* __restrict__ acc_lse, const int* __restrict__ seq_lens,
-    const int* __restrict__ bsk, int split_max, bf16* __restrict__ o, uint8_t* lamport, const unsigned long long* __restrict__ peers, int* state, int* err,
+    const int* __restrict__ bsk, int split_max, const bf16* __restrict__ w_kv_b,
+    const bf16* __restrict__ mla_gate, bf16* __restrict__ gated, uint8_t* lamport,
+    const unsigned long long* __restrict__ peers, int* state, int* err,
     int rank, int R, long long stage_bytes, long long timeout_ns) {
   const int flag = state[2];
   long long* clear_ptr = reinterpret_cast<long long*>(state + 4);
@@ -244,6 +273,8 @@ extern "C" __global__ void __launch_bounds__(256, 1) kern_k3_dcp_exchange(
   uint4* clear_buf = reinterpret_cast<uint4*>(lamport + ((flag + 2) % 3) * stage_bytes);
   __syncthreads();
   if (threadIdx.x == 0) atomicAdd(state, 1);
+  extern __shared__ uint4 sw[];  // [2][QROWS][LAT / 8]
+  if (blockIdx.x < (R + RB - 1) / RB * HL) stage_w(sw, w_kv_b, blockIdx.x % HL, 0), stage_w(sw, w_kv_b, blockIdx.x % HL, 1);
 
   const int lane = threadIdx.x % LANES, sub = threadIdx.x / LANES;
   for (int it = blockIdx.x; it < R * (HEADS / HPB); it += gridDim.x) {
@@ -256,13 +287,16 @@ extern "C" __global__ void __launch_bounds__(256, 1) kern_k3_dcp_exchange(
       const long long rec = (long long)b * M_TILE + h;
       const float* ls = acc_lse + rec * split_max;
       float m = -CUDART_INF_F;
+#pragma unroll 1
       for (int i = 0; i < splits; ++i) m = fmaxf(m, ls[i]);
       if (m == -CUDART_INF_F) m = 0.f;
       float sum = 0.f;
+#pragma unroll 1
       for (int i = 0; i < splits; ++i) sum += ex2(ls[i] - m);
       l = sum != 0.f ? m + lg2(sum) : CUDART_INF_F;
       float a[VEC] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
       const float4* src = reinterpret_cast<const float4*>(acc_o + rec * split_max * LAT) + 2 * lane;
+#pragma unroll 1
       for (int i = 0; i < splits; ++i, src += LAT / 4) {
         const float w = ex2(ls[i] - l);
         const float4 x = src[0], y = src[1];
@@ -284,9 +318,14 @@ extern "C" __global__ void __launch_bounds__(256, 1) kern_k3_dcp_exchange(
   for (long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x; i < clear_count; i += (long long)gridDim.x * blockDim.x)
     clear_buf[i] = poison;
 
+  __shared__ __align__(16) bf16 lat[RB][LAT];
+  const int items = (R + RB - 1) / RB * HL;
   int fail = 0;
-  for (int it = blockIdx.x; it < R * (HL / HPB); it += gridDim.x) {
-    const int b = it / (HL / HPB), j = it % (HL / HPB) * HPB + sub;
+  for (int it = blockIdx.x; it < items; it += gridDim.x) {
+    const int j = it % HL, b0 = it / HL * RB, b = b0 + sub;
+    if (b >= R) {
+      reinterpret_cast<uint4*>(lat[sub])[lane] = make_uint4(0, 0, 0, 0);
+    } else {
     const uint4* rec = mine + ((long long)b * HL + j) * REC;
     float l[NRANKS];
     float m = -CUDART_INF_F;
@@ -316,7 +355,65 @@ extern "C" __global__ void __launch_bounds__(256, 1) kern_k3_dcp_exchange(
     __nv_bfloat162* o2 = reinterpret_cast<__nv_bfloat162*>(&out);
 #pragma unroll
     for (int k = 0; k < VEC / 2; ++k) o2[k] = __floats2bfloat162_rn(acc[2 * k] * r, acc[2 * k + 1] * r);
-    reinterpret_cast<uint4*>(o + ((long long)b * HL + j) * LAT)[lane] = out;
+    reinterpret_cast<uint4*>(lat[sub])[lane] = out;
+    }
+    __syncthreads();
+    const int dl = threadIdx.x / 32, kl = threadIdx.x % 32;
+    float x[RB][16];
+#pragma unroll
+    for (int r = 0; r < RB; ++r)
+#pragma unroll
+      for (int i = 0; i < 2; ++i) {
+        const uint4 v = reinterpret_cast<const uint4*>(lat[r])[32 * i + kl];
+        const __nv_bfloat162* v2 = reinterpret_cast<const __nv_bfloat162*>(&v);
+#pragma unroll
+        for (int k = 0; k < 4; ++k) {
+          const float2 f = __bfloat1622float2(v2[k]);
+          x[r][8 * i + 2 * k] = f.x;
+          x[r][8 * i + 2 * k + 1] = f.y;
+        }
+      }
+#pragma unroll 1
+    for (int dv = dl; dv < NOPE; dv += 256 / 32) {
+      const int q = dv / QROWS;
+      if (dv % QROWS == dl) {
+        if (q < 3) wait_w<1>(); else wait_w<0>();
+        __syncthreads();
+      }
+      const uint4* w = sw + (q % 2) * (QROWS * LAT / 8) + dv % QROWS * (LAT / 8) + kl;
+      const uint4 wv[2] = {w[0], w[32]};
+      float a[RB] = {0.f, 0.f, 0.f, 0.f};
+#pragma unroll
+      for (int i = 0; i < 2; ++i) {
+        const __nv_bfloat162* w2 = reinterpret_cast<const __nv_bfloat162*>(&wv[i]);
+#pragma unroll
+        for (int k = 0; k < 4; ++k) {
+          const float2 g = __bfloat1622float2(w2[k]);
+#pragma unroll
+          for (int r = 0; r < RB; ++r) {
+            a[r] = fmaf(g.x, x[r][8 * i + 2 * k], a[r]);
+            a[r] = fmaf(g.y, x[r][8 * i + 2 * k + 1], a[r]);
+          }
+        }
+      }
+#pragma unroll
+      for (int r = 0; r < RB; ++r)
+#pragma unroll
+        for (int msk = 1; msk < 32; msk <<= 1) a[r] += __shfl_xor_sync(0xffffffffu, a[r], msk);
+      float mine_a = a[0];
+#pragma unroll
+      for (int r = 1; r < RB; ++r) mine_a = kl == r ? a[r] : mine_a;
+      if (kl < RB && b0 + kl < R) {
+        const long long oi = (long long)(b0 + kl) * (HL * NOPE) + j * NOPE + dv;
+        const float gf = __bfloat162float(mla_gate[oi]);
+        gated[oi] = __hmul(__float2bfloat16_rn(mine_a), __float2bfloat16_rn(1.0f / (1.0f + expf(-gf))));
+      }
+      if (dv % QROWS == QROWS - 256 / 32 + dl) {
+        __syncthreads();
+        if (q < 2) stage_w(sw, w_kv_b, j, q + 2);
+      }
+    }
+    if (it + gridDim.x < items) stage_w(sw, w_kv_b, (it + gridDim.x) % HL, 0), stage_w(sw, w_kv_b, (it + gridDim.x) % HL, 1);
   }
   if (fail) atomicMax(err, fail);
 

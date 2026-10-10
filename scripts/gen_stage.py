@@ -781,13 +781,13 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     if xchg:
         # The MLA partials change hands in one kernel (source/k3_dcp.cu): every
         # head's partial pushed into its owner's Lamport stage over NVLink, the
-        # members' partials of this member's heads merged by their LSE.
+        # members' partials of this member's heads merged by their LSE, expanded by v-up and gated.
         ops["dcp_exchange"] = {
-            "params": ["in buffer<f32>", "in buffer<f32>", "in buffer<i32>", "in buffer<i32>", "i32", "out buffer<bf16>",
-                       "inout buffer<u8>", "in buffer<u64>", "inout buffer<i32>", "out buffer<i32>", "i32", "i32", "i64",
+            "params": ["in buffer<f32>", "in buffer<f32>", "in buffer<i32>", "in buffer<i32>", "i32", "in buffer<bf16>",
+                       "in buffer<bf16>", "out buffer<bf16>", "inout buffer<u8>", "in buffer<u64>", "inout buffer<i32>", "out buffer<i32>", "i32", "i32", "i64",
                        "i64"],
             "impl": {"launches": [launch("k3_dcp", "kern_k3_dcp_exchange", grid=[TP_AR_GRID, 1, 1],
-                                         block=[256, 1, 1])]},
+                                         block=[256, 1, 1], smem=HEAD_DIM // 2 * KV_LORA * 2)]},
         }
         ops["dcp_init"] = {
             "params": ["inout buffer<u8>", "i64"],
@@ -1041,7 +1041,6 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     if xchg:
         work("o_partial", H)
     if xchg and mla:
-        work("o_lat_l", mo * KV_LORA)
         # the exchange's Lamport stages: a slot per member, a record of 65 vectors per (row, head) in it
         buffers.update({
             "dcp_lamport": {"dtype": "u8", "shape": [3 * dcp_stage], "kind": "carry", "export": True},
@@ -1380,10 +1379,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                     if xchg:
                         # every head over this member's positions → this member's heads over all of them
                         step(L + "dcp", "dcp_exchange", b("mla_acc_o"), b("mla_acc_lse"), b("seq_lens"), b("mla_bsk"),
-                             i32(mla_split_max), b("o_lat_l"),
+                             i32(mla_split_max), w("w_kv_b_l"), b("mla_gate"), b("gated"),
                              b("dcp_lamport"), b("dcp_lamport_peers"), b("dcp_state"), b("tp_err"), {"rank": "tp"}, B,
                              i64(dcp_stage), i64(TP_TIMEOUT_NS))
-                        step(L + "vup", "mla_vup_gate", b("o_lat_l"), w("w_kv_b_l"), b("mla_gate"), b("gated"), B)
                     else:
                         step(L + "vup", "mla_vup_gate", b("o_lat"), w("w_kv_b"), b("mla_gate"), b("gated"), B)
             else:

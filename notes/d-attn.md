@@ -8,6 +8,7 @@
 | after kda conv fold | 23.9 | 4.556 ms/step |
 | after dcp exchange kernel | 23.2 | 4.409 ms/step |
 | exchange merges the DSL splits | 22.9 | 4.400 ms/step |
+| exchange runs v-up + gate | 22.7 | 4.394 ms/step |
 
 ## Done
 
@@ -34,6 +35,22 @@
   approx, fma in split order, lse / log2 e). Bit-identical even at 4 rows
   (several splits). 4.409 → 4.400. Needs `__launch_bounds__(256, 1)`:
   with plain (256) ptxas squeezes it to 40 regs and spills.
+
+- **`mla_vup_gate` folded into the exchange's receive side**: a merge item
+  is (local head j, 4 rows); the rows' merged o land in bf16 in smem, then
+  a warp per dv (32 lanes x 16 columns, butterfly sum) does W_UV · o and the
+  gate. W_UV of the head is staged by cp.async in 4 quarters through two
+  32 KB buffers (64 KB dyn smem), so it streams while the block waits on
+  its peers. 7 near-tie flips vs main, relRMS max 0.6% (sum order of the
+  512-long dot). 4.400 → 4.394.
+  Pitfalls hit: (1) the lat slice is loop-invariant over dv, so a layout
+  with 8 lanes x 64 columns made ptxas hoist 128 regs of it and spill;
+  (2) a 128 KB staging buffer (1 block/SM, 152 blocks = every SM) PASSed a
+  one-GPU 8-virtual-rank harness (work/t/xchg8.cu) bit for bit but broke the
+  real TP8 check (garbage, 10x slower steps): presumably not all 152 blocks
+  were resident at once -> Lamport waits time out. Keep this kernel at
+  >= 2 blocks/SM worth of resources.
+  (3) `cmd | tail` hides a FAIL exit status: chain on the check's own rc.
 
 ## Profile (nsys, rank 0, 48 rows @128k, before the exchange kernel)
 
