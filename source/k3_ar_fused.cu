@@ -26,7 +26,8 @@
 //     latent_norm = k3_land.cu's kern_k3_rms(latent sum, gamma), shared_sum the shared sum.
 //
 //   grid (G >= B, 1, 1), every block resident at once   block (1024, 1, 1)
-//   `err` is sticky: 1 + the rank whose data did not show within `timeout_ns`.
+//   `err` gets 1 + the rank whose data did not show within `timeout_ns`, then the kernel traps.
+//   `lamport` holds the three stages, then NRANKS handshake words (the first call's, below).
 
 #include <cuda_bf16.h>
 #include <cstdint>
@@ -85,8 +86,37 @@ struct Lamport {
   int flag;
 };
 
-__device__ __forceinline__ Lamport lamport_open(uint8_t* lamport, const unsigned long long* peers, int* state,
-                                                int rank, long long tot, long long stage_bytes) {
+// A deadline that passes is a broken group, never a slow one: the kernel records the late
+// rank in `err` and traps, so the run fails instead of summing a slot that never arrived.
+__device__ __forceinline__ void give_up(int* err, int missing) {
+  atomicMax(err, missing);
+  __threadfence_system();
+  __trap();
+}
+
+// The first call of a process waits for every peer to have run its once-program (the
+// poisoning of its stages, kern_peer_lamport_init_bf16) before pushing into them: nothing
+// orders one rank's once-program after another's first step, and a push that lands before
+// the peer's poison is lost. Each rank's block 0 sets `ready[rank]` in every peer's
+// handshake words (past the three stages, which the init never touches and nothing
+// rewrites), every block waits for all of its own, and state[6] marks the handshake done.
+__device__ __forceinline__ void lamport_handshake(uint8_t* lamport, const unsigned long long* peers, int* state,
+                                                  int* err, int rank, long long stage_bytes, long long timeout_ns) {
+  if (threadIdx.x >= NRANKS || *reinterpret_cast<volatile int*>(state + 6)) return;
+  const long long at = 3 * stage_bytes;
+  if (blockIdx.x == 0)
+    reinterpret_cast<volatile int*>(reinterpret_cast<uint8_t*>(peers[threadIdx.x]) + at)[rank] = 1;
+  if (threadIdx.x == 0) {
+    const volatile int* ready = reinterpret_cast<const volatile int*>(lamport + at);
+    const unsigned long long t0 = gtimer();
+    for (int q = 0; q < NRANKS; ++q)
+      while (!ready[q])
+        if ((long long)(gtimer() - t0) > timeout_ns) give_up(err, 1 + q);
+  }
+}
+
+__device__ __forceinline__ Lamport lamport_open(uint8_t* lamport, const unsigned long long* peers, int* state, int* err,
+                                                int rank, long long tot, long long stage_bytes, long long timeout_ns) {
   Lamport l;
   l.flag = state[2];
   l.clear_count = *reinterpret_cast<long long*>(state + 4);
@@ -97,6 +127,7 @@ __device__ __forceinline__ Lamport lamport_open(uint8_t* lamport, const unsigned
                 (long long)rank * tot;
   l.mine = reinterpret_cast<const uint4*>(lamport + (l.flag % 3) * stage_bytes);
   l.clear_buf = reinterpret_cast<uint4*>(lamport + ((l.flag + 2) % 3) * stage_bytes);
+  lamport_handshake(lamport, peers, state, err, rank, stage_bytes, timeout_ns);
   __syncthreads();
   if (threadIdx.x == 0) atomicAdd(state, 1);
   return l;
@@ -147,12 +178,13 @@ __device__ __forceinline__ uint4 lamport_sum(const Lamport& l, long long i, long
 }
 
 __device__ __forceinline__ void lamport_close(const Lamport& l, int* state, int* err, int fail) {
-  if (fail) atomicMax(err, fail);
+  if (fail) give_up(err, fail);
   if (blockIdx.x == 0 && threadIdx.x == 0) {
     while (*reinterpret_cast<volatile int*>(state) != (int)gridDim.x) {
     }
     state[2] = (l.flag + 1) % 3;
     *reinterpret_cast<long long*>(state + 4) = (long long)NRANKS * l.tot;
+    state[6] = 1;
     state[0] = 0;
   }
 }
@@ -337,7 +369,7 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_attnres_rms
     int B, long long stage_bytes, long long timeout_ns) {
   const int t = threadIdx.x, b = blockIdx.x;
   const long long tot = (long long)B * KVEC;
-  const Lamport l = lamport_open(lamport, lamport_peers, state, rank, tot, stage_bytes);
+  const Lamport l = lamport_open(lamport, lamport_peers, state, err, rank, tot, stage_bytes, timeout_ns);
   for (long long i = (long long)b * KTHREADS + t; i < tot; i += (long long)gridDim.x * KTHREADS) lamport_push(l, i, x[i]);
   lamport_clear(l);
 
@@ -403,7 +435,7 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_finalize_rm
   __shared__ float sm[33];
   const int t = threadIdx.x, b = blockIdx.x;
   const long long tot = (long long)B * ROWV;
-  const Lamport l = lamport_open(lamport, lamport_peers, state, rank, tot, stage_bytes);
+  const Lamport l = lamport_open(lamport, lamport_peers, state, err, rank, tot, stage_bytes, timeout_ns);
   for (long long i = (long long)b * KTHREADS + t; i < tot; i += (long long)gridDim.x * KTHREADS) {
     const int row = (int)(i / ROWV), c = (int)(i % ROWV);
     lamport_push(l, i, c < KLATV ? finalize(fc2, exp2perm, wts, row, c) : shared[(long long)row * KVEC + c - KLATV]);

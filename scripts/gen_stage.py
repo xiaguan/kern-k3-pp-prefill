@@ -186,7 +186,7 @@ SP = "span"
 CTX = "ctx"
 TP_GRID = 256
 TP_AR_GRID = 152  # the GB300's SM count, a multiple of the cluster of 8 and under the 256-row flag table
-TP_TIMEOUT_NS = 2_000_000_000
+TP_TIMEOUT_NS = 30_000_000_000  # a deadline that passes traps: long enough for any start skew
 ONESHOT_MAX_ROWS = 192  # peer_allreduce.cu: wider batches go two-shot, the Lamport stages hold this many rows
 
 # Launch geometry per entry, as the kernel headers document it
@@ -961,7 +961,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     # (peer_collective.cu "own rows first").
     if xchg and peer_ar:
         buffers.update({
-            "tp_ar_lamport": {"dtype": "u8", "shape": [3 * ar_stage], "kind": "carry", "export": True},
+            # three stages, then the first call's handshake words (k3_ar_fused.cu), never poisoned
+            "tp_ar_lamport": {"dtype": "u8", "shape": [3 * ar_stage + 64], "kind": "carry", "export": True},
             "tp_ar_lamport_peers": {"dtype": "u64", "shape": [tp], "kind": "peer", "of": "tp_ar_lamport", "group": "tp"},
             "tp_ar_state": {"dtype": "i32", "shape": [8], "kind": "carry"},
             "tp_err": {"dtype": "i32", "shape": [1], "kind": "output", "fill": "error"},

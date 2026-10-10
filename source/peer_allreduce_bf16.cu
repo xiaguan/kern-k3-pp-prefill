@@ -22,11 +22,13 @@
 //     shared expert's, laid out apart, without the rows between them. N is the
 //     compile-time NRANKS (default 8); n and n2 multiples of 8. `lamport`
 //     holds 3 stages of `stage_bytes` >= N * (n + n2)_max * 2, poisoned once by
-//     kern_peer_lamport_init_bf16. `state` starts zeroed: [0] block counter,
-//     [2] stage, [4..5] i64 16-byte words to re-poison next call. Any grid
-//     whose blocks are all resident at once (block 0 waits for every block
-//     to arrive). `err` is sticky: 1 + the rank whose data did not show
-//     within `timeout_ns`.
+//     kern_peer_lamport_init_bf16, then N handshake words the first call sets
+//     in every peer and waits for in its own (no push before the peers' init).
+//     `state` starts zeroed: [0] block counter, [2] stage, [4..5] i64 16-byte
+//     words to re-poison next call, [6] handshake done. Any grid whose blocks
+//     are all resident at once (block 0 waits for every block to arrive).
+//     `err` gets 1 + the rank whose data did not show within `timeout_ns`,
+//     then the kernel traps.
 //
 //   kern_peer_lamport_init_bf16(inout u8 lamport, i64 bytes)
 
@@ -40,6 +42,13 @@ __device__ __forceinline__ unsigned long long gtimer() {
     unsigned long long t;
     asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(t));
     return t;
+}
+
+// A passed deadline is a broken group: record the late rank and trap, never sum a missing slot.
+__device__ __forceinline__ void give_up(int* err, int missing) {
+    atomicMax(err, missing);
+    __threadfence_system();
+    __trap();
 }
 
 __device__ __forceinline__ uint4 ld_volatile(const uint4* p) {
@@ -96,6 +105,18 @@ kern_peer_allreduce_bf16(const uint4* x, uint4* y, uint8_t* lamport, const unsig
     }
     const uint4* mine = reinterpret_cast<const uint4*>(lamport + (flag % 3) * stage_bytes);
     uint4* clear_buf = reinterpret_cast<uint4*>(lamport + ((flag + 2) % 3) * stage_bytes);
+    // k3_ar_fused.cu's first-call handshake: no push before every peer's stages are poisoned
+    if (threadIdx.x < NRANKS && !*reinterpret_cast<volatile int*>(state + 6)) {
+        if (blockIdx.x == 0)
+            reinterpret_cast<volatile int*>(reinterpret_cast<uint8_t*>(lamport_peers[threadIdx.x]) + 3 * stage_bytes)[rank] = 1;
+        if (threadIdx.x == 0) {
+            const volatile int* ready = reinterpret_cast<const volatile int*>(lamport + 3 * stage_bytes);
+            const unsigned long long t0 = gtimer();
+            for (int q = 0; q < NRANKS; ++q)
+                while (!ready[q])
+                    if ((long long)(gtimer() - t0) > timeout_ns) give_up(err, 1 + q);
+        }
+    }
     __syncthreads();
     if (threadIdx.x == 0) atomicAdd(state, 1);
 
@@ -141,7 +162,7 @@ kern_peer_allreduce_bf16(const uint4* x, uint4* y, uint8_t* lamport, const unsig
         }
         y[AT(i)] = make_uint4(pack(acc[0], acc[1]), pack(acc[2], acc[3]), pack(acc[4], acc[5]), pack(acc[6], acc[7]));
     }
-    if (fail) atomicMax(err, fail);
+    if (fail) give_up(err, fail);
     #undef AT
 
     if (blockIdx.x == 0 && threadIdx.x == 0) {
@@ -149,6 +170,7 @@ kern_peer_allreduce_bf16(const uint4* x, uint4* y, uint8_t* lamport, const unsig
         }
         state[2] = (flag + 1) % 3;
         *clear_ptr = (long long)NRANKS * tot;
+        state[6] = 1;
         state[0] = 0;
     }
 }

@@ -155,7 +155,7 @@ sha256 = "040f51b01c421b9c69a2090034ff1bc4741e40c02f5ea52bd04a3e62e5c1af4d"
 source = "source/weight_prep.cu"
 
 [kernels."peer_allreduce_bf16+NRANKS=8"]
-sha256 = "fa6a18d7a315427ecf3fbfdf8fa9528de62d2173221718c1c4e55af0bbe38f54"
+sha256 = "bfc0eef4b7c6a71d59fbb0a0bf4a8b3241a6fdb5bbd1d3ae116f18fd056944f3"
 source = "source/peer_allreduce_bf16.cu"
 defines = { NRANKS = 8 }
 
@@ -196,7 +196,7 @@ source = "source/k3_moe_front.cu"
 defines = { EXPERTS = 896, LDS = 6016, SH = 768, STRIDE = 8 }
 
 [kernels."k3_ar_fused+NRANKS=8"]
-sha256 = "1e3505d620e6a097d1a0c097bb0895fd7b5b36e7c69380d1a0457541ebd2016a"
+sha256 = "94e98d1aa231989c686f47d1193daa38dd676dd7b0f0d84fc47afc073472fe26"
 source = "source/k3_ar_fused.cu"
 defines = { NRANKS = 8 }
 
