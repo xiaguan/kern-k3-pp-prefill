@@ -148,6 +148,9 @@ The orchestrator ruled GEMM merges out of scope (18:13). Measured before that:
   2 or 4 rows a block: slower.
 
 ### Tried, not kept
+- PDL on P's batched GEMMs (as d-mlp's e29458a does for D), with and without the route kernel
+  triggering its dependents after its barrier: A/B in one lease 8192@0 +0.19 / +0.69%, 10 rows
+  -0.10 / -0.09%, 354 rows -0.04 / +0.14%: nothing measurable.
 - PDL (`pdl: true` + griddepcontrol.wait at the top) on every glue launch: 10 rows −0.5%, but 8192
   rows +0.9% (the early-resident blocks slow the GEMMs' tails); weighted +0.7%.
 - Route phase 2 with the first row's places computed before the scan + a tight barrier spin:
