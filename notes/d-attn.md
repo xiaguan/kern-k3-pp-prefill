@@ -413,3 +413,59 @@ p-kda's (flash_kda, span_gather).
   3-5% at long contexts. The bench has one sequence a call; real traffic
   packs up to 16. Worth a look by whoever owns the packing (grid x per
   sequence is the kernel's, not ours).
+
+## Long calls after the merge (orchestrator, 22:30 UTC)
+
+The orchestrator saw +1-2% on the 8192-row items in main cb84767. Same GPU
+(WITHGPU_GPUS fixed), long items only (8192 rows @128k / @196k), three
+interleaved rounds, ms:
+
+| | @128k | @196k |
+|---|---|---|
+| dcf6ec0 (before the three commits) | 279.07 / 278.63 / 276.53 | 345.20 / 345.78 / 345.32 |
+| cb84767 (with them) | 277.85 / 277.02 / 276.82 | 343.90 / 346.54 / 344.64 |
+| + absorb-launch q copies (f5d928c) | 276.14 / 278.93 / 277.13 | 343.18 / 342.18 / 345.03 |
+
+Per op, dcf6ec0 -> cb84767 at @196k: wfu's time moves from gemm_f32 to
+gemm_bf16 (-2.67 / +2.66 ms), the gate -0.4 ms, the FMHA flat. No commit
+costs the long calls. Two traps behind the noise:
+- Separate loop/p/bench runs lease any free GPU of the host, and whole
+  runs differ by ~3% from GPU to GPU (a run 3% faster in every op). Use
+  loop/p/ab (one lease, A B A B) or WITHGPU_GPUS.
+- flash_kda is placement-sensitive: with the same cubins, q_norm's shape
+  [9216, 1536] vs [tokens, 1536] moves every span_kda call 770 <-> 1180 us
+  at 8192 rows. p-kda traced it to a gpu-scope st.release in the
+  recurrence's store warp and is fixing it. Until then any workspace
+  resize can swing P by ~1%.
+
+## cuBLASLt algorithm pinning on P stage 0 (measure only, 22:31 UTC task)
+
+harness/p_gemm_algos.cu. Every GEMM shape of loop/out/p-stage0.json
+at the bench's rows (10 / 354 / 4096 / 8192 and the expansions' context
+rows), work/p/shapes.py lists them with their calls per item weighted like
+loop/score. Each shape: kern's pick (the cuBLASLt heuristic's first
+answer, 32 MiB workspace; the router's cublasGemmEx for gemm_f32) against
+every candidate of a 32-deep heuristic request (cuBLASLt returned 8 per
+shape). Weights rotate past L2 and the winner is re-timed against the
+pick, interleaved. One GPU, back-to-back, at the power cap.
+
+| rows | GEMM time (ms/item, weighted) | best-case saving (ms/item) |
+|---|---|---|
+| 10 | 0.52 | 0.016 |
+| 354 | 1.40 | 0.115 |
+| 4096 | 1.18 | 0.012 |
+| 8192 | 22.47 | 0.035 |
+| expansions (8.7k-205k rows) | 4.88 | 0.000 |
+| **all** | **30.44** | **0.178 (0.14% of ~125 ms/item)** |
+
+The largest single entries are front at 354 rows (70.5 -> 52.8 us, x3.65
+calls a item: 0.065 ms/item), o_proj at 8192 (621 -> 618 us: 0.017),
+qkvg at 354 (185 -> 181: 0.013), the router (f32, cublasGemmEx; best Lt
+f32 candidate 12.6 -> 10.1 us at 354: 0.009, but kern cannot pin
+cublasGemmEx). At 8192 rows the heuristic's pick is the best or within
+0.5% for every weight. Within cuBLASLt's candidate lists, pinning is worth
+~0.14% of P: not a case for opening the GEMMs. A wider search (every algo
+id x tile x stages x split-K via cublasLtMatmulAlgoGetIds) was not run. The
+harness timings are back-to-back at the power cap; in the stage a GEMM
+after a low-power kernel runs ~15% faster (p-glue's measurement), the
+same for every candidate.
