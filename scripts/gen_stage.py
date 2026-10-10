@@ -178,8 +178,8 @@ MLA_MAIN_SMEM = 232448
 # A short packed chunk's absorbed attention splits a row's KV at most this many ways.
 MLA_SHORT_SPLITS = 16
 # A packed call of at most SPLIT_ROWS rows on the FMHA splits its heaviest sequence's attention in three
-# causal pieces (k3_prefill.cu kern_k3_fmha_lens_varlen); their q rows and the keys two pieces share
-# take SPLIT_EXTRA more rows of q_norm / q_bf16 / o_bf16 and latent_g / kv_exp.
+# causal pieces (k3_prefill.cu kern_k3_fmha_lens_varlen); their q rows take up to 2 SPLIT_ROWS = SPLIT_EXTRA
+# more rows of q_norm / q_bf16 / o_bf16, the keys two pieces share fewer than SPLIT_ROWS more of latent_g / kv_exp.
 SPLIT_ROWS, SPLIT_EXTRA = 512, 1024
 MLA_REDUCE_SMEM = 1024    # 256-split reducer scratch
 
@@ -784,7 +784,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                        "i32", "out buffer<i32>", "out buffer<i32>", "out buffer<i32>", "i32", "i32", "i32"],
             "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_prep_gather",
                                          grid=[{"add": [{"add": [{"mul": [T, 2]}, 1]},
-                                                        {"ceil_div": [{"add": [ctx_rows, SPLIT_EXTRA]}, 28]}]},
+                                                        {"ceil_div": [{"add": [ctx_rows, SPLIT_ROWS]}, 28]}]},
                                                1, 1], block=[512, 1, 1], defines=mla_defs)]},
         }
         ops["mla_gate"] = {
@@ -1497,7 +1497,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                     step(L + "prep", "mla_prep_gather", b("mla_fused_partial"), w("gamma_q_a"), w("gamma_kv_a"),
                          b("slot_mapping"), {"state": kv, "offset": layer_off * 2}, i64(page_stride), b("q_norm"),
                          b("block_table"), i32(max_pages), b("fmha_lens"), i32(pack + 3), {"var": "seqs"},
-                         b("latent_g"), dim({"add": [ctx_rows, SPLIT_EXTRA]}), b("mla_row_table"), b("mla_row_lens"), b("mla_row_bsk"),
+                         b("latent_g"), dim({"add": [ctx_rows, SPLIT_ROWS]}), b("mla_row_table"), b("mla_row_lens"), b("mla_row_bsk"),
                          i32(MLA_SHORT_SPLITS), i32(mla_short), B)
                 else:
                     step(L + "mla_prep", "mla_prep", b("mla_fused_partial"), w("gamma_q_a"), w("gamma_kv_a"),
@@ -1514,7 +1514,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                              i64(page_stride), b("fmha_lens"), b("latent_g"), dim(ctx_rows))
                     # the expansion while the gathered rows are still in L2
                     step(L + "expand", "gemm_bf16_long" if packed and mla_short else "gemm_bf16", b("latent_g"), w("w_aug"),
-                         b("kv_exp"), dim({"add": [ctx_rows, SPLIT_EXTRA]} if packed else ctx_rows), i32(kv_exp_l),
+                         b("kv_exp"), dim({"add": [ctx_rows, SPLIT_ROWS]} if packed else ctx_rows), i32(kv_exp_l),
                          i32(KV_A), i32(kv_exp_l))
                     if packed:
                         q_b()
