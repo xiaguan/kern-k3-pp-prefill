@@ -6,13 +6,14 @@ loop/out/p-l12.json`. Small gains need `work/ab.sh A B OUT` (A, B, A, B in one l
 
 ## Where it stands (main 9850876, all of this run's commits merged)
 
-- Stage 0: 209 launches (17.4/layer), ~125.5 ms/item. A MoE layer: `land_add_attnres_rms_bf16`
+- Stage 0: 206 launches (17.2/layer), ~125 ms/item. A MoE layer: `land_add_attnres_rms_bf16`
   → router* → front* (lat_down | shared gate | up) → `moe_route` (top-k, mxfp8, routing tables,
   situ) → fc1* → fc2* → `moe_finalize_rms` → back* (lat_up | sh_down by K) → next
   `land_add2_attnres_rms`. An MLA layer: wfu* → `mla_prep_gather` → expand* (long) → q_b* →
   absorb (short) → mla_fmha (long) / decode attention (short) → `mla_gate` → o_proj*.
-  Every glue kernel left sits between GEMMs, the prebuilt FMHA or the decode attention; the only
-  removable one is `moe_route_init` (1 a stage: a zeroed workspace; a carry is refused by kern cut).
+  Every glue kernel left sits between GEMMs, the prebuilt FMHA or the decode attention. A stage's
+  setup (the routing state's zeroing, stage 0's FMHA tables) rides in its first launch (b038d30:
+  stage 0 206 launches, 17.2/layer); the stage-end `land_add2` stays (nothing after it in a stage).
 - Cost now is MLA attention and GEMMs: at 8192 rows over 131k mla_fmha is 45.8 ms a layer (68
   TFLOP at ~1.5 PF: at peak), at 354 rows expand 2.6 + FMHA 4.5 ms a layer (192 CTAs, 1.26
   waves, each head's 84 MB of expanded K/V streamed per 256-row Q tile), fc1 1.3 ms a layer
