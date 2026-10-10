@@ -35,6 +35,10 @@ loop/out/p-l12.json`. Small gains need `work/ab.sh A B OUT` (A, B, A, B in one l
   measured crossover is ~250 rows (200 rows −4.2%, 354 rows +9%); 256 would double the decode
   kernel's split workspace (rows × 16 × 256 KB) for shapes the bench does not weigh. The split
   merge in the gate kernel is the DSL reduction's own arithmetic (bit-identical logits).
+  Option measured, not committed (bench-neutral): threshold 256 with 8 splits (same 512 MB
+  workspace): A/B 4 rows over 131k +3.7% (fewer splits), 10 rows -0.06%, 200 rows -4.8%; the
+  bench has no shape between 10 and 354, so it is the traffic's call (are there chunks under 10
+  rows, are there many of 129..256?).
 - Proposal not done (a GEMM epilogue): sh_down accumulating onto lat_up's output is moot now that
   the back GEMM sums them by K.
 
