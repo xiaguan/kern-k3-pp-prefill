@@ -3,6 +3,29 @@
 Check: `loop/d/check loop/out/d-l4-tp8.json` (~20 s on a free pool). Bench: `loop/d/bench loop/out/d-l16-tp8.json`
 (~20 s). main 2026-10-10 start: 24.7 launches/layer, 4.562 ms/step.
 
+## Status (2026-10-10 22:20 UTC)
+
+D 16 layers: 24.7 -> 12.9 launches/layer, 4.562 -> 3.58 ms/step weighted (all runs' work; main 64b7cf7+).
+Real 93-layer step at 128k: 23.88 -> 19.54 ms (24 rows), 30.87 -> 26.42 ms (48 rows).
+
+My half is at its launch floor: per layer `ar_attnres_rms`, `moe_front`, `ar_finalize_rms`, `land_add2_attnres_rms`
+between cuBLAS / TRT-LLM GEMMs, which bound every pair. Time: the all-reduces are fabric-bound (cross-member
+stamps below), ar_finalize additionally waits on the member with the most active experts (MoE weight
+bandwidth, fixed EP layout), the residual epilogues sit at two dependent block reductions, moe_front's
+chain (logit load -> sigmoid -> picks -> last-block tables) at ~6.5 us. Every further trial is in the log
+and findings below with its measurement.
+
+## Proposals that need the runtime
+
+- **A head without the logits gather in serving.** Member 0's copy of every member's logit slice exists
+  only because the caller (k3_step) reads member 0's full logits; it costs 9-50 us a step (member 0's
+  NVLink ingress, 8-48 rows). A program variant or a readback hint that says "logits not read" drops it.
+- **Concurrent launch groups.** sh_down (cuBLAS) and the MoE batched GEMMs are independent and both
+  memory-bound; on the member with the most active experts they serialize. A manifest construct for two
+  streams joined before the all-reduce would let the shared expert hide under the routed one.
+- **A startup barrier after the once-programs** in k3_step / kern-serve. The first-call handshake makes the
+  Lamport kernels safe without it, but a slow member's setup (6 s seen) still lands in the first step.
+
 ## Per-layer MLP half now (DCP decode)
 
 `ar_attnres_rms` (o_proj sum + landing + mix + norm) → front* → `moe_front` (top-k, latent mxfp8, shared situ,
