@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# loop/p/check CANDIDATE OUT [BASE]: kern test of a 12-layer P manifest
+# (loop/gen's p-l12.json) against BASE (default: main's, data/base/p-l12.json)
+# on one leased GPU: every span replayed from A's inputs, end-to-end logits,
+# the noise floor. A prefill of 6000 tokens in 2048-token chunks crosses
+# chunks and pages. Last line is the verdict: PASS / FAIL / INCONCLUSIVE.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../env.sh"
+cand=$(realpath "$1") out=$(realpath -m "$2") base=$(realpath "${3:-$K3_LOOP_DATA/base/p-l12.json}")
+mkdir -p "$(dirname "$out")"
+"$LOOP_DIR/withgpu" -n 1 "$K3_KERN_BIN" test --reference "$base" --manifest "$cand" --kernels "$REPO/build" \
+  --weights "$K3_WEIGHTS" --tokenizer "$K3_TOKENIZER" --gpu 0 --capacity 16384 --prefill 6000 --chunk 2048 \
+  --out "$out.json" > "$out.log" 2>&1
+rc=$?
+grep -E "^(local|logits|noise|perf|PASS|FAIL|INCONCLUSIVE)" "$out.log" | cut -c1-400
+exit $rc

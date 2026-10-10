@@ -5,3 +5,5 @@ __pycache__/
 !decode/*/prebuilt/*.cubin
 /harness/out/
 /step/target/
+/loop/local.env
+/loop/out/
