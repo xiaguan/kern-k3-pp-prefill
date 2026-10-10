@@ -195,3 +195,7 @@ defines = { EXPERTS = 896, LDS = 6016, SH = 768, STRIDE = 8 }
 sha256 = "1e3505d620e6a097d1a0c097bb0895fd7b5b36e7c69380d1a0457541ebd2016a"
 source = "source/k3_ar_fused.cu"
 defines = { NRANKS = 8 }
+
+[kernels."k3_moe_route"]
+sha256 = "37148f9152e589acfdd68c82445f4224f3fd3b445d96ecba1bd466dcba5c7ea4"
+source = "source/k3_moe_route.cu"

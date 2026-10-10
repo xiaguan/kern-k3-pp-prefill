@@ -353,6 +353,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     # chunk, a lone rank's (EP1, a pipeline stage) over all its experts, a
     # DCP rank's over its every tp-th expert for every row of the batch.
     bmm = coll or (chunk and ranks == 1) or dcp
+    # A lone rank's chunk routes every expert: the top-k, quant and tables are one call (k3_moe_route.cu).
+    lone = bmm and not coll and not dcp
     assert bmm or experts == 224, "MegaMoE is built for the pruned checkpoint's 224 experts"
     span_max = 0 if chunk else min(span_max, tp * seqs_max)
     # The expansion runs over the sequence's length after the chunk (the `ctx` var the
@@ -1319,6 +1321,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                 step(L + "res_in", "attnres_rms" if nb_in > 0 else "attnres_rms_first", b("hidden"), b("blocks"),
                      w("sw_attn") if nb_in > 0 else w("sw_mlp"),
                      w("gamma_in"), b("normed"), i32(nb_in), i32(int(snapshot)), RB)
+            # A stage's MoE routing state, zeroed where a stage starts (lone: k3_moe_route.cu).
+            if lone and (i == first or snapshot):
+                prog.append(bp["route_init_step"](label=L))
             # attention over every row of the chunk
             normed_all = all_rows(L + "gather_normed", b("normed"), b("normed_all"))
             if is_mla(i):
@@ -1437,8 +1442,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                                                    "route_map", "exp2perm")), {"rank": "tp"}, OB)
                 else:
                     gemm(L + "router", b("normed"), w("w_router"), b("router_partial"), experts, H, m=OB)
-                    step(L + "topk", "router_topk", b("router_partial"), w("bias"), w("rs"), b("topk_idx"),
-                         b("topk_weight"), OB)
+                    if not lone:
+                        step(L + "topk", "router_topk", b("router_partial"), w("bias"), w("rs"), b("topk_idx"),
+                             b("topk_weight"), OB)
                     if chunk:
                         proj(L + "lat_down", b("normed"), w("w_lat_down"), b("latent"), LATENT, H, m=OB)
                     else:
@@ -1483,12 +1489,15 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                     proj(L + "lat_up", b("routed_latent_norm"), w("w_lat_up"), b("routed_partial"), H, LATENT, m=RB)
                     closing = (L + "hidden", b("routed_partial"), b(moe, shared_at), 1)
                 elif bmm:
-                    step(L + "moe_quant", "moe_quant", b("latent"), b("latent_q"), b("latent_sf"), OB, i32(LATENT))
-                    # the combine lands its row and norms it (lat_norm) in one pass
+                    # the top-k, the latent's mxfp8 and the routing tables in one call; the combine lands its
+                    # row and norms it (lat_norm) in one pass
+                    prog.append(bp["route_step"](b("router_partial"), w("bias"), w("rs"), b("latent"), LATENT,
+                                                 b("latent_q"), b("latent_sf"), b("topk_idx"), b("topk_weight"),
+                                                 label=L))
                     prog.extend(bp["steps"](b("latent_q"), b("latent_sf"), b("topk_idx"), b("topk_weight"),
                                             w("moe.w13s"), w("moe.w13_sfs"), w("moe.w2s"), w("moe.w2_sfs"),
                                             w("moe.alpha"), w("moe.beta"), b("routed_latent_norm"),
-                                            gamma=w("gamma_lat"), label=L))
+                                            gamma=w("gamma_lat"), label=L, routed=True))
                 else:
                     prog.extend(gen_k3_moe.mega_pieces(ranks, own_max, wprefix=f"layers.{i}.", tokens=OG)["steps"](
                         b("latent"), b("topk_idx"), b("topk_weight"), b("routed_latent"), label=L))
