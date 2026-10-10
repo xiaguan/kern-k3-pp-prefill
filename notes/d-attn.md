@@ -96,6 +96,15 @@
   blocks are resident before a GEMM block takes an SM. 4.120 → 4.101.
   (absorb is followed by the DSL kernel, which has no PDL: no trigger.)
 
+- **Embedding / argmax (dropped from this branch: d-mlp owns the head)**:
+  I had vectorized the embedding gather (P kern test 37.1 → 13.4 us a
+  call) and made the decode argmax one launch (per-row atomicMax of the
+  same 64-bit keys into a zeroed carry, last block writes the token;
+  16 rows: 5.8 us vs partial 7.4 + final 2.6; next tokens identical to
+  main over 640 steps); together D 4.101 → 4.080. d-mlp landed its own
+  versions first; numbers sent to d-mlp. Kept in git history only
+  (2e4d9fc, 9a9a427 on the old branch).
+
 ## Open: intermittent check failure (orchestrator, 20:00 UTC)
 
 main + my 1a53ac8 56d8cf6 05d3ad6 (exchange loads-in-flight, absorb, clock64
