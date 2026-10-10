@@ -17,9 +17,9 @@
 // then the last block to finish (`done`, a zeroed carry it re-zeroes) builds
 // the routing tables of this rank's experts `first + j * STRIDE` (j < LOCAL)
 // over all T rows: what FlashInfer's routing writes for the batched GEMMs'
-// TILE-row CTAs, with every expert's rows in expanded-id order (FlashInfer's
-// order within an expert is its atomics'; the GEMMs' rows do not depend on
-// it), padding rows routing token 0, exp2perm -1 for another rank's expert.
+// TILE-row CTAs, every expert's rows in the order of shared-memory atomics
+// (as FlashInfer's are; the GEMMs' rows do not depend on it), padding rows
+// routing token 0, exp2perm -1 for another rank's expert.
 //
 //   nvcc -cubin -arch=sm_103a -DEXPERTS=896 -DLDS=6016 -DSH=768 -DSTRIDE=8 k3_moe_front.cu
 #include <cuda_bf16.h>
@@ -196,36 +196,25 @@ __device__ __forceinline__ void quant8(const float* __restrict__ x, uint8_t* __r
   reinterpret_cast<uint2*>(q)[u] = *reinterpret_cast<const uint2*>(o);
 }
 
-// The last block's routing tables over T rows' ids, thread i one expanded id.
+// The last block's routing tables over T rows' ids, thread i one expanded id: its slot within its
+// expert claimed by a shared-memory atomic (an expert's rows in arrival order, as FlashInfer's atomics
+// leave them; the GEMMs compute every row on its own and the combine gathers by exp2perm).
 __device__ __forceinline__ void route(const int* __restrict__ idx, int first, int T, int* __restrict__ cta_batch,
                                       int* __restrict__ cta_limit, int* __restrict__ num_non_exiting,
                                       int* __restrict__ total_padded, int* __restrict__ route_map,
                                       int* __restrict__ exp2perm) {
-  __shared__ int hist[WARPS][LOCAL];
   __shared__ int count[LOCAL], off[LOCAL + 1];
-  const int i = threadIdx.x, warp = i / 32, lane = i % 32;
-  const unsigned below = (1u << lane) - 1;
-  for (int k = i; k < WARPS * LOCAL; k += THREADS) (&hist[0][0])[k] = 0;
-  __syncthreads();
+  const int i = threadIdx.x, lane = i % 32;
+  if (i < LOCAL) count[i] = 0;
   int j = -1;
   if (i < T * TOPK) {
     const int d = __ldcg(idx + i) - first;
     if (d >= 0 && d % STRIDE == 0) j = d / STRIDE;
   }
-  const unsigned peers = __match_any_sync(0xffffffffu, j);
-  if (j >= 0 && (peers & below) == 0) hist[warp][j] = __popc(peers);
   __syncthreads();
-  if (i < LOCAL) {
-    int run = 0;
-    for (int w = 0; w < (T * TOPK + 31) / 32; ++w) {
-      const int c = hist[w][i];
-      hist[w][i] = run;
-      run += c;
-    }
-    count[i] = run;
-  }
+  const int slot = j >= 0 ? atomicAdd_block(count + j, 1) : 0;
   __syncthreads();
-  if (warp == 0) {  // off = exclusive scan of the experts' CTA counts
+  if (i < 32) {  // off = exclusive scan of the experts' CTA counts
     constexpr int EPL = (LOCAL + 31) / 32;
     int c[EPL], sum = 0;
 #pragma unroll
@@ -264,7 +253,7 @@ __device__ __forceinline__ void route(const int* __restrict__ idx, int first, in
   if (i < T * TOPK) {
     int row = -1;
     if (j >= 0) {
-      row = off[j] * TILE + hist[warp][j] + __popc(peers & below);
+      row = off[j] * TILE + slot;
       route_map[row] = i / TOPK;
     }
     exp2perm[i] = row;
@@ -311,11 +300,11 @@ extern "C" __global__ void __launch_bounds__(THREADS, 1) kern_k3_moe_front(
     reinterpret_cast<uint2*>(act + (long long)b * SH)[k] = *reinterpret_cast<const uint2*>(o);
   }
 
-  if (warp == 0) __threadfence();  // the ids, the one output the last block reads
   __syncthreads();
-  if (t == 0) {
-    s_last = atomicAdd(done, 1) == T - 1;
-    __threadfence();
+  if (t == 0) {  // releases the block's ids (ordered before by the barrier), acquires the others'
+    int n;
+    asm volatile("atom.acq_rel.gpu.global.add.s32 %0, [%1], 1;" : "=r"(n) : "l"(done) : "memory");
+    s_last = n == T - 1;
   }
   __syncthreads();
   if (!s_last) return;
