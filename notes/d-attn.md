@@ -226,6 +226,14 @@ deadline as well (a member's data never came: fail loudly, not garbage).
   __launch_bounds__(128, 4): with the L2 state prefetch 32 B of spills and
   slower everywhere; L1-only prefetch 16 rows 7.6 → 7.9, 48 rows 16.2 → 16.8.
 
+- **kda_core launched early (pdl) to pull its weights into L2 before
+  griddepcontrol.wait** (they are cold in the real step: one GPU says 7.6
+  us at 16 rows, the graph 10.3; work/kda_pdl_prefetch.diff). The prefetch
+  had to live in a `__noinline__` helper to keep 128 regs (inline it
+  pushed ptxas to 152: a trick worth remembering). Bit-identical, but D
+  4.025 (main ad97493, same pool, same hour) → 4.050: the early blocks
+  waiting on the SMs slow the GEMM ahead of them. Dropped.
+
 ## Where the half stands (16 rows @128k, nsys, after the commits above)
 
 Per 16-layer step: DSL split kernel 254 us (prebuilt, ~4.7 TB/s, the only
