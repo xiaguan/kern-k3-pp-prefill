@@ -33,4 +33,4 @@ gen --layers 4 --tp 1 --ranks 1 $D > "$out/d-l4-tp1.json"
 for f in p-l12 d-l16-tp8 d-l4-tp8 d-l4-tp1; do
   "$K3_KERN_BIN" verify "$out/$f.json" >/dev/null 2>&1 || { "$K3_KERN_BIN" verify "$out/$f.json"; exit 1; }
 done
-"$LOOP_DIR/count" "$out"/*.json
+"$LOOP_DIR/count" "$out"/{p-stage1,p-l12,d-l16-tp8,d-l4-tp8,d-l4-tp1}.json
