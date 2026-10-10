@@ -102,4 +102,16 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
   member's active experts: ar_finalize waits ~20 us median on the slowest member), other GEMMs ~55 (front
   incl. cuBLAS split-K reduce, qkvg, o_proj, sh_down, lat_up), kda_core 11 (d-attn), my four kernels ~38.
   MLA layers add the DSL attention (96 us at 24 rows / 128k, ~4.7 TB/s, prebuilt) and the exchange.
+- **Cross-member stamps of the attention all-reduce** (work/dbg/arf_t*.cu: block 0 and 5 of every member
+  printf %globaltimer at entry / push issued / poll done for 4 calls; members of one host share the
+  clock), 24 rows: members enter within 0-2 us; issuing the pushes takes ~4.9 us (blocks 0-20 each 1024
+  vectors x 8 peers); polls complete ~10.5 us after the first entry, ~4 us after the last member's pushes
+  were issued. Chunked pushes (every block a contiguous share, staged in smem): issue 3.6 us, last issue
+  1.3 us earlier, polls only 0.3 us earlier. Delivery is fabric-bound (2.4 MB a member at 24 rows lands at
+  an effective ~270 GB/s, plus a ~3 us hop seen at 4 rows), which also explains why the two-shot (half
+  the bytes, two hops) did not pay. The all-reduce line is closed.
+- **Real model, 93 layers, 128k** (work/d93bench.sh; 2 min weight load): start 3ad4ec9 23.88 / 30.87 ms
+  a step at 24 / 48 rows, this branch 19.54 / 26.42 (-18% / -14%; every run's work). nsys at 24 rows:
+  ar_finalize median 27 us (MoE skew), ar_attnres 12.9, kda_core 10.9, moe_front 7.3, K1d 6.9 (snapshot
+  counts up to 8: +2.3 us over the bench's nb 1-2), dcp_exchange 13.7.
 
