@@ -574,13 +574,41 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_finalize_rm
 // ---------------------------------------------------------------- embedding + K1a of the first layer
 // hidden = embed[ids[b]] (written, and snapshot 0 of blocks), normed = rms(hidden, gamma): the
 // gather and the first layer's attnres_rms with no snapshot to mix (nb = 0, the mix is the row).
-// kern_k3_embed_rms_plan also writes row b's MLA split count (kern's k3_mla_split_plan.cu,
-// whose integer plan needs only every row's tile count: each block sums them itself).
+// kern_k3_embed_rms_plan also writes row b's MLA split count: kern's k3_mla_split_plan.cu sizes
+// splits to fill one wave of clusters; here the batch fills the 1 to MLA_WAVES waves of the least
+// modelled time (one wave of 48 rows held one split a row on 96 of 152 SMs). The plan needs only
+// every row's tile count: each block works it out itself.
 //   kern_k3_embed_rms(const i64* ids, const bf16* table, bf16* hidden, bf16* blocks,
 //       const bf16* gamma, bf16* normed, int B)
 //   kern_k3_embed_rms_plan(..., const i32* seq_lens, i32* block_split_kvs, int split_max, int B)
 //   grid (B, 1, 1)   block (1024, 1, 1)
 #define MLA_TILE 128
+// A wave of n 2-CTA clusters runs a tile in ~1.46 us a cluster up to ~53 clusters; past that the GPU runs ~36
+// tiles a us (96 heads, bf16 MMA padded to 128 rows: the tensor pipes and HBM both near their limit); a
+// split also writes and the exchange reads back its f32 partial, ~2 tiles of traffic. So a wave of n
+// clusters at `longest` tiles a split costs (longest + 2) * max(53, n). A batch fills up to MLA_WAVES.
+#define MLA_SATURATE 53
+#define MLA_SPLIT_TILES 2
+#define MLA_WAVES 3
+
+__device__ __forceinline__ long long warp_sum_ll(long long v) {
+#pragma unroll
+  for (int o = 16; o; o >>= 1) v += __shfl_xor_sync(0xffffffffu, v, o);
+  return v;
+}
+__device__ __forceinline__ long long warp_max_ll(long long v) {
+#pragma unroll
+  for (int o = 16; o; o >>= 1) v = max(v, __shfl_xor_sync(0xffffffffu, v, o));
+  return v;
+}
+// kern's k3_mla_split_plan.cu: `per` tiles a split over `budget` clusters, a row's splits from it
+__device__ __forceinline__ long long split_per(long long total, long long budget) {
+  budget = max(budget, 1ll);
+  return max((total + budget - 1) / budget, 1ll);
+}
+__device__ __forceinline__ long long row_splits(long long tiles, long long per, int split_max) {
+  return min(max((tiles + per - 1) / per, 1ll), (long long)split_max);
+}
 
 __device__ __forceinline__ void embed_rms(const long long* __restrict__ ids, const bf16_t* __restrict__ table,
                                           bf16_t* __restrict__ hidden, bf16_t* __restrict__ blocks,
@@ -613,23 +641,30 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_embed_rms_plan
   asm volatile("griddepcontrol.launch_dependents;");
   const int b = blockIdx.x, t = threadIdx.x;
   if (b >= B) return;
-  if (t < 32) {  // the plan of row b: every row's 128-token tiles, a cluster wave's budget
+  if (t < 32) {  // the plan of row b
     long long total = 0;
     for (int q = t; q < B; q += 32) total += (seq_lens[q] + MLA_TILE - 1) / MLA_TILE;
-#pragma unroll
-    for (int o = 16; o; o >>= 1) total += __shfl_xor_sync(0xffffffffu, total, o);
-    if (t == 0) {
-      unsigned nsm;
-      asm("mov.u32 %0, %%nsmid;" : "=r"(nsm));
-      long long budget = (long long)(nsm / 2) - B;
-      if (budget < 1) budget = 1;
-      long long per = (total + budget - 1) / budget;
-      if (per < 1) per = 1;
-      long long sp = ((seq_lens[b] + MLA_TILE - 1) / MLA_TILE + per - 1) / per;
-      if (sp < 1) sp = 1;
-      if (sp > split_max) sp = split_max;
-      block_split_kvs[b] = (int)sp;
+    total = warp_sum_ll(total);
+    unsigned nsm;
+    asm("mov.u32 %0, %%nsmid;" : "=r"(nsm));
+    const long long clusters = nsm / 2;
+    // `per` tiles a split such that the batch fills W waves of clusters, the W of the least modelled time
+    long long best = 0, best_cost = 0;
+    for (int w = 1; w <= MLA_WAVES; ++w) {
+      const long long per = split_per(total, w * clusters - B);
+      long long splits = 0, longest = 0;
+      for (int q = t; q < B; q += 32) {
+        const long long tiles = (seq_lens[q] + MLA_TILE - 1) / MLA_TILE, sp = row_splits(tiles, per, split_max);
+        splits += sp;
+        longest = max(longest, (tiles + sp - 1) / sp);
+      }
+      splits = warp_sum_ll(splits);
+      longest = warp_max_ll(longest);
+      long long cost = 0;
+      for (long long n = splits; n > 0; n -= clusters) cost += (longest + MLA_SPLIT_TILES) * max((long long)MLA_SATURATE, min(n, clusters));
+      if (w == 1 || cost < best_cost) best = per, best_cost = cost;
     }
+    if (t == 0) block_split_kvs[b] = (int)row_splits((seq_lens[b] + MLA_TILE - 1) / MLA_TILE, best, split_max);
   }
   embed_rms(ids, table, hidden, blocks, gamma, normed, b, t);
 }
