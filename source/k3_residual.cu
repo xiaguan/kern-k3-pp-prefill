@@ -18,6 +18,11 @@
 //     extern "C" __global__ void kern_k3_land_add2(
 //         const f32* p1, const f32* p2, const bf16* prefix2, bf16* hidden, int two, int B);
 //
+//   [K1d] K1c on bf16 partials, then K1a on the hidden it made (below)
+//     extern "C" __global__ void kern_k3_land_add2_attnres_rms(
+//         const bf16* p1, const bf16* p2, const bf16* prefix2, bf16* hidden, int two,
+//         bf16* blocks, const f32* sw, const bf16* gamma, bf16* normed, int nb, int snapshot, int B);
+//
 // Launch geometry (all three entries -- this is what the manifest should copy):
 //     grid  = (B, 1, 1)                     one row per block, B is a runtime variable
 //     block = (1024, 1, 1)
@@ -388,4 +393,51 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_land_add2(
         o.w[j] = f2bf(make_float2(x, y));
     }
     stv(hidden + off, o);
+}
+
+// ---------------------------------------------------------------- K1d
+// K1c on bf16 partials then K1a: hidden = bf16(prefix2 + p1 + (two ? p2 : 0)) written
+// (and snapshotted into blocks[b, nb] when `snapshot`), then normed = rms(attnres(blocks,
+// hidden, nb), gamma) from registers: a layer's closing add fused into the next layer's mix.
+// k3_prefill_glue.cu's kern_k3g_land_add2_attnres_rms at a row per 1024 threads.
+extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_land_add2_attnres_rms(
+    const bf16_t* __restrict__ p1,       // [B, H]
+    const bf16_t* __restrict__ p2,       // [B, H]  read only when two != 0
+    const bf16_t* __restrict__ prefix2,  // [B, H]
+    bf16_t*       __restrict__ hidden,   // [B, H]
+    int two,
+    bf16_t*       __restrict__ blocks,   // [B, NB_MAX, H]
+    const float*  __restrict__ sw,       // [H]
+    const bf16_t* __restrict__ gamma,    // [H]
+    bf16_t*       __restrict__ normed,   // [B, H]
+    int nb, int snapshot, int B)
+{
+    const int b = blockIdx.x;
+    if (b >= B) return;
+    const int t = threadIdx.x;
+    const bool act = (t < KVEC);
+
+    V8 pv;
+    pv.w[0] = 0u; pv.w[1] = 0u; pv.w[2] = 0u; pv.w[3] = 0u;
+    if (act) {
+        const size_t off = (size_t)b * KH + t * 8;
+        const V8 a = ldv(p1 + off), pr = ldv(prefix2 + off);
+        V8 c;
+        if (two) c = ldv(p2 + off);
+#pragma unroll
+        for (int j = 0; j < 4; ++j) {
+            const float2 rf = bf2f(pr.w[j]), l1 = bf2f(a.w[j]);
+            float x = rf.x + l1.x, y = rf.y + l1.y;
+            if (two) {
+                const float2 l2 = bf2f(c.w[j]);
+                x += l2.x;  y += l2.y;
+            }
+            pv.w[j] = f2bf(make_float2(x, y));
+        }
+        stv(hidden + off, pv);
+        if (snapshot && nb < KNB_MAX) stv(blocks + ((size_t)b * KNB_MAX + nb) * KH + t * 8, pv);
+    }
+
+    attnres_rms_row(blocks + (size_t)b * KNB_MAX * KH, pv, sw, gamma,
+                    normed + (size_t)b * KH, nb, t);
 }

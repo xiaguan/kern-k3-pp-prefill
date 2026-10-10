@@ -524,6 +524,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                        "in buffer<bf16>", "in buffer<f32>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32"],
             "impl": {"launches": [residual(None, "kern_k3g_land_add2_attnres_rms")]},
         }} if chunk else {}),
+        # A DCP step's closing add fused into the next layer's mix, a snapshot layer's too.
+        **({"land_add2_attnres_rms_snap": {
+            "params": ["in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32",
+                       "inout buffer<bf16>", "in buffer<f32>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32",
+                       "i32"],
+            "impl": {"launches": [launch("k3_residual", "kern_k3_land_add2_attnres_rms", grid=[RV, 1, 1],
+                                         block=[1024, 1, 1])]},
+        }} if dcp else {}),
         "land_add2": {
             "params": [f"in buffer<{part}>", f"in buffer<{part}>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32"],
             "impl": {"launches": [launch("k3_prefill_glue", "kern_k3g_land_add2", grid=[RV, 4, 1], block=[224, 1, 1],
@@ -1256,11 +1264,16 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                 step(label, "land_add2", p1, p2, b("prefix2"), b("hidden"), i32(two), RB)
             closing = None
 
-        def mix_in(label, sw, gamma, nb):
+        def mix_in(label, sw, gamma, nb, snapshot=0):
+            """The closing add fused into the next mix; a DCP step's takes a snapshot layer's too."""
             nonlocal closing
             _, p1, p2, two = closing
-            step(label, "land_add2_attnres_rms", p1, p2, b("prefix2"), b("hidden"), i32(two), b("blocks"), sw, gamma,
-                 b("normed"), i32(nb), RB)
+            if dcp:
+                step(label, "land_add2_attnres_rms_snap", p1, p2, b("prefix2"), b("hidden"), i32(two), b("blocks"), sw,
+                     gamma, b("normed"), i32(nb), i32(snapshot), RB)
+            else:
+                step(label, "land_add2_attnres_rms", p1, p2, b("prefix2"), b("hidden"), i32(two), b("blocks"), sw,
+                     gamma, b("normed"), i32(nb), RB)
             closing = None
 
         for i in layers:
@@ -1273,8 +1286,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
             nb_mlp = blocks
 
             # residual mix in + snapshot + norm → normed
-            if closing and not snapshot:
-                mix_in(L + "res_in", w("sw_attn"), w("gamma_in"), nb_in)
+            if closing and (dcp or not snapshot):
+                mix_in(L + "res_in", w("sw_attn"), w("gamma_in"), nb_in, int(snapshot))
             else:
                 close()
                 step(L + "res_in", "attnres_rms" if nb_in > 0 else "attnres_rms_first", b("hidden"), b("blocks"),
@@ -1452,7 +1465,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                     shared = (reduced(L + "reduce_mlp", b("shared_partial2"), b("mlp_all")) if tray else
                               b("shared_partial2"))
                     closing = (L + "hidden", b("routed_partial"), shared, 1)
-            if not chunk:
+            if not chunk and not dcp:
                 close()
 
         assert blocks == blocks_total
