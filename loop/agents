@@ -32,8 +32,12 @@ container_up() {
     -v "$K3_SHARED:$K3_SHARED:ro" -v "$root:$root" -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro \
     -v "$HOME/.claude/.credentials.json:$home/.claude/.credentials.json" \
     "$image" sleep infinity >/dev/null
-  [[ -d $home/.humanize/flowverses/official ]] || docker exec $container $hmz_py -c \
-    'from hmz.runtime.flowing import verses; verses.fetch("official")' >/dev/null
+  docker exec -u root $container bash -c 'command -v ssh >/dev/null || { apt-get update -qq && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-client; } >/dev/null 2>&1'
+  # ralph_loop left the official flowverse after 6ae2d72; the image's hmz is pinned to match that.
+  [[ -d $home/.humanize/flowverses/official ]] || {
+    git clone -q https://github.com/humanfia/flowverse.git "$home/.humanize/flowverses/official" 2>/dev/null &&
+      git -C "$home/.humanize/flowverses/official" checkout -q 6ae2d72; }
 }
 
 window() {
