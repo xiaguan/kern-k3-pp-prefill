@@ -549,3 +549,27 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_finalize_rm
   }
   lamport_close(l, state, err, fail);
 }
+
+// ---------------------------------------------------------------- embedding + K1a of the first layer
+// hidden = embed[ids[b]] (written, and snapshot 0 of blocks), normed = rms(hidden, gamma): the
+// gather and the first layer's attnres_rms with no snapshot to mix (nb = 0, the mix is the row).
+//   kern_k3_embed_rms(const i64* ids, const bf16* table, bf16* hidden, bf16* blocks,
+//       const bf16* gamma, bf16* normed, int B)
+//   grid (B, 1, 1)   block (1024, 1, 1)
+extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_embed_rms(
+    const long long* __restrict__ ids, const bf16_t* __restrict__ table, bf16_t* __restrict__ hidden,
+    bf16_t* __restrict__ blocks, const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int B) {
+  __shared__ RowSmem s;
+  const int b = blockIdx.x, t = threadIdx.x;
+  asm volatile("griddepcontrol.launch_dependents;");
+  if (b >= B) return;
+  const RowRegs r = row_prefetch(blocks, nullptr, gamma, nullptr, 0, t);
+  V8 pv;
+  pv.w[0] = 0u, pv.w[1] = 0u, pv.w[2] = 0u, pv.w[3] = 0u;
+  if (t < KVEC) {
+    pv = ldv(table + ids[b] * KH + t * 8);
+    stv(hidden + (size_t)b * KH + t * 8, pv);
+    stv(blocks + (size_t)b * KNB_MAX * KH + t * 8, pv);
+  }
+  row_finish(nullptr, r, pv, normed + (size_t)b * KH, 0, t, s);
+}

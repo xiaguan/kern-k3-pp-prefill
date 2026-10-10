@@ -26,6 +26,7 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 | my kernels execute `griddepcontrol.launch_dependents` at their start: the next cuBLAS GEMM (launched with programmatic serialization) gets its CTAs on SMs while the kernel finishes | 13.1 | 4.061 | bit-identical |
 | embedding copies 16-byte vectors, 4 in flight a thread (was one bf16 a thread an iteration: 15 us for 8 rows) | 13.1 | 4.050 | bit-identical (D and P check) |
 | head argmax in one launch (`kern_k3_argmax_f32_fused`: 16 busy 256-thread blocks a row, the row's last block takes the max) | 13.1 | 4.041 | bit-identical |
+| embedding gather + layer 0's `attnres_rms_first` → `kern_k3_embed_rms` (nb = 0: snapshot + rms of the gathered row) | 13.0 | 4.040 | bit-identical |
 
 ## Findings
 
