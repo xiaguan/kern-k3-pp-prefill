@@ -410,6 +410,9 @@ __device__ __forceinline__ void k12_gate(int e, int nseq, const long long* cu_se
       for (int c = c0; c < min(c0 + 4, ntiles); ++c) {
         const int r = 16 * c + i;
         const unsigned char* row = ro + buf * 4096 + ((c - c0) * 2 + half) * 256;
+        // staged: nothing reads the ungated row again, so its L2 lines go without a write-back
+        if (r < len && (k & 7) == 0)
+          asm volatile("discard.global.L2 [%0], 128;" ::"l"(raw + (bos + r) * K12_INNER + h * 128 + 8 * k) : "memory");
         float y[8];
 #pragma unroll
         for (int q = 0; q < 4; ++q) {
