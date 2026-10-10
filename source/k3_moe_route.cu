@@ -98,6 +98,12 @@ __device__ __forceinline__ float sigmoid(float x) { return 1.0f / (1.0f + expf(-
 // are the candidates (16 or more; past CAND, the original 16 rounds), ranked by
 // key then expert into their places.
 #define CAND 64
+#ifndef QBATCH
+#define QBATCH 8  // quant pieces a warp loads at once
+#endif
+#ifndef SBATCH
+#define SBATCH 4  // situ pieces a warp loads at once
+#endif
 __device__ __forceinline__ void topk_row(const float* __restrict__ row, const float* __restrict__ bias, int lane,
                                          u32* __restrict__ ck, int* __restrict__ ce, int& pick_e, float& pick_w) {
   u32 o[TK_PER];
@@ -220,9 +226,7 @@ __device__ __forceinline__ float situ(float g, float u, bool fast) {
   return (a * s) * c;
 }
 
-__device__ __forceinline__ void situ8(const bf16_t* __restrict__ gate, const bf16_t* __restrict__ up,
-                                      bf16_t* __restrict__ act) {
-  const uint4 g = *reinterpret_cast<const uint4*>(gate), u = *reinterpret_cast<const uint4*>(up);
+__device__ __forceinline__ void situ8(const uint4 g, const uint4 u, bf16_t* __restrict__ act) {
   const __nv_bfloat162* gp = reinterpret_cast<const __nv_bfloat162*>(&g);
   const __nv_bfloat162* upp = reinterpret_cast<const __nv_bfloat162*>(&u);
   uint4 o;
@@ -250,9 +254,7 @@ __device__ __forceinline__ void situ8(const bf16_t* __restrict__ gate, const bf1
 }
 
 // kern_k3_moe_quant on 8 elements, four lanes a 32-element group.
-__device__ __forceinline__ void quant8(const bf16_t* __restrict__ x, uint8_t* __restrict__ q, uint8_t* __restrict__ sf,
-                                       int lane) {
-  const uint4 u = *reinterpret_cast<const uint4*>(x);
+__device__ __forceinline__ void quant8(const uint4 u, uint8_t* __restrict__ q, uint8_t* __restrict__ sf, int lane) {
   const __nv_bfloat162* p = reinterpret_cast<const __nv_bfloat162*>(&u);
   float2 v[4];
   float amax = 0.f;
@@ -347,17 +349,41 @@ extern "C" __global__ void __launch_bounds__(THREADS, 2) kern_k3g_moe_route(
   // pieces to the warps that had no top-k row (on a short chunk, the top-k and these overlap)
   const int nq = B * (LATENT / 256), ns = B * (SHARED / 256);
   const int i0 = (r0 + rstride - min(B, rstride)) % rstride;
-#pragma unroll 4
-  for (int i = i0; i < nq; i += rstride) {
-    const int b = i / (LATENT / 256), c = i % (LATENT / 256) * 256 + lane * 8;
-    quant8(x + (long long)b * ldx + c, q + (long long)b * LATENT + c, sf + (long long)b * (LATENT / 32) + c / 32,
-           lane);
+  // a batch of pieces' loads in flight before any of the warp-wide votes and shuffles that would hold
+  // the next piece's loads back
+  for (int i = i0; i < nq; i += QBATCH * rstride) {
+    uint4 u[QBATCH];
+#pragma unroll
+    for (int k = 0; k < QBATCH; ++k) {
+      const int ik = min(i + k * rstride, nq - 1);
+      const int b = ik / (LATENT / 256), c = ik % (LATENT / 256) * 256 + lane * 8;
+      u[k] = *reinterpret_cast<const uint4*>(x + (long long)b * ldx + c);
+    }
+#pragma unroll
+    for (int k = 0; k < QBATCH; ++k) {
+      const int ik = i + k * rstride;
+      if (ik >= nq) break;
+      const int b = ik / (LATENT / 256), c = ik % (LATENT / 256) * 256 + lane * 8;
+      quant8(u[k], q + (long long)b * LATENT + c, sf + (long long)b * (LATENT / 32) + c / 32, lane);
+    }
   }
-#pragma unroll 4
-  for (int i = (i0 + rstride - nq % rstride) % rstride; i < ns; i += rstride) {
-    const int b = i / (SHARED / 256), c = i % (SHARED / 256) * 256 + lane * 8;
-    const bf16_t* gate = gu + (long long)b * ldgu + c;
-    situ8(gate, gate + SHARED, act + (long long)b * SHARED + c);
+  for (int i = (i0 + rstride - nq % rstride) % rstride; i < ns; i += SBATCH * rstride) {
+    uint4 g[SBATCH], u[SBATCH];
+#pragma unroll
+    for (int k = 0; k < SBATCH; ++k) {
+      const int ik = min(i + k * rstride, ns - 1);
+      const int b = ik / (SHARED / 256), c = ik % (SHARED / 256) * 256 + lane * 8;
+      const bf16_t* gate = gu + (long long)b * ldgu + c;
+      g[k] = *reinterpret_cast<const uint4*>(gate);
+      u[k] = *reinterpret_cast<const uint4*>(gate + SHARED);
+    }
+#pragma unroll
+    for (int k = 0; k < SBATCH; ++k) {
+      const int ik = i + k * rstride;
+      if (ik >= ns) break;
+      const int b = ik / (SHARED / 256), c = ik % (SHARED / 256) * 256 + lane * 8;
+      situ8(g[k], u[k], act + (long long)b * SHARED + c);
+    }
   }
 
   // grid barrier
