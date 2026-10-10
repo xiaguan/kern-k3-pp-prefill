@@ -320,7 +320,7 @@ def mla_attn_op(batch_max, page_stride, split_max, shared_table=False, batch=T, 
     }
 
 
-def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, chunk_max=0, moe_variants=None,
+def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, chunk_max=0, moe_variants=None,
           stage=False, experts=224, per_layer=False, pack=1, dcp=False, peer_ar=False, mla_short=0):
     """`layers`: the range of model layers; `stage`: a pipeline stage of them
     (no embedding unless it starts at 0, no head unless it ends at the last);
@@ -1743,7 +1743,7 @@ def main():
     ap.add_argument("--max-ctx", type=int, default=16384)
     ap.add_argument("--seqs", type=int, default=64, help="sequences per rank (the `tokens`/`seqs` bound)")
     ap.add_argument("--tp", type=int, default=1, help="tray-batch group size (a divisor of --ranks)")
-    ap.add_argument("--mla-split-max", type=int, default=32,
+    ap.add_argument("--mla-split-max", type=int, default=16,
                     help="KV splits a row's attention may run as; the workspace is tokens x this x 256 KiB")
     ap.add_argument("--span-max", type=int, default=0,
                     help="rows a `decode_span` program may fill with one sequence's prefill chunk (0: no span program)")

@@ -16,6 +16,8 @@
 | main 7d6ea4f + the above (measured with PDL, = without) | 13.2 | 4.144 ms/step |
 | exchange: split loads at once, half-head merge items, gate in smem | 13.2 | 4.120 ms/step |
 | launch_dependents at entry of kda_core / mla_prep / dcp_exchange | 13.2 | 4.101 ms/step |
+| rebased on main 049ff65+ (without embedding/argmax) | 13.2 | 4.099 ms/step |
+| MLA split slots 32 → 16 | 13.2 | 4.066 ms/step |
 
 ## Done
 
@@ -104,6 +106,21 @@
   main over 640 steps); together D 4.101 → 4.080. d-mlp landed its own
   versions first; numbers sent to d-mlp. Kept in git history only
   (2e4d9fc, 9a9a427 on the old branch).
+
+- **MLA split slots 32 → 16** (`--mla-split-max` default): the DSL grid
+  is (2, rows, split_max) clusters and every slot past a row's planned
+  splits is a cluster that launches and exits; at 24-48 rows that churn
+  cost 12-20 us per MLA layer. Bench (rebased branch, 4.099 at 32): cap 16
+  4.066, cap 8 4.048; `when` tiers (≤7: 32, 8-15: 16, 16-31: 8, ≥32: 4)
+  would be ~4.04 but loop/count counts every `when` launch (13.2 → 14.9 a
+  layer for zero extra launches run), and kern's expressions have no `min`
+  to shrink the slots with the batch in one launch. 16 keeps ≥2x headroom
+  over a uniform 8-row batch's need (and lets a long row among short ones
+  spread 16 ways), halves acc_o (537 → 268 MB). Below 8 rows a lone long
+  row now spreads over 16 clusters instead of up to 32 (not in the bench).
+  **Runtime proposal**: `min`/`max` in launch expressions (grid z =
+  min(32, ceil_div(128, tokens))) or not counting mutually exclusive
+  `when` launches, to tier this properly.
 
 ## Open: intermittent check failure (orchestrator, 20:00 UTC)
 
