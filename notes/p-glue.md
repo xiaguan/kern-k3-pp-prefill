@@ -14,6 +14,16 @@ Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check l
   over 64k), 2.29 ms (10 rows over 131k), 4.11 ms (354 over 131k). The real P stage spends ~45% of
   its time in the MLA FMHA. loop/p/check's p-l12 has stage 0's call, so numerics are checked on
   real tables. Fix: recompute the tables per stage (as work/lensx) or a `fill` for the cut table.
+- **Stage 1's MoE routing is degenerate too:** its `hidden_in` / `blocks_in` arrive as zeros, so
+  every row routes to the same 16 experts (FC1 1.7 ms/layer at 8192 rows there vs 3.0 ms on stage
+  0's real routing; 0.1 ms vs 1.3 ms at 354 rows). Since 19:54 the bench target is stage 0.
+- Stage 0 (main 9b1cce0 + this branch, 225 launches, 127.7 ms/item): per call at 8192 rows over
+  131k: mla_fmha 45.8 ms (×3), fc1 2.8 ms, fc2 1.3 ms, flash_kda 1.0 ms, finalize 165 us,
+  res_mlp 147 us, res_in 155 us, route 115 us, mla_gate 130 us, prep_gather 97 us. At 10 rows over
+  131k (21.7 ms an item): mla_fmha 2.35 ms + expand ~2.3 ms per MLA layer = ~14 ms of the item.
+- `work/ab.sh A B OUT`: A, B, A, B in one lease over work/ab.toml (8192@0, 10@131k, 354@131k);
+  `work/swapmod.py MANIFEST main OUT` re-pins a manifest's modules to main's cubins (the A side of
+  a cubin-only change). The lease's own A-to-A spread is 0.5-1.2% at 8192 rows.
 - **Proposal (touches the expand GEMM, so not done): absorbed MLA for short chunks.** The expand
   re-derives k | v for the whole context every chunk: 131k × 576 × 30720 × 2 = 4.6 TFLOP, 2.3 ms a
   layer, and the FMHA then streams that 8 GB expansion: 2.3 ms more for 10 rows (real tables).
@@ -52,6 +62,8 @@ Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check l
 | route reciprocals | 19.2 | 52.65 | rcp/div fast paths without the IEEE slow-path branch |
 | finalize smem picks + FFMA2 | 19.2 | 52.53 | 190 → 163 us at 8192 rows |
 | route: pieces to warps without a top-k row | 19.2 | 52.48 | short chunks: top-k beside quant/situ |
+| route: batched piece loads | 19.2 | 52.42 | stage 0 A/B: inside noise |
+| gather: 4 rows a thread | 18.8 (stage 0) | stage 0 A/B −0.2..−0.3% | with the batched route |
 
 A MoE layer is now: `land_add_attnres_rms_bf16` → router* → lat_down* → wsh* → `moe_route` →
 fc1* → fc2* → `moe_finalize_rms` → lat_up* → sh_down* → next `land_add2_attnres_rms`.
