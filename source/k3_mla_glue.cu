@@ -8,7 +8,7 @@
 //     blocks [B, B + ceil(n / 28)): rows [28 g, 28 g + 28) of latent_g, the sequences' cached latent
 //       rows back to back (sequence j's at [cum_kv[j], cum_kv[j] + seq_lens_kv[j])), every other row
 //       of the first n zero; the rows this chunk appends are the head blocks' own.
-//     partial f32 [B, MLA_FUSED] the fused projection (q_a | kv_a | rope | gate);
+//     partial bf16 [B, MLA_FUSED] the fused projection (q_a | kv_a | rope | gate), landed by its GEMM;
 //     slab, page_stride: the layer's latent pages; lens: kern_k3_fmha_lens_varlen's tables
 //     (seq_lens_kv | cum_q | cum_kv, ns words each) of the call's nseq + 2 FMHA sequences and its
 //     split record. A split sequence's rows go to its pieces: keys c + 1 .. in its own span, keys
@@ -25,11 +25,10 @@
 //   grid (2 B + 1, 1, 1)   block (512, 1, 1)
 //
 //   kern_k3g_mla_gate(out, o, partial, ..., stats, lens, ns, n, short_max, B)
-//     sigmoid_mul.cu's kern_sigmoid_mul_bf16 on the gate columns of the fused projection, landed to
-//     bf16 here (k3_mla_prep.cu landed them into a buffer of their own):
+//     sigmoid_mul.cu's kern_sigmoid_mul_bf16 on the gate columns of the fused projection:
 //     out = bf16(o * bf16(sigmoid(bf16(partial[b, HEADC + j])))), o / out [B, n]. A split sequence's
 //     row first merges its three pieces' o through the FMHA's (max, sum) stats.
-//   grid (B, ceil(n / 2048), 1)   block (256, 1, 1)
+//   grid (ceil(B / 8) * n / 2048 + the absorbed form's blocks, 1, 1)   block (256, 1, 1)
 //
 // Every value is the three kernels' bit for bit (the same landings, sums and roundings), but a split
 // row's o: an f32 merge of three bf16 pieces.
@@ -68,17 +67,18 @@ __device__ __forceinline__ float landf(float x) { return __bfloat162float(__floa
 
 // k3_mla_prep.cu's fast head for chunk row b: q_norm, kv_norm | rope appended to the slab, and the
 // latent row also written to `grow` unless null. The whole 512-thread block.
-__device__ __forceinline__ void prep_head(const float* __restrict__ partial, const bf16_t* __restrict__ gamma_q_a,
+__device__ __forceinline__ void prep_head(const bf16_t* __restrict__ partial, const bf16_t* __restrict__ gamma_q_a,
                                           const bf16_t* __restrict__ gamma_kv_a, const long long* __restrict__ slot_mapping,
                                           bf16_t* __restrict__ slab, long long page_stride, bf16_t* __restrict__ q_norm,
                                           bf16_t* __restrict__ grow, int b, int t, int qr1 = -1, int qr2 = -1) {
   __shared__ float red[NT / 32];
-  const float* __restrict__ P = partial + (long long)b * MLA_FUSED;
+  const bf16_t* __restrict__ P = partial + (long long)b * MLA_FUSED;
   const bool isq = (t < QU);
   const int col = isq ? (4 * t) : (Q_LORA + 4 * (t - QU));
-  const float4 v = *reinterpret_cast<const float4*>(P + col);
-  const float x0 = landf(v.x), x1 = landf(v.y);
-  const float x2 = landf(v.z), x3 = landf(v.w);
+  const uint2 v = *reinterpret_cast<const uint2*>(P + col);
+  const float2 v01 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&v.x));
+  const float2 v23 = __bfloat1622float2(*reinterpret_cast<const __nv_bfloat162*>(&v.y));
+  const float x0 = v01.x, x1 = v01.y, x2 = v23.x, x3 = v23.y;
 
   float ss = x0 * x0 + x1 * x1 + x2 * x2 + x3 * x3;
 #pragma unroll
@@ -92,8 +92,7 @@ __device__ __forceinline__ void prep_head(const float* __restrict__ partial, con
   const uint2 g = *reinterpret_cast<const uint2*>(gsrc);
   uint2 rope4 = make_uint2(0u, 0u);
   if (t < ROPE / 4) {
-    const float4 rv = *reinterpret_cast<const float4*>(P + Q_LORA + KV_LORA + 4 * t);
-    rope4 = make_uint2(pack2(rv.x, rv.y), pack2(rv.z, rv.w));
+    rope4 = *reinterpret_cast<const uint2*>(P + Q_LORA + KV_LORA + 4 * t);
   }
 
   __syncthreads();
@@ -127,7 +126,7 @@ __device__ __forceinline__ void prep_head(const float* __restrict__ partial, con
 #define TILE_KV 128  // the decode attention's KV tile (k3_mla_split_plan.cu)
 
 extern "C" __global__ void __launch_bounds__(NT) kern_k3g_mla_prep_gather(
-    const float* __restrict__ partial, const bf16_t* __restrict__ gamma_q_a, const bf16_t* __restrict__ gamma_kv_a,
+    const bf16_t* __restrict__ partial, const bf16_t* __restrict__ gamma_q_a, const bf16_t* __restrict__ gamma_kv_a,
     const long long* __restrict__ slot_mapping, bf16_t* __restrict__ slab, long long page_stride,
     bf16_t* __restrict__ q_norm, const int* __restrict__ block_table, int max_pages, const int* __restrict__ lens,
     int ns, int nseq, bf16_t* __restrict__ latent_g, int n, int* __restrict__ row_table, int* __restrict__ row_lens,
@@ -267,7 +266,7 @@ __device__ __forceinline__ void split_scales(const float* __restrict__ acc_lse, 
 __device__ __forceinline__ void vup_gate_block(const float* __restrict__ acc_o, const float* __restrict__ acc_lse,
                                                const int* __restrict__ row_lens, const int* __restrict__ bsk,
                                                int split_max, const __nv_bfloat16* __restrict__ w_kv_b,
-                                               const float* __restrict__ partial, __nv_bfloat16* __restrict__ gated,
+                                               const bf16_t* __restrict__ partial, __nv_bfloat16* __restrict__ gated,
                                                int B, int bx, int h, int dz) {
   __shared__ __align__(16) __nv_bfloat16 lat[RB][LAT];
   __shared__ float red[JS][RB][DS];
@@ -346,19 +345,50 @@ __device__ __forceinline__ void vup_gate_block(const float* __restrict__ acc_o, 
 #pragma unroll
       for (int k = 0; k < JS; ++k) a += red[k][r][d];
       const size_t oi = (size_t)(b0 + r) * (HEADS * NOPE) + (size_t)h * NOPE + dv0 + d;
-      const float gf = landf(partial[(size_t)(b0 + r) * MLA_FUSED + HEADC + (size_t)h * NOPE + dv0 + d]);
+      const float gf = __bfloat162float(partial[(size_t)(b0 + r) * MLA_FUSED + HEADC + (size_t)h * NOPE + dv0 + d]);
       gated[oi] = __hmul(__float2bfloat16_rn(a), __float2bfloat16_rn(1.0f / (1.0f + expf(-gf))));
     }
   }
 }
 
 
+// a split row's three pieces' o (N at row b, R at B + Lq - 1 - i, A at B + Lq + i) merged through the
+// FMHA's stats, landed to bf16
+__device__ __forceinline__ uint4 merge_split(const bf16_t* __restrict__ o, const float2* __restrict__ stats,
+                                             const int* __restrict__ rec, long long b, int j, int n, int B) {
+  const int i = (int)b - rec[2], lq = rec[3], h = j / NOPE;
+  const long long rows[3] = {b, B + lq - 1 - i, B + lq + i};
+  float2 st[3];
+  float m = -__int_as_float(0x7f800000);
+#pragma unroll
+  for (int k = 0; k < 3; ++k) st[k] = stats[rows[k] * (n / NOPE) + h], m = fmaxf(m, st[k].x);
+  float acc[8] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f}, den = 0.f;
+#pragma unroll
+  for (int k = 0; k < 3; ++k) {
+    const float w = st[k].y * expf(st[k].x - m);
+    const uint4 pv = *reinterpret_cast<const uint4*>(o + rows[k] * n + j);
+    const __nv_bfloat162* pp = reinterpret_cast<const __nv_bfloat162*>(&pv);
+    den += w;
+#pragma unroll
+    for (int e = 0; e < 4; ++e) {
+      const float2 f = __bfloat1622float2(pp[e]);
+      acc[2 * e] = fmaf(w, f.x, acc[2 * e]), acc[2 * e + 1] = fmaf(w, f.y, acc[2 * e + 1]);
+    }
+  }
+  const float inv = 1.f / den;
+  return make_uint4(pack2(acc[0] * inv, acc[1] * inv), pack2(acc[2] * inv, acc[3] * inv),
+                    pack2(acc[4] * inv, acc[5] * inv), pack2(acc[6] * inv, acc[7] * inv));
+}
+
+// GATE_ROWS rows a thread, every load issued before the first use: the kernel's registers and shared
+// memory are the absorbed form's, two blocks an SM, so one row's loads alone leave HBM idle
+#define GATE_ROWS 8
 extern "C" __global__ void __launch_bounds__(256) kern_k3g_mla_gate(
-    bf16_t* __restrict__ out, const bf16_t* __restrict__ o, const float* __restrict__ partial,
+    bf16_t* __restrict__ out, const bf16_t* __restrict__ o, const bf16_t* __restrict__ partial,
     const float* __restrict__ acc_o, const float* __restrict__ acc_lse, const int* __restrict__ row_lens,
     const int* __restrict__ bsk, int split_max, const bf16_t* __restrict__ w_kv_b, const float2* __restrict__ stats,
     const int* __restrict__ lens, int ns, int n, int short_max, int B) {
-  const int gate_blocks = B * (n / 2048);
+  const int gate_blocks = (B + GATE_ROWS - 1) / GATE_ROWS * (n / 2048);
   if (B <= short_max) {  // a short chunk: o_lat through W_UV, then the gate (blocks past the gate's)
     if (blockIdx.x < gate_blocks) return;
     const int i = blockIdx.x - gate_blocks;
@@ -367,46 +397,32 @@ extern "C" __global__ void __launch_bounds__(256) kern_k3g_mla_gate(
     return;
   }
   if (blockIdx.x >= gate_blocks) return;
-  const long long b = blockIdx.x / (n / 2048);
+  const long long b0 = (long long)(blockIdx.x / (n / 2048)) * GATE_ROWS;
   const int j = (blockIdx.x % (n / 2048) * blockDim.x + threadIdx.x) * 8;
-  const float4* gp = reinterpret_cast<const float4*>(partial + b * MLA_FUSED + HEADC + j);
-  const float4 g0 = gp[0], g1 = gp[1];
-  const float gx[8] = {g0.x, g0.y, g0.z, g0.w, g1.x, g1.y, g1.z, g1.w};
-  uint4 av = *reinterpret_cast<const uint4*>(o + b * n + j);
-  const int* __restrict__ rec = lens + 3 * ns;
-  if (rec[3] > 0 && b >= rec[2] && b < rec[2] + rec[3]) {  // a split row: N | R | A merged
-    const int i = (int)b - rec[2], lq = rec[3], h = j / NOPE;
-    const long long rows[3] = {b, B + lq - 1 - i, B + lq + i};
-    float2 st[3];
-    float m = -__int_as_float(0x7f800000);
+  uint4 gv[GATE_ROWS], av[GATE_ROWS];
 #pragma unroll
-    for (int k = 0; k < 3; ++k) st[k] = stats[rows[k] * (n / NOPE) + h], m = fmaxf(m, st[k].x);
-    float acc[8] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f}, den = 0.f;
-#pragma unroll
-    for (int k = 0; k < 3; ++k) {
-      const float w = st[k].y * expf(st[k].x - m);
-      const uint4 pv = *reinterpret_cast<const uint4*>(o + rows[k] * n + j);
-      const __nv_bfloat162* pp = reinterpret_cast<const __nv_bfloat162*>(&pv);
-      den += w;
-#pragma unroll
-      for (int e = 0; e < 4; ++e) {
-        const float2 f = __bfloat1622float2(pp[e]);
-        acc[2 * e] = fmaf(w, f.x, acc[2 * e]), acc[2 * e + 1] = fmaf(w, f.y, acc[2 * e + 1]);
-      }
+  for (int r = 0; r < GATE_ROWS; ++r)
+    if (b0 + r < B) {
+      gv[r] = *reinterpret_cast<const uint4*>(partial + (b0 + r) * MLA_FUSED + HEADC + j);
+      av[r] = *reinterpret_cast<const uint4*>(o + (b0 + r) * n + j);
     }
-    const float inv = 1.f / den;
-    av = make_uint4(pack2(acc[0] * inv, acc[1] * inv), pack2(acc[2] * inv, acc[3] * inv),
-                    pack2(acc[4] * inv, acc[5] * inv), pack2(acc[6] * inv, acc[7] * inv));
-  }
-  const __nv_bfloat162* ap = reinterpret_cast<const __nv_bfloat162*>(&av);
-  uint4 ov;
-  __nv_bfloat162* op = reinterpret_cast<__nv_bfloat162*>(&ov);
+  const int* __restrict__ rec = lens + 3 * ns;
 #pragma unroll
-  for (int i = 0; i < 4; i++) {
-    const float x0 = landf(gx[2 * i]), x1 = landf(gx[2 * i + 1]);
-    const __nv_bfloat162 g = __floats2bfloat162_rn(1.0f / (1.0f + expf(-x0)), 1.0f / (1.0f + expf(-x1)));
-    op[i] = __floats2bfloat162_rn(__bfloat162float(ap[i].x) * __bfloat162float(g.x),
-                                  __bfloat162float(ap[i].y) * __bfloat162float(g.y));
+  for (int r = 0; r < GATE_ROWS; ++r) {
+    const long long b = b0 + r;
+    if (b >= B) break;
+    if (rec[3] > 0 && b >= rec[2] && b < rec[2] + rec[3]) av[r] = merge_split(o, stats, rec, b, j, n, B);
+    const __nv_bfloat162* gp = reinterpret_cast<const __nv_bfloat162*>(&gv[r]);
+    const __nv_bfloat162* ap = reinterpret_cast<const __nv_bfloat162*>(&av[r]);
+    uint4 ov;
+    __nv_bfloat162* op = reinterpret_cast<__nv_bfloat162*>(&ov);
+#pragma unroll
+    for (int i = 0; i < 4; i++) {
+      const float2 x = __bfloat1622float2(gp[i]);
+      const __nv_bfloat162 g = __floats2bfloat162_rn(1.0f / (1.0f + expf(-x.x)), 1.0f / (1.0f + expf(-x.y)));
+      op[i] = __floats2bfloat162_rn(__bfloat162float(ap[i].x) * __bfloat162float(g.x),
+                                    __bfloat162float(ap[i].y) * __bfloat162float(g.y));
+    }
+    *reinterpret_cast<uint4*>(out + b * n + j) = ov;
   }
-  *reinterpret_cast<uint4*>(out + b * n + j) = ov;
 }

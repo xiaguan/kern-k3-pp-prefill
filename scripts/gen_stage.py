@@ -779,7 +779,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         short = {"when": {"var": T, "max": mla_short}}
         long_ = {"when": {"var": T, "min": mla_short + 1}}
         ops["mla_prep_gather"] = {
-            "params": ["in buffer<f32>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<i64>", "inout state", "i64",
+            "params": ["in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<i64>", "inout state", "i64",
                        "out buffer<bf16>", "in buffer<i32>", "i32", "in buffer<i32>", "i32", "i32", "out buffer<bf16>",
                        "i32", "out buffer<i32>", "out buffer<i32>", "out buffer<i32>", "i32", "i32", "i32"],
             "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_prep_gather",
@@ -788,11 +788,11 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                                                1, 1], block=[512, 1, 1], defines=mla_defs)]},
         }
         ops["mla_gate"] = {
-            "params": ["out buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "in buffer<f32>", "in buffer<f32>",
+            "params": ["out buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "in buffer<f32>",
                        "in buffer<i32>", "in buffer<i32>", "i32", "in buffer<bf16>", "in buffer<f32>",
                        "in buffer<i32>", "i32", "i32", "i32", "i32"],
             "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_gate",
-                                         grid=[{"add": [{"mul": [T, gate_l // 2048]}, -(-mla_short // 32) * HEADS * 4]},
+                                         grid=[{"add": [{"mul": [{"ceil_div": [T, 8]}, gate_l // 2048]}, -(-mla_short // 32) * HEADS * 4]},
                                                1, 1], block=[256, 1, 1], defines=mla_defs)]},
         }
         if mla_short:
@@ -1174,7 +1174,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         buffers.update(varlen_abi.kda_workspace(hl, run_max, pack) if packed
                        else flash_kda_abi.workspace_buffers(hl, run_max))
     if mla:
-        work("mla_fused_partial", mla_fused_l, "f32")
+        work("mla_fused_partial", mla_fused_l, "bf16" if packed else "f32")
         work("q_norm", Q_LORA, var=chunk_max + SPLIT_EXTRA if packed else T)
     if decode and mla:
         work("q_partial", Q_B, "f32")
@@ -1490,7 +1490,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                 k = mla_index[i]
                 layer_off = 0 if per_layer else k * PAGE * LATENT_ROW  # elements
                 kv = kv_of(i)
-                gemm(L + "wfu", normed_all, w("wfu"), b("mla_fused_partial"), mla_fused_l, H)
+                proj(L + "wfu", normed_all, w("wfu"), b("mla_fused_partial"), mla_fused_l, H,
+                     dt="bf16" if packed else "f32")
                 if packed:
                     # q_norm and the latent row appended, the context's latent rows gathered (this chunk's
                     # from the prep), expanded to this rank's heads' k | v by one GEMM, the FMHA, the gate
