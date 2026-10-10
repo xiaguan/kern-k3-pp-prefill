@@ -743,8 +743,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                                                1, 1], block=[512, 1, 1], defines=mla_defs)]},
         }
         ops["mla_gate"] = {
-            "params": ["out buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "in buffer<bf16>", "in buffer<bf16>", "i32",
-                       "i32", "i32"],
+            "params": ["out buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "in buffer<f32>", "in buffer<f32>",
+                       "in buffer<i32>", "in buffer<i32>", "i32", "in buffer<bf16>", "i32", "i32", "i32"],
             "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_gate",
                                          grid=[{"add": [{"mul": [T, gate_l // 2048]}, -(-mla_short // 32) * HEADS * 4]},
                                                1, 1], block=[256, 1, 1], defines=mla_defs)]},
@@ -762,7 +762,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                                              block=[128, 1, 1], defines={"QBF16": 1}, **short)]},
             }
             # the FMHA's softmax scale (f32 192^-0.5), not the decode step's bf16-rounded one
-            ops["mla_attn_short"] = mla_attn_op(mla_short, page_stride, MLA_SHORT_SPLITS,
+            # the splits merged by the gate kernel, not the DSL's reduction launch
+            ops["mla_attn_short"] = mla_attn_op(mla_short, page_stride, MLA_SHORT_SPLITS, reduce=False,
                                                 scale_log2=trtllm_fmha_abi.SCALE_LOG2)
             for l in ops["mla_attn_short"]["impl"]["launches"]:
                 l.update(short)
@@ -1417,8 +1418,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                          b("o_bf16"), lens(0), lens(1), lens(2), b("fmha_scratch"),
                          b("fmha_scratch", trtllm_fmha_abi.PARTIAL_O_OFFSET))
                     if packed:
-                        step(L + "gate", "mla_gate", b("gated"), b("o_bf16"), b("mla_fused_partial"), b("mla_o_lat"),
-                             w("w_kv_b"), i32(gate_l), i32(mla_short), B)
+                        step(L + "gate", "mla_gate", b("gated"), b("o_bf16"), b("mla_fused_partial"), b("mla_s_acc_o"),
+                             b("mla_s_acc_lse"), b("mla_row_lens"), b("mla_row_bsk"), i32(MLA_SHORT_SPLITS), w("w_kv_b"),
+                             i32(gate_l), i32(mla_short), B)
                     else:
                         step(L + "gate", "mla_gate", b("gated"), b("o_bf16"), b("mla_gate"), i32(ml), i32(NOPE_DIM),
                              i32(gate_l), i32(NOPE_DIM))

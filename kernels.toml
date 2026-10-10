@@ -205,7 +205,7 @@ sha256 = "e7497eaa3b7689c4a947d18e9d7f0bce53ef43f57a6bae2c984057728ae1b157"
 source = "source/k3_moe_route.cu"
 
 [kernels."k3_mla_glue"]
-sha256 = "d8c892afaecba1c6fb7fa3cb40cf47d50d882eceb6079b6752402a4eb9cd3fbd"
+sha256 = "dbddf68b4cbd3b994bbb4666f9b9cf90141c2959e4315920c700e95c08f4dea1"
 source = "source/k3_mla_glue.cu"
 
 [kernels."k3_mla_absorb+QBF16=1"]
