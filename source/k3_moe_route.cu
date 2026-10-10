@@ -3,13 +3,13 @@
 // shared expert's activation, where they were six launches (router_topk,
 // moe_quant, FlashInfer's init / histogram / offsets, situ).
 //
-//   kern_k3g_moe_route(S, bias, rs, x, ldx, gu, ldgu, q, sf, idx, wts, act, sync, cta_batch, cta_limit,
+//   kern_k3g_moe_route(S, bias, rs, x, ldx, gu, ldgu, q, sf, idx, wts, act, ldact, sync, cta_batch, cta_limit,
 //                      num_non_exiting, total_padded, route_map, exp2perm, tile, B)
 //     S f32 [B, EXPERTS] router logits; bias f32 [EXPERTS]; rs bf16 [1];
 //     x bf16 [B, ldx] the latent; gu bf16 [B, ldgu] the shared expert's gate | up;
 //     q u8 [B, LATENT], sf u8 [B, LATENT / 32]: k3_moe_prefill.cu's kern_k3_moe_quant;
 //     idx i32 / wts f32 [B, 16]: k3_prefill_glue.cu's router top-k, bit for bit;
-//     act bf16 [B, SHARED]: the shared expert's activation, k3_prefill_glue.cu's kern_k3g_situ;
+//     act bf16 [B, ldact]: the shared expert's activation, k3_prefill_glue.cu's kern_k3g_situ;
 //     sync u32 [2 + 2 * TABLE]: the grid barrier (arrivals, generation) and two routing tables
 //       (Table below), the generation's parity picking this call's; zeroed by
 //       kern_k3g_moe_route_init before a stage's first call, every call of a stage's B rows
@@ -20,6 +20,15 @@
 //
 //   kern_k3g_moe_route_init(sync)
 //   grid (any, 1, 1)   block (1024, 1, 1)
+//
+//   kern_k3g_moe_finalize_rms(fc2, exp2perm, wts, gamma, out, ldo, T)
+//     k3_prefill_glue.cu's kern_k3g_finalize_rms (the top-k combine, its row normed by gamma)
+//     into the first LATENT columns of out's ldo-wide rows.
+//   grid (T, 1, 1)   block (LATENT / 8, 1, 1)
+//
+//   kern_k3_concat_cols(a, b, out, rows, ka, kb)
+//     out [rows, ka + kb] = a [rows, ka] | b [rows, kb], bf16; a load-time weight concat.
+//   grid (ceil(rows * (ka + kb) / 8 / 256), 1, 1)   block (256, 1, 1)
 //
 // Phase 1: a warp a row's top-k (a grid-stride over rows when B passes 16 *
 // gridDim), its picks marked in this call's table (each expert's count, its
@@ -298,7 +307,7 @@ __device__ __forceinline__ Table table(u32* sync, u32 parity) {
 extern "C" __global__ void __launch_bounds__(THREADS, 2) kern_k3g_moe_route(
     const float* __restrict__ S, const float* __restrict__ bias, const bf16_t* __restrict__ rs,
     const bf16_t* __restrict__ x, int ldx, const bf16_t* __restrict__ gu, int ldgu, uint8_t* __restrict__ q,
-    uint8_t* __restrict__ sf, int* __restrict__ idx, float* __restrict__ wts, bf16_t* __restrict__ act,
+    uint8_t* __restrict__ sf, int* __restrict__ idx, float* __restrict__ wts, bf16_t* __restrict__ act, int ldact,
     u32* __restrict__ sync, int* __restrict__ cta_batch, int* __restrict__ cta_limit,
     int* __restrict__ num_non_exiting, int* __restrict__ total_padded, int* __restrict__ route_map,
     int* __restrict__ exp2perm, int tile, int B) {
@@ -382,7 +391,7 @@ extern "C" __global__ void __launch_bounds__(THREADS, 2) kern_k3g_moe_route(
       const int ik = i + k * rstride;
       if (ik >= ns) break;
       const int b = ik / (SHARED / 256), c = ik % (SHARED / 256) * 256 + lane * 8;
-      situ8(g[k], u[k], act + (long long)b * SHARED + c);
+      situ8(g[k], u[k], act + (long long)b * ldact + c);
     }
   }
 
@@ -467,4 +476,72 @@ extern "C" __global__ void __launch_bounds__(THREADS, 2) kern_k3g_moe_route(
 
 extern "C" __global__ void __launch_bounds__(1024) kern_k3g_moe_route_init(u32* __restrict__ sync) {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < 2 + 2 * TABLE; i += gridDim.x * blockDim.x) sync[i] = 0;
+}
+
+extern "C" __global__ void __launch_bounds__(LATENT / 8) kern_k3g_moe_finalize_rms(
+    const bf16_t* __restrict__ fc2, const int* __restrict__ exp2perm, const float* __restrict__ wts,
+    const bf16_t* __restrict__ gamma, bf16_t* __restrict__ out, int ldo, int T) {
+  __shared__ float sm[33];
+  const int t = blockIdx.x, h = threadIdx.x;
+  const int lane = h & 31, warp = h >> 5;
+  float acc[8] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  if (t < T) {
+#pragma unroll
+    for (int k = 0; k < TOPK; ++k) {
+      const int p = exp2perm[t * TOPK + k];
+      if (p < 0) continue;
+      const float w = wts[t * TOPK + k];
+      const uint4 u = reinterpret_cast<const uint4*>(fc2 + (long long)p * LATENT)[h];
+      const __nv_bfloat162* v = reinterpret_cast<const __nv_bfloat162*>(&u);
+#pragma unroll
+      for (int l = 0; l < 4; ++l) {
+        const float2 f = __bfloat1622float2(v[l]);
+        acc[2 * l] += w * f.x;
+        acc[2 * l + 1] += w * f.y;
+      }
+    }
+  }
+  __nv_bfloat162 x[4];
+  float sum = 0.0f;
+#pragma unroll
+  for (int l = 0; l < 4; ++l) {
+    x[l] = __floats2bfloat162_rn(acc[2 * l], acc[2 * l + 1]);
+    const float2 f = __bfloat1622float2(x[l]);
+    sum += f.x * f.x;
+    sum += f.y * f.y;
+  }
+#pragma unroll
+  for (int o = 16; o > 0; o >>= 1) sum += __shfl_xor_sync(0xffffffffu, sum, o);
+  if (lane == 0) sm[warp] = sum;
+  if (h < 32 && h >= (int)(blockDim.x >> 5)) sm[h] = 0.f;
+  __syncthreads();
+  if (warp == 0) {
+    float v = sm[lane];
+#pragma unroll
+    for (int o = 16; o > 0; o >>= 1) v += __shfl_xor_sync(0xffffffffu, v, o);
+    if (lane == 0) sm[32] = v;
+  }
+  __syncthreads();
+  const float rs = rsqrtf(sm[32] / (float)LATENT + 1e-5f);
+  const uint4 gw = reinterpret_cast<const uint4*>(gamma)[h];
+  const __nv_bfloat162* g = reinterpret_cast<const __nv_bfloat162*>(&gw);
+  uint4 o;
+  __nv_bfloat162* ov = reinterpret_cast<__nv_bfloat162*>(&o);
+#pragma unroll
+  for (int l = 0; l < 4; ++l) {
+    const float2 f = __bfloat1622float2(x[l]);
+    ov[l] = __hmul2(__floats2bfloat162_rn(f.x * rs, f.y * rs), g[l]);
+  }
+  reinterpret_cast<uint4*>(out + (long long)t * ldo)[h] = o;
+}
+
+extern "C" __global__ void kern_k3_concat_cols(const bf16_t* __restrict__ a, const bf16_t* __restrict__ b,
+                                               bf16_t* __restrict__ out, int rows, int ka, int kb) {
+  const long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+  const int k = ka + kb;
+  if (i >= (long long)rows * k / 8) return;
+  const long long r = i / (k / 8);
+  const int c = (int)(i % (k / 8)) * 8;
+  reinterpret_cast<uint4*>(out)[i] = c < ka ? *reinterpret_cast<const uint4*>(a + r * ka + c)
+                                            : *reinterpret_cast<const uint4*>(b + r * kb + c - ka);
 }

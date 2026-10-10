@@ -125,13 +125,19 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
         **({"moe_route": {
             "params": ["in buffer<f32>", "in buffer<f32>", "in buffer<bf16>", "in buffer<bf16>", "i32", "in buffer<bf16>",
                        "i32", "out buffer<u8>",
-                       "out buffer<u8>", "out buffer<i32>", "out buffer<f32>", "out buffer<bf16>", "inout buffer<u32>",
+                       "out buffer<u8>", "out buffer<i32>", "out buffer<f32>", "out buffer<bf16>", "i32",
+                       "inout buffer<u32>",
                        *["out buffer<i32>"] * 6, "i32", "i32"],
             "impl": {"launches": [
                 {**module(ROUTE, **({"EXPERTS": experts} if experts != 896 else {})), "entry": "kern_k3g_moe_route",
                  "block": [32 * ROUTE_WARPS, 1, 1], **g}
                 for g in ({"grid": [ROUTE_BLOCKS_SMALL, 1, 1], "when": {"var": tokens, "max": 256}},
                           {"grid": [ROUTE_BLOCKS, 1, 1], "when": {"var": tokens, "min": 257}})]},
+        }, "moe_finalize_rms_ld": {
+            "params": ["in buffer<bf16>", "in buffer<i32>", "in buffer<f32>", "in buffer<bf16>", "out buffer<bf16>",
+                       "i32", "i32"],
+            "impl": {"launches": [{**module(ROUTE), "entry": "kern_k3g_moe_finalize_rms", "block": [H // 8, 1, 1],
+                                   "grid": [out_rows, 1, 1]}]},
         }, "moe_route_init": {
             "params": ["out buffer<u32>"],
             "impl": {"launches": [{**module(ROUTE, **({"EXPERTS": experts} if experts != 896 else {})),
@@ -178,11 +184,11 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
              "args": [ids, b("blockoff"), T, rank, i32(local), b("route_map"), b("exp2perm")]},
         ]
 
-    def route_step(S, bias, rs, x, ldx, gu, ldgu, q, sf, ids, wts, act, label=""):
+    def route_step(S, bias, rs, x, ldx, gu, ldgu, q, sf, ids, wts, act, ldact, label=""):
         """The router top-k, the latent's mxfp8, the routing tables and the shared expert's activation (from
         its gate | up rows `gu`) in one call (k3_moe_route.cu)."""
         return {"label": label + "route", "op": "moe_route",
-                "args": [S, bias, rs, x, i32(ldx), gu, i32(ldgu), q, sf, ids, wts, act, b("route_sync"), b("cta_batch"), b("cta_limit"),
+                "args": [S, bias, rs, x, i32(ldx), gu, i32(ldgu), q, sf, ids, wts, act, i32(ldact), b("route_sync"), b("cta_batch"), b("cta_limit"),
                          b("num_non_exiting"), b("total_padded"), b("route_map"), b("exp2perm"), i32(tile),
                          dim(tokens)]}
 
@@ -191,12 +197,14 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
         return {"label": label + "route_init", "op": "moe_route_init", "args": [b("route_sync")]}
 
     def steps(q, sf, ids, wts, w13s, w13_sfs, w2s, w2_sfs, alpha, beta, out, rank=None, gamma=None, label="",
-              routed=False, combined=True):
+              routed=False, combined=True, ldo=None):
         """One layer's calls; with `gamma` the combine's row is normed by it (the latent norm) before `out`;
         `routed`: the tables are already built (route_step, or the DCP step's moe_front); not `combined`: the
         combine is the caller's (the DCP step's fused all-reduce)."""
         T = dim(tokens)
-        combine = ({"label": label + "finalize", "op": "moe_finalize_rms",
+        combine = ({"label": label + "finalize", "op": "moe_finalize_rms_ld",
+                    "args": [b("fc2_out"), b("exp2perm"), wts, gamma, out, i32(ldo), T]} if gamma and ldo else
+                   {"label": label + "finalize", "op": "moe_finalize_rms",
                     "args": [b("fc2_out"), b("exp2perm"), wts, gamma, out, T, i32(H)]} if gamma else
                    {"label": label + "finalize", "op": "moe_finalize",
                     "args": [b("fc2_out"), b("exp2perm"), wts, out, T, i32(H)]})

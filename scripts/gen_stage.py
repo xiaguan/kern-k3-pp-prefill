@@ -919,6 +919,12 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         return name
 
     ops.update((bp or mp)["ops"])
+    if lone:
+        ops["k3_concat_cols"] = {
+            "params": ["in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32", "i32"],
+            "impl": {"launches": [launch("k3_moe_route", "kern_k3_concat_cols",
+                                         grid=[-(-H * (LATENT + sh_l) // 8 // 256), 1, 1], block=[256, 1, 1])]},
+        }
 
     # ---- buffers
     buffers = {
@@ -1182,12 +1188,16 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         work("topk_idx_all", TOPK, "i32", var=tp * own_max)
         work("topk_weight_all", TOPK, "f32", var=tp * own_max)
         work("moe_partial", LATENT, var=tp * own_max)
-    work("routed_latent_norm", LATENT, var=RW)
+    if lone:
+        # the routed latent normed | the shared expert's activation, one GEMM's rows
+        work("moe_back", LATENT + sh_l, var=RW)
+    else:
+        work("routed_latent_norm", LATENT, var=RW)
+        work("shared_act", sh_l, var=RW)
     work("routed_partial", H, part, var=RW)
     if not front and not lone:
         work("shared_partial", 2 * sh_l, part, var=RW)
-    work("shared_act", sh_l, var=RW)
-    if not dcp:
+    if not dcp and not lone:
         work("shared_partial2", H, part, var=RW)
     if 0 in layers:
         work("dense_partial", 2 * dn_l, part, var=RW)
@@ -1598,28 +1608,32 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                     proj(L + "lat_up", b("routed_latent_norm"), w("w_lat_up"), b("routed_partial"), H, LATENT, m=RB)
                     closing = (L + "hidden", b("routed_partial"), b(moe, shared_at), 1)
                 elif bmm:
-                    # the top-k, the latent's mxfp8 and the routing tables in one call; the combine lands its
-                    # row and norms it (lat_norm) in one pass
+                    # the top-k, the latent's mxfp8, the routing tables and the shared activation in one call;
+                    # the combine lands its
+                    # row and norms it (lat_norm) in one pass, next to the shared activation; lat_up and the
+                    # shared down projection are one GEMM over both (K = 3584 + 6144), one partial
+                    back = LATENT + sh_l
                     prog.append(bp["route_step"](b("router_partial"), w("bias"), w("rs"), b("moe_front"),
                                                  LATENT + 2 * sh_l, b("moe_front", LATENT * 2), LATENT + 2 * sh_l,
                                                  b("latent_q"), b("latent_sf"), b("topk_idx"), b("topk_weight"),
-                                                 b("shared_act"), label=L))
+                                                 b("moe_back", LATENT * 2), back, label=L))
                     prog.extend(bp["steps"](b("latent_q"), b("latent_sf"), b("topk_idx"), b("topk_weight"),
                                             w("moe.w13s"), w("moe.w13_sfs"), w("moe.w2s"), w("moe.w2_sfs"),
-                                            w("moe.alpha"), w("moe.beta"), b("routed_latent_norm"),
-                                            gamma=w("gamma_lat"), label=L, routed=True))
+                                            w("moe.alpha"), w("moe.beta"), b("moe_back"),
+                                            gamma=w("gamma_lat"), label=L, routed=True, ldo=back))
+                    proj(L + "back", b("moe_back"), w("w_moe_back"), b("routed_partial"), H, back, m=RB)
+                    closing = (L + "hidden", b("routed_partial"), b("routed_partial"), 0)
                 else:
                     prog.extend(gen_k3_moe.mega_pieces(ranks, own_max, wprefix=f"layers.{i}.", tokens=OG)["steps"](
                         b("latent"), b("topk_idx"), b("topk_weight"), b("routed_latent"), label=L))
-                if not dcp:
+                if not dcp and not lone:
                     if not bmm or coll:
                         routed = (gathered(L + "gather_moe", b("routed_latent"), b("routed_latent_all"), "bf16",
                                            LATENT * 2) if tray else b("routed_latent"))
                         step(L + "lat_norm", "rms", routed, w("gamma_lat"), b("routed_latent_norm"), i32(LATENT), RB)
                     proj(L + "lat_up", b("routed_latent_norm"), w("w_lat_up"), b("routed_partial"), H, LATENT, m=RB)
-                    if not lone:
-                        proj(L + "wsh", b("normed"), w("wsh"), b("shared_partial"), 2 * sh_l, H, m=RB)
-                        land_situ(L + "shared_situ", b("shared_partial"), b("shared_act"), sh_l, RB)
+                    proj(L + "wsh", b("normed"), w("wsh"), b("shared_partial"), 2 * sh_l, H, m=RB)
+                    land_situ(L + "shared_situ", b("shared_partial"), b("shared_act"), sh_l, RB)
                     proj(L + "sh_down", b("shared_act"), w("sh_down"), b("shared_partial2"), H, sh_l, m=RB)
                     shared = (reduced(L + "reduce_mlp", b("shared_partial2"), b("mlp_all")) if tray else
                               b("shared_partial2"))
@@ -1721,11 +1735,22 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                         seg(e + "shared_experts.up_proj.weight")])
             elif not front:
                 weight(n + "w_lat_down", [LATENT, H], [seg(e + "routed_expert_down_proj.weight")])
-            weight(n + "w_lat_up", [H, LATENT], [seg(e + "routed_expert_up_proj.weight")])
             weight(n + "gamma_lat", [LATENT], [seg(e + "routed_expert_norm.weight")])
             if not front and not lone:
                 gate_up(n + "wsh", e + "shared_experts.gate_proj.weight", e + "shared_experts.up_proj.weight", sh_l)
-            weight(n + "sh_down", [H, sh_l], [seg(e + "shared_experts.down_proj.weight", cols=mlp_shard(sh_l))])
+            if lone:
+                # [lat_up | shared down] by columns, made while the weights load
+                for name, t, k in (("w_lat_up", "routed_expert_up_proj", LATENT), ("sh_down", "shared_experts.down_proj", sh_l)):
+                    weight(n + name, [H, k], [seg(e + t + ".weight")])
+                    buffers[n + name]["kind"] = "source"
+                carry(n + "w_moe_back", [H, LATENT + sh_l])
+                derive.calls.append({"label": f"load.k3_concat_cols.{i}", "op": "k3_concat_cols",
+                                     "args": [buf(n + "w_lat_up"), buf(n + "sh_down"), buf(n + "w_moe_back"), i32(H),
+                                              i32(LATENT), i32(sh_l)]})
+            else:
+                weight(n + "w_lat_up", [H, LATENT], [seg(e + "routed_expert_up_proj.weight")])
+                weight(n + "sh_down", [H, sh_l],
+                       [seg(e + "shared_experts.down_proj.weight", cols=mlp_shard(sh_l))])
             if bmm:
                 moe_weights(once, i, n + "moe.")
             else:
