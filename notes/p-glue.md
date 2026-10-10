@@ -74,9 +74,9 @@ Tried, not kept (harness, bit-identical unless said):
   TFLOP at ~1.5 PF: at peak), at 354 rows expand 2.6 + FMHA 4.5 ms a layer (192 CTAs, 1.26
   waves, each head's 84 MB of expanded K/V streamed per 256-row Q tile), fc1 1.3 ms a layer
   (streaming all 896 experts' weights). The 10-row item is 7.6 ms (GEMM weight streaming).
-- Next, if anyone: an absorbed MLA *prefill* kernel (rows × heads in M, the latent read once) for
-  129..~1000-row chunks: ~9.7 TFLOP at 354 rows over 131k against 21 ms of expand + FMHA today,
-  but only as a tcgen05 kernel (mma.sync peaks at 605 TFLOP/s here: work/mma).
+- An absorbed MLA *prefill* kernel for 129..~1000-row chunks does not pay: ~9.7 TFLOP at 354 rows
+  over 131k (6.5 ms a layer at 1.5 PF) against expand + FMHA's ~6.2 TFLOP (2.7 + 3.2 ms a layer
+  today, after d-attn's split); absorbing trades the expansion for 576-wide dot products.
 
 ## Power cap (22:16 target; main aa144e0, 8192@0 unless said)
 
@@ -302,9 +302,11 @@ now replays a rebuilt module under its old name (`work/forcediff.py` did the sam
 
 ## Next
 
-- Launches: every glue kernel left sits between GEMMs / the prebuilt FMHA; the only one left is
-  `moe_route_init` (1 a stage), which needs a zeroed workspace (a carry is refused by `kern cut`).
+- Launches: the floor without opening the GEMMs or the prebuilt FMHA / FlashKDA. Every glue kernel
+  sits between two of them; the last input-sharing GEMM pair (qkvg | wsm) is merged; span_g (K 128)
+  is bound by its own 201 MB output, which FlashKDA's prebuilt prepare reads.
 - mla_gate: only neighbours are the prebuilt FMHA and cuBLAS o_proj: no fusion without our own FMHA.
-- Time: residual K1b / K1d (153 / 163 us at 8192, nb 2; floor ~86 / 100 us): issue-bound half the
-  time (58% issue, ~14k warp-instr a row); finalize at the gather floor + 9 us; route 108 us
-  (situ ~45 us of it, MUFU-bound: 4 MUFU an element).
+- Time (harness, 8192 rows, stage 0's nb 1): residual K1b / K1d 128 us (bytes 73 us; issue 56%,
+  DRAM 54%, a barrier-phased row), finalize 157 (gather floor 149), route 98 (pieces at their own
+  floors, top-k not overlapped with the streaming), gate 94 (bytes 75), situ 259 (bytes 207).
+  Every remaining idea measured above is worth <= ~0.1% of the score.
