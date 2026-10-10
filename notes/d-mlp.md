@@ -19,7 +19,7 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 | `router_topk_front` + `land_n3584` + `moe_quant` + `moe_routing` (3) + `situ_front` → `kern_k3_moe_front` (row per block; warp 0 picks while other warps quantise + situ; the last block builds the tables, deterministic order) | 18.1 | 4.394 | bit-identical |
 | `tp_allreduce_bf16` + `land_add_attnres_rms_bf16` → `kern_k3_ar_attnres_rms`; `moe_finalize` + `tp_allreduce_bf16` + `rms` → `kern_k3_ar_finalize_rms` (all 152 blocks push a grid-stride share, block b < B polls row b and runs the epilogue at 1024 threads) | 15.2 | 4.332 | bit-identical |
 | (main after merges with d-attn: 13.2/layer, 4.175) | 13.2 | 4.175 | |
-| Lamport hang detector on clock64 instead of %globaltimer (fix, below) | 13.2 | 4.174 | bit-identical, 3/3 runs |
+| first Lamport call handshakes with every peer (init race, below); a passed deadline (30 s) traps | 13.2 | 4.177 | bit-identical, 3/3 on main, 12/12 on the series |
 | moe_front top-k in two levels (8 warps x 112 experts, then warp 0 over the 128 candidates); 10.5 -> 6.5 us | 13.2 | 4.122 | bit-identical |
 | the residual rows (ar_attnres_rms, land_add2_attnres_rms) cp.async their snapshot rows into smem up front, sw/gamma in registers; the all-reduce scores the snapshots before polling | 13.2 | 4.098 | bit-identical |
 | layer 0's dense down partial summed by layer 1's mix: `tp_allreduce_bf16` + `land_add2_attnres_rms` → `ar_attnres_rms` (prefix = prefix2, out = hidden) | 13.1 | 4.093 | bit-identical |
@@ -30,15 +30,21 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 
 ## Findings
 
-- **%globaltimer trips spurious timeouts.** The Lamport kernels' 2 s timeout fired at step 0 in ~2/3 of the
-  4-layer checks of the fused all-reduces (tp_err = 1 + rank 5 or 6; seen with `--dump` of a copy of the
-  manifest whose `tp_err` is [tokens]-shaped and has no fill). Then a rank sums a slot that has not arrived
-  and the ranks diverge for good ("ranks disagree", hundreds of flips). The same manifest with a 30 s
-  timeout: 3/3 clean and no extra step time, so the wait was not real: the global timer is resynced to the
-  host clock and jumps. All Lamport kernels now count clock64 cycles (2 per ns). d-attn moved k3_dcp.cu too.
-- **withgpu -H 2 livelocks** when two 8-GPU jobs wait at once (each pass takes one host, fails the other,
-  both release, retry in lockstep every 5 s). `work/lease8.sh` (not committed) retries single passes with a
-  random 2-9 s pause; `work/dcheck.sh` / `work/dbench.sh` are loop/d/check / bench through it.
+- **Step-0 deadline misses were an init race.** The Lamport kernels' 2 s deadline fired at step 0 in some
+  4-layer checks (tp_err = 1 + a rank; seen with `--dump` of a copy of the manifest whose `tp_err` is
+  [tokens]-shaped with no fill), then a rank summed a missing slot and the ranks diverged for good. I first
+  blamed %globaltimer jumping and moved the deadline to clock64 (wrong; dropped from the branch). With the
+  deadline at 2000 s, 2 of 3 runs HUNG after load: data lost, not late. Cause (found by d-attn, confirmed by
+  their debug build: ranks 0-6 waiting on rank 7's AR partial): the once-program poisons the stages right
+  after step/'s 200 ms-polled handle exchange, with no barrier, so a fast rank's first push can land in a
+  peer's stage before that peer's init poisons it. Fix (first commit of the branch, on main): the first
+  Lamport call of a process handshakes (block 0 sets ready[rank] in every peer's words past the three
+  stages, every block waits for all of its own; state[6] marks it done) and a passed deadline (30 s) traps
+  instead of summing a missing slot. It also covers d-attn's dcp_lamport: a peer's ready flag is written
+  after its whole once-program, and layer 0's all-reduce precedes the first exchange. Seen since: runs
+  that wait 5-7 s at step 0 (start skew) and pass.
+- withgpu -H 2 used to livelock two waiters (fixed in main 049ff65). Keep D runs to <= 3 in a row with a
+  60 s pause before the next lease (orchestrator, 20:36).
 - **Launch gaps inside the graph are ~0.15 us**: fusing saves the kernel ramp and tail, not launch latency.
 - **`pdl: true` on my kernels (griddepcontrol.wait at their start) is unsafe for K1d**: with it on
   land_add2_attnres_rms alone the check FAILs (430 flips, ranks agree); on the two AR kernels alone or
@@ -53,3 +59,17 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
   medians are 16 / 33 us, fc1 84, fc2 42.
 - moe_front at 10.5 us regardless of rows: ~6 us was the single warp's 16 serial rounds over 28 experts a
   lane, ~1.5 us the routing tables (single-GPU harness `work/h/mf_bench.cu`).
+- **What bounds the fused all-reduces** (stamped debug build: `work/h/mkstamps.py` adds a stamps param,
+  `--dump stamps` of a [tokens, 64] i64 output): at 4 rows the attention AR is ~1.4 us before the first
+  push, 2.4 us of pushing (row blocks only: 1024 vectors x 8 peers through one SM), 0.6 clear, 0.7
+  snapshots, ~2.3 us polling, ~2.3 us epilogue (including other threads' late vectors). Across the 4 ranks
+  of one host the AR ends ~10-11 us after the last rank arrives; ar_finalize additionally waits a median
+  ~22 us at 24 rows on the rank with the most active experts (MoE weight bandwidth; inherent to the EP
+  layout). Tried, no gain, reverted: pushes spread over all 152 blocks in 8-lane groups (4.061 -> 4.124:
+  the combine's 16-gather chain repeats per lane group, stores lose 512 B coalescing); contiguous chunk per
+  block staged in smem (4.104: pushes finish earlier, arrival does not); push before the state barrier and
+  the prefetch (4.059, equal); AR grid 64 / 96 instead of 152 (equal). The end is set by arrival (peer
+  skew + NVLink latency), not by the push.
+- Two-shot all-reduce for 36-48 rows estimated at ~0.4% weighted (one-shot pushes 7x the partial; only the
+  large row counts are bandwidth-bound). Not done.
+- Per-step leftovers: lm_head GEMM 370 us (replicated on every rank, out of scope), mla_split_plan (d-attn).
