@@ -80,6 +80,18 @@ or a tight NVML loop alike), so no trace resolves a kernel; nsys is not installe
     item), and it is a GEMM ABI change in the runtime: out of scope.
   - The f32 intermediate in the MLA glue (wfu's gate columns) went bf16 with d-attn's cb84767
     (gate −0.6 GB read a pass).
+- Sized, not done (each below the stage A/B's ~0.5% spread):
+  - `discard.global.L2` on the glue's dead inputs. These are route's front-GEMM rows (latent +
+    gate/up, 260 MB a call), the residuals' partials (117 MB) and the FC2 output's tail. Only the
+    lines still dirty in L2 are saved, ~1-2 GB of write-back a pass, ~0.1 ms. p-kda's kda_rec
+    discard (de539b9, 1.7 GB a pass) measured flat.
+  - The residuals' second read of each block candidate (score, then mix) comes from L2, not DRAM:
+    ncu L2 1.2 GB against DRAM 0.54 GB a call. Keeping the candidates in registers spilled before;
+    it would be worth ~15 mJ a call, ~0.25 ms an item.
+  - Route at 10 rows is 9.1 us back to back (CUDA graph, harness work/hb2; empty launch 0.7). The
+    bench's 20 us is the per-op bracketing. All of it is ~0.1 ms of a 7.6 ms item.
+- Where an 8192-row item's energy goes: GEMMs and their weight and activation streaming. The glue's
+  ~5% is near its byte floor; the throttling (~12% of the item) is the GEMMs' own power.
 - Threshold 256 rows with 8 splits vs main's 128 with 16, same-lease `loop/p/ab` on stage 0 (main
   aa144e0): A 124.52 / 124.57, B 124.78 / 124.44 ms/item; the 10-row item (the only one it
   changes: 354 stays long) 7.595 → 7.605 ms (+0.13%). No gain: not landed.
