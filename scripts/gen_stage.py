@@ -531,20 +531,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                                   launch("k3_residual", "kern_k3_land_add2", var=RV)]},
         },
         **({
-        # K2 / K3 KDA
-        "conv_silu": {
-            "params": [f"in buffer<{kpart}>", "in buffer<f32>", "inout state", "in buffer<i32>", "i64",
-                       "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "i32", "in buffer<i32>", "i32"],
-            "impl": {"launches": [launch("k3_conv_silu", "kern_k3_conv_silu", grid=[T, 3, inner_l // 512],
-                                         var=KV, defines={**(kda_defs or {}), **kfuse_defs} or None)]},
-        },
+        # K2 + K3 KDA: the short conv in the delta rule's prologue
         "kda_core": {
-            "params": ["in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "in buffer<f32>",
-                       "in buffer<bf16>", "in buffer<f32>", "in buffer<f32>", "in buffer<f32>",
-                       "inout state", "in buffer<i32>", "i64", "out buffer<bf16>", "i32", "in buffer<i32>", "i32"],
+            "params": [f"in buffer<{kpart}>", "in buffer<f32>", "in buffer<f32>", "in buffer<bf16>", "in buffer<f32>",
+                       "in buffer<f32>", "in buffer<f32>", "inout state", "in buffer<i32>", "i64", "out buffer<bf16>",
+                       "i32", "in buffer<i32>", "i32"],
             "impl": {"launches": [launch("k3_kda_core", "kern_k3_kda_core", grid=[T, hl, 1], var=KV,
-                                         defines={**(kda_defs or {}), **kfuse_defs,
-                                                  **({"WSM_LDS": kfused, "WSM_FA": hl} if kfused else {})} or None)]},
+                                         defines={"KDA_CONV": 1, **(kda_defs or {}), **kfuse_defs,
+                                                  **({"WSM_LDS": kfused, "WSM_FA": hl} if kfused else {})})]},
         },
         "mla_split_plan": {
             "params": ["in buffer<i32>", "out buffer<i32>", "i32", "i32"],
@@ -1038,9 +1032,6 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     work("kda_partial", kfused or fused_l, kpart, var=KV)
     if not kfused:
         work("wsm_partial", WSM, kpart, var=KV)
-    if decode:
-        for n in ["conv_q", "conv_k", "conv_v"]:
-            work(n, inner_l, var=KV)
     work("gated", gate_l)
     if mla:
         work("mla_gate", gate_l)
@@ -1347,14 +1338,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                     span_kda(L, w, line, KB, S, kda_of(i))
                     span_out_gate(L, w, S)
                 else:
-                    step(L + "conv", "conv_silu", b("kda_partial"), w("cw"), {"state": kda_of(i)}, line, i64(line_l),
-                         b("conv_q"), b("conv_k"), b("conv_v"), KB, b("span_at"), S)
+                    step(L + "kda_core", "kda_core", b("kda_partial"), w("cw"), wsm_part, w("w_f_b"), w("dt_bias"),
+                         w("a_log"), w("gamma_o"), {"state": kda_of(i)}, line, i64(line_l), gated_kda, KB, b("span_at"), S)
                     if span:
                         span_kda(L, w, line, KB, S)
-                    step(L + "kda_core", "kda_core", b("conv_q"), b("conv_k"), b("conv_v"), wsm_part,
-                         b("kda_partial"), w("w_f_b"), w("dt_bias"), w("a_log"), w("gamma_o"), {"state": kda_of(i)}, line,
-                         i64(line_l), gated_kda, KB, b("span_at"), S)
-                    if span:
                         span_out_gate(L, w, S)
             if chunk:
                 # o_proj over every row, bf16: this rank's heads' slice of the

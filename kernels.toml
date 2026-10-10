@@ -183,3 +183,13 @@ defines = { HEADS = 12, LDS = 6400 }
 [kernels."k3_mla_absorb_mma"]
 sha256 = "9612d4dab1ad4584414211f8ecffd778f747a32ff057b128971f0765ad634d7c"
 source = "source/k3_mla_absorb_mma.cu"
+
+[kernels."k3_kda_core+KDA_CONV=1"]
+sha256 = "04e9557b9ba7fb6660a1dfec5e427c2ed265d2976fe4fbb6b86b51e33a01cef9"
+source = "source/k3_kda_core.cu"
+defines = { KDA_CONV = 1 }
+
+[kernels."k3_kda_core+HEADS=12+KDA_CONV=1+LDS=6400+WSM_FA=12+WSM_LDS=6400"]
+sha256 = "55587f0859bdaa094ae607d2474f455ca4285c859f04753bfcdc0a5d150d2f6f"
+source = "source/k3_kda_core.cu"
+defines = { HEADS = 12, KDA_CONV = 1, LDS = 6400, WSM_FA = 12, WSM_LDS = 6400 }

@@ -68,6 +68,19 @@
 // The w_f_b tile is read with the same lane split, and summed as a pairwise
 // tree -- see the comment on the ga block.
 //
+// -DKDA_CONV=1 folds K2 (k3_conv_silu.cu) into the prologue: the block's
+// thread d runs the short conv + SiLU of column base + d of the q, k and v
+// streams itself (the same f32 sums and bf16 landings, the window shifted in
+// place in the row's line), so conv_q / conv_k / conv_v never touch memory.
+// Its signature drops them and reads q | k | v | g from one partial:
+//
+//   extern "C" __global__ void kern_k3_kda_core(
+//       const f32* partial,        // [B, LDS]  q | k | v | g, 4 * INNER columns
+//       const f32* cw,             // [3 stream][4 tap][INNER]
+//       const f32* wsm_partial, const bf16* w_f_b, const f32* dt_bias, const f32* a_log, const f32* gamma_o,
+//       void* kda_base, const int* line_index, long long line_bytes,
+//       bf16* out, int B, const int* span_at, int span);
+//
 //   nvcc -cubin -arch=sm_103a -O3 -Xptxas -v \
 //        -o target/cubins/k3_kda_core.cubin tools/kernels-src/k3_kda_core.cu
 #include <cuda_bf16.h>
@@ -106,6 +119,9 @@
 #ifndef KDA_SWIZZLE
 #define KDA_SWIZZLE 1
 #endif
+#ifndef KDA_CONV
+#define KDA_CONV 0
+#endif
 #ifndef KDA_STREAM
 #define KDA_STREAM 1
 #endif
@@ -143,10 +159,16 @@ __device__ __forceinline__ float block_sum(float v, float* sm) {
 }
 
 extern "C" __global__ __launch_bounds__(128) void kern_k3_kda_core(
+#if KDA_CONV
+    const float* __restrict__ gate_partial,
+    const float* __restrict__ cw,
+    const float* __restrict__ wsm_partial,
+#else
     const bf16* __restrict__ conv_q, const bf16* __restrict__ conv_k,
     const bf16* __restrict__ conv_v,
     const float* __restrict__ wsm_partial,
     const float* __restrict__ gate_partial,
+#endif
     const bf16* __restrict__ w_f_b,
     const float* __restrict__ dt_bias,
     const float* __restrict__ a_log,
@@ -178,9 +200,36 @@ extern "C" __global__ __launch_bounds__(128) void kern_k3_kda_core(
   __shared__ float sh_red[8];
 
   // ---- l2norm chain for q and k (all-bf16 chain, f32 sums) ----
+#if KDA_CONV
+  bf16 qkv[3];
+  {
+    const int c = base + d;
+    bf16* win = reinterpret_cast<bf16*>(reinterpret_cast<char*>(kda_base) + (long long)line_index[b] * line_bytes +
+                                        (long long)HEADS * KD * KD * 4) + c;
+#pragma unroll
+    for (int s = 0; s < 3; ++s, win += 3 * INNER) {
+      const bf16 w0 = win[0], w1 = win[INNER], w2 = win[2 * INNER];
+      const bf16 x = __float2bfloat16_rn(gate_partial[(size_t)b * LDS + s * INNER + c]);
+      const float* k = cw + (size_t)s * 4 * INNER + c;
+      win[0] = w1;
+      win[INNER] = w2;
+      win[2 * INNER] = x;
+      float y = __bfloat162float(w0) * k[0];
+      y = fmaf(__bfloat162float(w1), k[INNER], y);
+      y = fmaf(__bfloat162float(w2), k[2 * INNER], y);
+      y = fmaf(__bfloat162float(x), k[3 * INNER], y);
+      const float sb = __bfloat162float(__float2bfloat16_rn(y));
+      qkv[s] = __float2bfloat16_rn(sb * (1.0f / (1.0f + expf(-sb))));
+    }
+  }
+  const bf16 qv = qkv[0];
+  const bf16 kv = qkv[1];
+  sh_v[d] = __bfloat162float(qkv[2]);
+#else
   const bf16 qv = conv_q[(size_t)b * INNER + base + d];
   const bf16 kv = conv_k[(size_t)b * INNER + base + d];
   sh_v[d] = __bfloat162float(conv_v[(size_t)b * INNER + base + d]);
+#endif
 
   float qsq = __bfloat162float(__hmul(qv, qv));
   float ksq = __bfloat162float(__hmul(kv, kv));
