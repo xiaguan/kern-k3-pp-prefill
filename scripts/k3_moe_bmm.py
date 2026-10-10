@@ -58,7 +58,8 @@ def glue(entry, grid, block=256, params=None, args=None, mod=None):
             **({"params": params, "args": args} if params else {})}
 
 
-def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, prefix="", names=None, stride=None):
+def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, prefix="", names=None, stride=None,
+           pdl=False):
     """The ops and workspace buffers for `local` of `experts` experts over `tokens` (the chunk's token count: a var
     name or an expression, at most `tokens_max`) routed from an activation of `rows_max` rows; the quant
     runs over `quant_rows` rows and the combine writes `out_rows` rows (expressions). `steps` lists the
@@ -156,6 +157,12 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
             "impl": {"launches": [glue("kern_k3g_finalize_rms", [out_rows, 1, 1], block=H // 8, mod=pglue)]},
         },
     }
+    # The batched GEMMs wait on the grid before them (griddepcontrol.wait) and trigger their dependents
+    # early: with `pdl` launched as programmatic dependents, their CTAs land while the kernel before
+    # them finishes.
+    for op in ("moe_fc1", "moe_fc2") if pdl else ():
+        for l in ops[op]["impl"]["launches"]:
+            l["pdl"] = True
     assert trtllm_bmm.params(v1) == ["a", "sf_a", "b", "sf_b", "c", "sf_c", "route_map", "alpha", "beta",
                                      "num_non_exiting", "total_padded", "cta_batch", "cta_limit"]
     assert trtllm_bmm.params(v2) == ["a", "sf_a", "b", "sf_b", "c", "num_non_exiting", "total_padded", "cta_batch",

@@ -28,6 +28,8 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 | head argmax in one launch (`kern_k3_argmax_f32_fused`: 16 busy 256-thread blocks a row, the row's last block takes the max) | 13.1 | 4.041 | bit-identical |
 | embedding gather + layer 0's `attnres_rms_first` → `kern_k3_embed_rms` (nb = 0: snapshot + rms of the gathered row) | 13.0 | 4.040 | bit-identical |
 | vocab-parallel lm_head (SGLang's layout for this group): each member's 20480-row slice GEMM, `kern_k3_head_argmax` copies the slice into member 0's full logits and exchanges one argmax key per row (3 stages, zero = not arrived) | 13.0 | 3.742 | lm_head GEMM at N = 20480 (another cuBLAS kernel): logits relRMS 1e-5 vs main, 0 flips |
+| (main 0c3c812 + the head: 3.930 -> 3.632) | 13.0 | 3.632 | |
+| the MoE batched GEMMs launch as programmatic dependents (`pdl: true` on fc1 / fc2: their cubins wait with griddepcontrol and trigger early) | 13.0 | 3.582 | unchanged (launch attribute only) |
 
 ## Findings
 
@@ -76,3 +78,11 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 - The head was 370 us a step (every member computing all 163840 logits from a 2.35 GB weight). SGLang's
   captured graph for this group runs it vocab-parallel (a 1/8 GEMM, then a logits all-gather); now so do we,
   with the logits gathered to member 0 only (the caller reads member 0's) and the argmax by key exchange.
+- **The 26.6 ms/step check (orchestrator, 21:24) did not reproduce** in 14 checks of an instrumented build
+  (work/dbg: device printf when the first-call handshake, an all-reduce poll or the head's key wait passes
+  100 ms, then 5 ms; cubins swapped into a copy of the manifest). All 14 ran at 3.3-3.8 ms/step. Over 100 ms:
+  only the handshake at step 0 (0.15-0.2 s, start skew, once). Over 5 ms: a few dozen all-reduce polls a run
+  at 5-9 ms (ranks waiting for member 0, whose host reads and scans 4 x 163840 logits after every check
+  step); the head's key wait never. 15 s over 640 steps is ~23 ms every step on every rank, which none of
+  the kernels' waits showed; host-side contention is the likelier cause.
+

@@ -419,7 +419,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
     # A DCP rank's combine runs over every row the flat MoE all-reduce sums
     # (`seqs_max`), writing zeros past `tokens`.
     bp = (k3_moe_bmm.pieces(epr, experts, T, seqs_max, seqs_max, T, seqs_max, prefix="moe.", names=moe_variants,
-                            stride=tp) if dcp else
+                            stride=tp, pdl=True) if dcp else
           k3_moe_bmm.pieces(epr, experts, T, chunk_max, tp * own_max, OG, {"mul": [OG, tp]}, prefix="moe.",
                             names=moe_variants)
           if bmm else None)
