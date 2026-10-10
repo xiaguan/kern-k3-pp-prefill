@@ -84,7 +84,7 @@ def kda_op(hl, rows_max, seqs_max, module, rec_module, rows, seqs, scale=kda.QSC
     tmap = lambda param, dims, strides, box, swizzle: {"pack": {"size": 128, "fields": [{"at": 0, "tensormap": {
         "param": param, "dtype": "bf16", "dims": dims, "strides": strides, "box": box, "swizzle": swizzle,
         "l2_promotion": 128}}]}}
-    ws_tile = lambda param: tmap(param, [D, n * kda.CHUNK], [256], [64, kda.CHUNK], 128)
+    ws_tile = lambda param: tmap(param, [64, n * kda.CHUNK, 2], [256, 128], [64, kda.CHUNK, 2], 128)
     ws_tile_sq = lambda param: tmap(param, [kda.CHUNK, n * kda.CHUNK], [32], [kda.CHUNK, kda.CHUNK], 0)
     rec = {
         **rec_module, "entry": "kern_k3_kda_rec", "block": [REC_BLOCK, 1, 1],
@@ -93,7 +93,8 @@ def kda_op(hl, rows_max, seqs_max, module, rec_module, rows, seqs, scale=kda.QSC
             "in buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "inout state", "in buffer<i32>", "i64",
             "in buffer<bf16>", "in buffer<f32>", "out buffer<bf16>", "out buffer<bf16>", "in buffer<i32>",
             "in buffer<i64>", "in buffer<i32>", "inout buffer<i32>", "bytes<4>", "i32", "i32"],
-        "args": [ws_tile(7), ws_tile(8), ws_tile(9), tmap(2, [hl * D, rows_max], [hl * D * 2], [64, kda.CHUNK], 128),
+        "args": [ws_tile(7), ws_tile(8), ws_tile(9),
+                 tmap(2, [64, rows_max, hl, 2], [hl * D * 2, 256, 128], [64, kda.CHUNK, 1, 2], 128),
                  ws_tile_sq(11), ws_tile_sq(12),
                  *({"param": k} for k in [2, 4, 10, 17, 18, 19, 20, 21, 0, 22, 23]), cu, tp, {"param": 24}, tiles,
                  T, N],

@@ -5,8 +5,9 @@
 // on every output row, and the conv windows advanced (K9's last step).
 //
 //   extern "C" __global__ void kern_k3_kda_rec(
-//       CUtensorMap tm_kd, tm_qd, tm_kr,  // [HEADS * tiles * 16 rows][128] bf16, box 64 x 16, 128B swizzle
-//       CUtensorMap tm_v,                 // span_v [rows][INNER], box 64 x 16, 128B swizzle
+//       CUtensorMap tm_kd, tm_qd, tm_kr,  // [HEADS * tiles * 16 rows][128] bf16 as (64, rows, 2 halves), box
+//                                         // 64 x 16 x 2, 128B swizzle
+//       CUtensorMap tm_v,                 // span_v [rows][INNER] as (64, rows, HEADS, 2), box 64 x 16 x 1 x 2
 //       CUtensorMap tm_inv, tm_mqk,       // [HEADS * tiles * 16 rows][16] bf16, box 16 x 16
 //       const bf16* v,          // [rows, INNER]  conv'd v (span_v), a partial tile's rows
 //       const bf16* beta,       // [HEADS, span]  beta logits (span_beta)
@@ -29,8 +30,8 @@
 // warp w the 16 value columns 16w..16w+16 of the head's state, held as bf16 in
 // registers as the A operand of mma.m16n8k16: FlashKDA's products transposed
 // (S [dv][dk] times kd^T instead of kd times S^T), which sums the same products
-// in the same k order per output element. Warp 8 streams each 16-row tile's
-// inputs into an eight-stage ring (TMA, 128-byte swizzle so ldmatrix is
+// in the same k order per output element. Warps 8 and 10 stream each 16-row
+// tile's inputs into an eight-stage ring (TMA, 128-byte swizzle so ldmatrix is
 // conflict-free); warp 9 advances the windows, then copies every output tile
 // to `raw` and publishes them four at a time (`progress` = tiles done, st.release). The last
 // K12_GATE_CTAS CTAs, on the SMs one sequence's heads leave idle, gate the
@@ -60,8 +61,8 @@
 
 typedef __nv_bfloat16 bf16;
 
-// A 16-row tile of 128 bf16 columns as TMA lands it with the 128-byte
-// swizzle: two boxes of 64 columns, 16-byte chunk c of row r at c ^ (r % 8).
+// A 16-row tile of 128 bf16 columns as one TMA box lands it with the 128-byte
+// swizzle: two halves of 64 columns, 16-byte chunk c of row r at c ^ (r % 8).
 struct K12Stage {
   alignas(1024) unsigned char kd[4096];
   alignas(1024) unsigned char qd[4096];
@@ -129,6 +130,22 @@ __device__ __forceinline__ void k12_tma(void* dst, const K12Tmap& map, int x, in
 // byte offset of row `row`, 16-byte chunk `chunk` (of 16) in a swizzled tile
 __device__ __forceinline__ unsigned k12_sw(int row, int chunk) {
   return (chunk >> 3) * 2048 + row * 128 + (((chunk & 7) ^ (row & 7)) << 4);
+}
+
+__device__ __forceinline__ void k12_tma3(void* dst, const K12Tmap& map, int x, int y, int z, uint64_t* bar) {
+  asm volatile(
+      "cp.async.bulk.tensor.3d.shared::cluster.global.tile.mbarrier::complete_tx::bytes [%0], [%1, {%2, %3, %4}], "
+      "[%5];" ::"r"(k12_smem(dst)),
+      "l"(&map), "r"(x), "r"(y), "r"(z), "r"(k12_smem(bar))
+      : "memory");
+}
+
+__device__ __forceinline__ void k12_tma4(void* dst, const K12Tmap& map, int x, int y, int z, int w, uint64_t* bar) {
+  asm volatile(
+      "cp.async.bulk.tensor.4d.shared::cluster.global.tile.mbarrier::complete_tx::bytes [%0], [%1, {%2, %3, %4, "
+      "%5}], [%6];" ::"r"(k12_smem(dst)),
+      "l"(&map), "r"(x), "r"(y), "r"(z), "r"(w), "r"(k12_smem(bar))
+      : "memory");
 }
 
 __device__ __forceinline__ void k12_ldsm(unsigned (&r)[4], unsigned addr) {
@@ -311,34 +328,35 @@ __device__ __forceinline__ void k12_recurrence(K12Smem& sm, const float* rec_in,
   }
 }
 
-// Tile c's inputs into its stage, by the whole warp: whole tiles by 2D TMA; a sequence's
-// last, partial tile has its v rows stored by hand (zero past the sequence).
-__device__ __forceinline__ void k12_load(K12Smem& sm, int c, int lane, int len, long long bos, long long ws0, int h,
-                                         const K12Tmap& tm_kd, const K12Tmap& tm_qd, const K12Tmap& tm_kr,
-                                         const K12Tmap& tm_v, const K12Tmap& tm_inv, const K12Tmap& tm_mqk,
-                                         const bf16* v, const float* ws_gt) {
+// Tile c's inputs into its stage, by two warps issuing side by side (a TMA
+// instruction takes ~100 cycles to issue): warp 0 kd / qd / kr and g_total,
+// warp 1 v, inv and mqk; a sequence's last, partial tile has its v rows stored
+// by hand (zero past the sequence). Each arrives on the stage's full barrier.
+__device__ __forceinline__ void k12_load(K12Smem& sm, int c, int which, int lane, int len, long long bos,
+                                         long long ws0, int h, const K12Tmap& tm_kd, const K12Tmap& tm_qd,
+                                         const K12Tmap& tm_kr, const K12Tmap& tm_v, const K12Tmap& tm_inv,
+                                         const K12Tmap& tm_mqk, const bf16* v, const float* ws_gt) {
   const int s = c % K12_STAGES;
   K12Stage& st = sm.in[s];
   const int valid = min(16, len - 16 * c);
   const int ws = (int)(ws0 + c) * 16, row0 = (int)(bos + 16 * c);
   if (lane == 0) {
     k12_wait(&sm.empty[s], ((c / K12_STAGES) & 1) ^ 1);
-    k12_expect_tx(&sm.full[s], 3 * 4096 + 2 * 512 + 512 + (valid == 16 ? 4096 : 0));
-    for (int b = 0; b < 2; ++b) {
-      k12_tma(st.kd + 2048 * b, tm_kd, 64 * b, ws, &sm.full[s]);
-      k12_tma(st.qd + 2048 * b, tm_qd, 64 * b, ws, &sm.full[s]);
-      k12_tma(st.kr + 2048 * b, tm_kr, 64 * b, ws, &sm.full[s]);
-    }
-    k12_tma(st.inv, tm_inv, 0, ws, &sm.full[s]);
-    k12_tma(st.mqk, tm_mqk, 0, ws, &sm.full[s]);
-    k12_bulk(st.gt, ws_gt + (long long)ws * 8, 512, &sm.full[s]);
-    if (valid == 16) {
-      k12_tma(st.v, tm_v, h * 128, row0, &sm.full[s]);
-      k12_tma(st.v + 2048, tm_v, h * 128 + 64, row0, &sm.full[s]);
+    if (which == 0) {
+      k12_expect_tx(&sm.full[s], 3 * 4096 + 512);
+      k12_tma3(st.kd, tm_kd, 0, ws, 0, &sm.full[s]);
+      k12_tma3(st.qd, tm_qd, 0, ws, 0, &sm.full[s]);
+      k12_tma3(st.kr, tm_kr, 0, ws, 0, &sm.full[s]);
+      k12_bulk(st.gt, ws_gt + (long long)ws * 8, 512, &sm.full[s]);
+    } else {
+      k12_expect_tx(&sm.full[s], 2 * 512 + (valid == 16 ? 4096 : 0));
+      if (valid == 16) k12_tma4(st.v, tm_v, 0, row0, h, 0, &sm.full[s]);
+      k12_tma(st.inv, tm_inv, 0, ws, &sm.full[s]);
+      k12_tma(st.mqk, tm_mqk, 0, ws, &sm.full[s]);
     }
   }
   __syncwarp();
-  if (valid < 16 && lane < 16) {
+  if (which == 1 && valid < 16 && lane < 16) {
     const uint4* src = (const uint4*)(v + (long long)(row0 + lane) * K12_INNER + h * 128);
 #pragma unroll
     for (int k = 0; k < 16; ++k) *(uint4*)(st.v + k12_sw(lane, k)) = lane < valid ? src[k] : make_uint4(0, 0, 0, 0);
@@ -346,6 +364,7 @@ __device__ __forceinline__ void k12_load(K12Smem& sm, int c, int lane, int len, 
   __syncwarp();
   if (lane == 0) k12_arrive(&sm.full[s]);
 }
+
 
 
 // ld.acquire / st.release of a progress counter (gpu scope)
@@ -493,7 +512,7 @@ extern "C" __global__ void __launch_bounds__(K12_THREADS, 1) kern_k3_kda_rec(
   char* line = (char*)kda_base + (long long)line_index[j] * line_bytes;
   if (threadIdx.x == 0) {
     for (int s = 0; s < K12_STAGES; ++s) {
-      k12_bar_init(&sm.full[s], 1);
+      k12_bar_init(&sm.full[s], 2);
       k12_bar_init(&sm.empty[s], K12_MMA_WARPS);
     }
     for (int o = 0; o < K12_OSTAGES; ++o) {
@@ -510,9 +529,10 @@ extern "C" __global__ void __launch_bounds__(K12_THREADS, 1) kern_k3_kda_rec(
   if (warp < K12_MMA_WARPS) {
     float* rec = (float*)(line + (long long)h * 128 * 128 * 4);
     k12_recurrence(sm, rec, rec, len);
-  } else if (warp == K12_MMA_WARPS) {
+  } else if (warp == K12_MMA_WARPS || warp == K12_MMA_WARPS + 2) {
+    const int which = warp == K12_MMA_WARPS ? 0 : 1;
     for (int c = 0; c < ntiles; ++c)
-      k12_load(sm, c, lane, len, bos, ws0, h, tm_kd, tm_qd, tm_kr, tm_v, tm_inv, tm_mqk, v, ws_gt);
+      k12_load(sm, c, which, lane, len, bos, ws0, h, tm_kd, tm_qd, tm_kr, tm_v, tm_inv, tm_mqk, v, ws_gt);
   } else if (warp == K12_MMA_WARPS + 1) {
     // The conv windows first (the gather read them, nothing after it does), lane l columns 4l..4l+4
     if (len > 0) {
