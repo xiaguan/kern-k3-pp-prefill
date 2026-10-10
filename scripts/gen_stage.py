@@ -248,12 +248,13 @@ def dim(x):
     return {"var": x} if isinstance(x, str) else {"expr": x}
 
 
-def mla_attn_op(batch_max, page_stride, split_max, shared_table=False, batch=T):
+def mla_attn_op(batch_max, page_stride, split_max, shared_table=False, batch=T, reduce=True):
     """The DSL attention as one op: split kernel + reduction, structs packed from the interface.
     Interface: q_abs latent | q_abs rope (+1024 B) | kv latent | kv rope (+1024 B) | block_table |
     seq_lens | mla_bsk | o_lat | lse | acc_o | acc_lse | B | max_pages. `shared_table`: every
     row reads page-table row 0 (a prefill chunk's rows are one sequence). `batch` is the rows'
-    dimension, at most `batch_max`."""
+    dimension, at most `batch_max`. Without `reduce` the splits stay in acc_o / acc_lse for the
+    DCP exchange to merge."""
     V = {"at": 0, **dim(batch)}
     tmap = lambda param, d0, page, box1, stride1: pack(128, {"at": 0, "tensormap": {
         "param": param, "dtype": "bf16", "dims": [d0, page, 0 if page == PAGE else batch_max],
@@ -311,7 +312,7 @@ def mla_attn_op(batch_max, page_stride, split_max, shared_table=False, batch=T):
              "grid": [2, batch, split_max], "cluster": [2, 1, 1], "shared_mem": MLA_MAIN_SMEM},
             {**mod, "entry": MLA_REDUCE, "params": reduce_params, "args": reduce_args, "block": [128, 1, 1],
              "grid": [HEADS, 1, batch], "shared_mem": MLA_REDUCE_SMEM},
-        ]},
+        ][:2 if reduce else 1]},
     }
 
 
@@ -552,7 +553,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
             "params": ["in buffer<i32>", "out buffer<i32>", "i32", "i32"],
             "impl": {"launches": [launch("k3_mla_split_plan", "kern_k3_mla_split_plan")]},
         },
-        "mla_attn": mla_attn_op(seqs_max, page_stride, mla_split_max),
+        "mla_attn": mla_attn_op(seqs_max, page_stride, mla_split_max, reduce=not xchg),
         **({"gemm_bf16": {
             "params": ["in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32", "i32", "i32"],
             "impl": {"launches": [{"entry": "extern:cublaslt_bf16_tn"}]},
@@ -773,8 +774,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         # head's partial pushed into its owner's Lamport stage over NVLink, the
         # members' partials of this member's heads merged by their LSE.
         ops["dcp_exchange"] = {
-            "params": ["in buffer<bf16>", "in buffer<f32>", "in buffer<i32>", "out buffer<bf16>", "inout buffer<u8>",
-                       "in buffer<u64>", "inout buffer<i32>", "out buffer<i32>", "i32", "i32", "i64", "i64"],
+            "params": ["in buffer<f32>", "in buffer<f32>", "in buffer<i32>", "in buffer<i32>", "i32", "out buffer<bf16>",
+                       "inout buffer<u8>", "in buffer<u64>", "inout buffer<i32>", "out buffer<i32>", "i32", "i32", "i64",
+                       "i64"],
             "impl": {"launches": [launch("k3_dcp", "kern_k3_dcp_exchange", grid=[TP_AR_GRID, 1, 1],
                                          block=[256, 1, 1])]},
         }
@@ -1334,7 +1336,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                          b("o_lat"), b("mla_lse"), b("mla_acc_o"), b("mla_acc_lse"), B, i32(max_pages))
                     if xchg:
                         # every head over this member's positions → this member's heads over all of them
-                        step(L + "dcp", "dcp_exchange", b("o_lat"), b("mla_lse"), b("seq_lens"), b("o_lat_l"),
+                        step(L + "dcp", "dcp_exchange", b("mla_acc_o"), b("mla_acc_lse"), b("seq_lens"), b("mla_bsk"),
+                             i32(mla_split_max), b("o_lat_l"),
                              b("dcp_lamport"), b("dcp_lamport_peers"), b("dcp_state"), b("tp_err"), {"rank": "tp"}, B,
                              i64(dcp_stage), i64(TP_TIMEOUT_NS))
                         step(L + "vup", "mla_vup_gate", b("o_lat_l"), w("w_kv_b_l"), b("mla_gate"), b("gated"), B)

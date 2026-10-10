@@ -49,20 +49,28 @@
 //   Summation order is q = 0 .. NRANKS - 1, so the result is the same bytes on
 //   every run.
 //
-// kern_k3_dcp_exchange is the four steps above in one launch: fixup, pack,
-// the all-to-all and combine, with the group's peer-mapped Lamport stages for
-// the wire instead of NCCL (TensorRT-LLM's one-shot protocol, as
-// peer_allreduce_bf16.cu runs it).
+// kern_k3_dcp_exchange is the DSL decode's split reduction and the four
+// steps above in one launch: fixup, pack, the all-to-all and combine, with
+// the group's peer-mapped Lamport stages for the wire instead of NCCL
+// (TensorRT-LLM's one-shot protocol, as peer_allreduce_bf16.cu runs it).
 //
 //   extern "C" __global__ void kern_k3_dcp_exchange(
-//       const bf16* o_lat, const float* lse,   // [R, HEADS, LAT], [R, HEADS]
-//       const int* seq_lens,                   // [R]
+//       const float* acc_o,                    // [R][M_TILE][split_max][LAT]  the splits' normalized o
+//       const float* acc_lse,                  // [R][M_TILE][split_max]       their log2-sum-exp
+//       const int* seq_lens, const int* bsk,   // [R]  positions held, splits asked for
+//       int split_max,
 //       bf16* o,                               // [R, HL, LAT]
 //       uint8_t* lamport,                      // 3 stages of `stage_bytes`
 //       const unsigned long long* peers,       // [NRANKS] every member's `lamport`
 //       int* state, int* err,                  // [8] zeroed carry; sticky 1 + the late member
 //       int rank, int R, long long stage_bytes, long long timeout_ns);
 //   grid: any grid whose blocks are all resident at once   block 256
+//
+//   The splits merge as the DSL's reduction kernel does: row b ran
+//   S = ceil(t / ceil(t / bsk[b])) splits of its t = ceil(seq_lens[b] / 128)
+//   tiles; g = m + log2(sum_s exp2(l_s - m)) over them (m their max, 0 if
+//   -inf), o = bf16(sum_s acc_o[s] * exp2(l_s - g)) and lse = g / log2(e),
+//   ex2 / lg2 approximate.
 //
 //   A stage holds NRANKS slots, slot q member q's partials of this member's
 //   heads: R * HL records of REC 16-byte vectors, a head's o (LANES vectors,
@@ -159,6 +167,20 @@ extern "C" __global__ void __launch_bounds__(256) kern_k3_dcp_combine(const bf16
 }
 
 #define REC (LANES + 1)
+#define M_TILE 128
+#define LOG2E 1.4426950408889634f
+
+__device__ __forceinline__ float ex2(float x) {
+  float y;
+  asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(y) : "f"(x));
+  return y;
+}
+
+__device__ __forceinline__ float lg2(float x) {
+  float y;
+  asm("lg2.approx.ftz.f32 %0, %1;" : "=f"(y) : "f"(x));
+  return y;
+}
 
 __device__ __forceinline__ uint4 ld_volatile(const uint4* p) {
   uint4 v;
@@ -209,9 +231,9 @@ __device__ __forceinline__ uint4 await(const uint4* p, int from, long long timeo
   }
 }
 
-extern "C" __global__ void __launch_bounds__(256) kern_k3_dcp_exchange(
-    const bf16* __restrict__ o_lat, const float* __restrict__ lse, const int* __restrict__ seq_lens,
-    bf16* __restrict__ o, uint8_t* lamport, const unsigned long long* __restrict__ peers, int* state, int* err,
+extern "C" __global__ void __launch_bounds__(256, 1) kern_k3_dcp_exchange(
+    const float* __restrict__ acc_o, const float* __restrict__ acc_lse, const int* __restrict__ seq_lens,
+    const int* __restrict__ bsk, int split_max, bf16* __restrict__ o, uint8_t* lamport, const unsigned long long* __restrict__ peers, int* state, int* err,
     int rank, int R, long long stage_bytes, long long timeout_ns) {
   const int flag = state[2];
   long long* clear_ptr = reinterpret_cast<long long*>(state + 4);
@@ -226,17 +248,37 @@ extern "C" __global__ void __launch_bounds__(256) kern_k3_dcp_exchange(
   const int lane = threadIdx.x % LANES, sub = threadIdx.x / LANES;
   for (int it = blockIdx.x; it < R * (HEADS / HPB); it += gridDim.x) {
     const int b = it / (HEADS / HPB), h = it % (HEADS / HPB) * HPB + sub;
-    const bool empty = seq_lens[b] == 0;
-    uint4 v = empty ? make_uint4(0, 0, 0, 0)
-                    : reinterpret_cast<const uint4*>(o_lat + ((long long)b * HEADS + h) * LAT)[lane];
-    v = make_uint4(unpoison(v.x), unpoison(v.y), unpoison(v.z), unpoison(v.w));
+    const int n = seq_lens[b];
+    float l = -CUDART_INF_F;
+    uint4 v = make_uint4(0, 0, 0, 0);
+    if (n != 0) {
+      const int tiles = (n + M_TILE - 1) / M_TILE, per = (tiles + bsk[b] - 1) / bsk[b], splits = (tiles + per - 1) / per;
+      const long long rec = (long long)b * M_TILE + h;
+      const float* ls = acc_lse + rec * split_max;
+      float m = -CUDART_INF_F;
+      for (int i = 0; i < splits; ++i) m = fmaxf(m, ls[i]);
+      if (m == -CUDART_INF_F) m = 0.f;
+      float sum = 0.f;
+      for (int i = 0; i < splits; ++i) sum += ex2(ls[i] - m);
+      l = sum != 0.f ? m + lg2(sum) : CUDART_INF_F;
+      float a[VEC] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+      const float4* src = reinterpret_cast<const float4*>(acc_o + rec * split_max * LAT) + 2 * lane;
+      for (int i = 0; i < splits; ++i, src += LAT / 4) {
+        const float w = ex2(ls[i] - l);
+        const float4 x = src[0], y = src[1];
+        a[0] = fmaf(x.x, w, a[0]), a[1] = fmaf(x.y, w, a[1]), a[2] = fmaf(x.z, w, a[2]), a[3] = fmaf(x.w, w, a[3]);
+        a[4] = fmaf(y.x, w, a[4]), a[5] = fmaf(y.y, w, a[5]), a[6] = fmaf(y.z, w, a[6]), a[7] = fmaf(y.w, w, a[7]);
+      }
+      __nv_bfloat162* v2 = reinterpret_cast<__nv_bfloat162*>(&v);
+#pragma unroll
+      for (int k = 0; k < VEC / 2; ++k) v2[k] = __floats2bfloat162_rn(a[2 * k], a[2 * k + 1]);
+      v = make_uint4(unpoison(v.x), unpoison(v.y), unpoison(v.z), unpoison(v.w));
+      l *= 1.0f / LOG2E;
+    }
     uint4* dst = reinterpret_cast<uint4*>(reinterpret_cast<uint8_t*>(peers[h / HL]) + stage) + rank * slot +
                  ((long long)b * HL + h % HL) * REC;
     dst[lane] = v;
-    if (lane == 0) {
-      const float l = empty ? -CUDART_INF_F : lse[(long long)b * HEADS + h];
-      dst[LANES] = lse_word(l != l || l == CUDART_INF_F ? -CUDART_INF_F : l);
-    }
+    if (lane == 0) dst[LANES] = lse_word(l != l || l == CUDART_INF_F ? -CUDART_INF_F : l);
   }
   const uint4 poison = make_uint4(0x80008000u, 0x80008000u, 0x80008000u, 0x80008000u);
   for (long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x; i < clear_count; i += (long long)gridDim.x * blockDim.x)

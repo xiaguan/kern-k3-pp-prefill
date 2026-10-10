@@ -7,6 +7,7 @@
 | main (2026-10-10) | 24.7 | 4.562 ms/step |
 | after kda conv fold | 23.9 | 4.556 ms/step |
 | after dcp exchange kernel | 23.2 | 4.409 ms/step |
+| exchange merges the DSL splits | 22.9 | 4.400 ms/step |
 
 ## Done
 
@@ -26,6 +27,13 @@
   4.409 ms/step: the NCCL SendRecv alone was 23 us + a 3 us gap at 48 rows.
   The receiver waits for every vector even when its weight is 0, so no
   write of call c can land after the stage's re-poison in call c + 1.
+
+- **DSL split reduction folded into the exchange's send side**: the MLA op
+  keeps only the split kernel (`reduce=False`); the sender merges acc_o /
+  acc_lse as the DSL reduction does (S = ceil(t / ceil(t / bsk)), ex2/lg2
+  approx, fma in split order, lse / log2 e). Bit-identical even at 4 rows
+  (several splits). 4.409 → 4.400. Needs `__launch_bounds__(256, 1)`:
+  with plain (256) ptxas squeezes it to 40 regs and spills.
 
 ## Profile (nsys, rank 0, 48 rows @128k, before the exchange kernel)
 
