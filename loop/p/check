@@ -8,7 +8,7 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../env.sh"
 cand=$(realpath "$1") out=$(realpath -m "$2") base=$(realpath "${3:-$K3_LOOP_DATA/base/p-l12.json}")
 mkdir -p "$(dirname "$out")"
-"$LOOP_DIR/withgpu" -n 1 "$K3_KERN_BIN" test --reference "$base" --manifest "$cand" --kernels "$REPO/build" \
+"$LOOP_DIR/withgpu" -n 1 env KERN_CACHE_DIR="$KERN_CACHE_DIR" LD_LIBRARY_PATH="$LD_LIBRARY_PATH" "$K3_KERN_BIN" test --reference "$base" --manifest "$cand" --kernels "$REPO/build" \
   --weights "$K3_WEIGHTS" --tokenizer "$K3_TOKENIZER" --gpu 0 --capacity 16384 --prefill 6000 --chunk 2048 \
   --out "$out.json" > "$out.log" 2>&1
 rc=$?
