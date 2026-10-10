@@ -42,7 +42,16 @@
 #define KS 16         // d-slices per block (8 rows of W each)
 #define OCT (CS / 8)  // 8-column octets per slice
 
-extern "C" __global__ void __launch_bounds__(128) kern_k3_mla_absorb(const float* __restrict__ q_partial,
+// -DQBF16: the query arrives landed (bf16 [B, HEADS*192], a prefill's q_b GEMM output): the same qh.
+#ifdef QBF16
+typedef __nv_bfloat16 q_t;
+__device__ __forceinline__ float qf(q_t x) { return __bfloat162float(x); }
+#else
+typedef float q_t;
+__device__ __forceinline__ float qf(q_t x) { return x; }
+#endif
+
+extern "C" __global__ void __launch_bounds__(128) kern_k3_mla_absorb(const q_t* __restrict__ q_partial,
                                                                     const __nv_bfloat16* __restrict__ w_kv_b,
                                                                     __nv_bfloat16* __restrict__ q_abs, int B) {
   __shared__ __nv_bfloat16 qh[RB][QW];
@@ -63,7 +72,7 @@ extern "C" __global__ void __launch_bounds__(128) kern_k3_mla_absorb(const float
 #pragma unroll
     for (int k = 0; k < RB * QW / 128; ++k) {
       const int i = t + k * 128, r = i / QW, e = i - r * QW;
-      qv[k] = q_partial[(size_t)min(b0 + r, B - 1) * (HEADS * QW) + (size_t)h * QW + e];
+      qv[k] = qf(q_partial[(size_t)min(b0 + r, B - 1) * (HEADS * QW) + (size_t)h * QW + e]);
     }
     if (g) __syncthreads();  // the previous group is done reading qh / red
 #pragma unroll

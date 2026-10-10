@@ -175,6 +175,8 @@ MLA_REDUCE = ("kernel_cutlass_reduction_kernel_flashinfercute_dslattentionmonoli
               "BlackwellMultiHeadLatentAttentionForwardFP16_object_at__tensorptrbf16gmemalign16odiv16i64div161i64div16_1")
 MLA_M_TILE = 128          # the MMA's row tile: 96 heads pad to one
 MLA_MAIN_SMEM = 232448
+# A short packed chunk's absorbed attention splits a row's KV at most this many ways.
+MLA_SHORT_SPLITS = 16
 MLA_REDUCE_SMEM = 1024    # 256-split reducer scratch
 
 T = "tokens"
@@ -248,13 +250,14 @@ def dim(x):
     return {"var": x} if isinstance(x, str) else {"expr": x}
 
 
-def mla_attn_op(batch_max, page_stride, split_max, shared_table=False, batch=T, reduce=True):
+def mla_attn_op(batch_max, page_stride, split_max, shared_table=False, batch=T, reduce=True,
+                scale_log2=bf16((NOPE_DIM + ROPE) ** -0.5) * math.log2(math.e)):
     """The DSL attention as one op: split kernel + reduction, structs packed from the interface.
     Interface: q_abs latent | q_abs rope (+1024 B) | kv latent | kv rope (+1024 B) | block_table |
     seq_lens | mla_bsk | o_lat | lse | acc_o | acc_lse | B | max_pages. `shared_table`: every
     row reads page-table row 0 (a prefill chunk's rows are one sequence). `batch` is the rows'
     dimension, at most `batch_max`. Without `reduce` the splits stay in acc_o / acc_lse for the
-    DCP exchange to merge."""
+    DCP exchange to merge. `scale_log2`: the softmax scale times log2(e)."""
     V = {"at": 0, **dim(batch)}
     tmap = lambda param, d0, page, box1, stride1: pack(128, {"at": 0, "tensormap": {
         "param": param, "dtype": "bf16", "dims": [d0, page, 0 if page == PAGE else batch_max],
@@ -290,7 +293,7 @@ def mla_attn_op(batch_max, page_stride, split_max, shared_table=False, batch=T, 
         pack(24, {"at": 0, "param": 8}, {"at": 8, "i32": 1}, at(12, V), {"at": 16, "i64": HEADS}),
         acc_o, acc_lse,
         {"i32": split_max}, seqs, bsk,
-        {"f32": bf16((NOPE_DIM + ROPE) ** -0.5) * math.log2(math.e)}, {"f32": 1.0},
+        {"f32": scale_log2}, {"f32": 1.0},
         {"param": 11}, {"i32": 1}, {"i32": split_max},
         pack(12), pack(12, *fast_divmod(1)), pack(12, *fast_divmod(split_max)),
     ]
@@ -317,7 +320,7 @@ def mla_attn_op(batch_max, page_stride, split_max, shared_table=False, batch=T, 
 
 
 def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, chunk_max=0, moe_variants=None,
-          stage=False, experts=224, per_layer=False, pack=1, dcp=False, peer_ar=False):
+          stage=False, experts=224, per_layer=False, pack=1, dcp=False, peer_ar=False, mla_short=0):
     """`layers`: the range of model layers; `stage`: a pipeline stage of them
     (no embedding unless it starts at 0, no head unless it ends at the last);
     `experts`: the checkpoint's routed experts (CHECKPOINTS); `per_layer`:
@@ -368,6 +371,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     ctx_rows = {"mul": [ctx_tiles, 128]}
     if chunk:
         seqs_max = pack
+    assert not packed or mla_short > 0
     n_kda = sum(1 for i in layers if not is_mla(i))
     mla_index = {i: k for k, i in enumerate(i for i in layers if is_mla(i))}
     n_mla = len(mla_index)
@@ -723,19 +727,44 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         # k3_mla_glue.cu: the prep's head blocks and the context's gather blocks in one grid, and the
         # gate reading its columns of the fused projection
         mla_defs = {"MLA_FUSED": mla_fused_l} if mla_fused_l != 14400 else None
+        # A short chunk (`tokens` <= mla_short) attends in the latent space (the decode step's absorb and
+        # FlashInfer's MLA decode kernel, each row its own causal length) instead of expanding its context:
+        # the prep lays out the rows' page tables, lengths and KV split plan instead of gathering, the gate
+        # first takes the attention's latent output through W_UV; the expansion and the FMHA sit it out.
+        short = {"when": {"var": T, "max": mla_short}}
+        long_ = {"when": {"var": T, "min": mla_short + 1}}
         ops["mla_prep_gather"] = {
             "params": ["in buffer<f32>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<i64>", "inout state", "i64",
                        "out buffer<bf16>", "in buffer<i32>", "i32", "in buffer<i32>", "i32", "i32", "out buffer<bf16>",
-                       "i32", "i32"],
+                       "i32", "out buffer<i32>", "out buffer<i32>", "out buffer<i32>", "i32", "i32", "i32"],
             "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_prep_gather",
-                                         grid=[{"add": [T, {"ceil_div": [ctx_rows, 28]}]}, 1, 1], block=[512, 1, 1],
-                                         defines=mla_defs)]},
+                                         grid=[{"add": [{"add": [{"mul": [T, 2]}, 1]}, {"ceil_div": [ctx_rows, 28]}]},
+                                               1, 1], block=[512, 1, 1], defines=mla_defs)]},
         }
         ops["mla_gate"] = {
-            "params": ["out buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "i32", "i32"],
-            "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_gate", grid=[T, -(-gate_l // 2048), 1],
-                                         block=[256, 1, 1], defines=mla_defs)]},
+            "params": ["out buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "in buffer<bf16>", "in buffer<bf16>", "i32",
+                       "i32", "i32"],
+            "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_gate",
+                                         grid=[{"add": [{"mul": [T, gate_l // 2048]}, -(-mla_short // 32) * HEADS * 4]},
+                                               1, 1], block=[256, 1, 1], defines=mla_defs)]},
         }
+        if mla_short:
+            ops["gemm_bf16_long"] = {
+                "params": ["in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32", "i32", "i32"],
+                "impl": {"launches": [{"entry": "extern:cublaslt_bf16_tn", **long_}]},
+            }
+            for l in ops["mla_fmha"]["impl"]["launches"]:
+                l.update(long_)
+            ops["mla_absorb_short"] = {
+                "params": ["in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32"],
+                "impl": {"launches": [launch("k3_mla_absorb", "kern_k3_mla_absorb", grid=[{"ceil_div": [T, 32]}, HEADS, 8],
+                                             block=[128, 1, 1], defines={"QBF16": 1}, **short)]},
+            }
+            # the FMHA's softmax scale (f32 192^-0.5), not the decode step's bf16-rounded one
+            ops["mla_attn_short"] = mla_attn_op(mla_short, page_stride, MLA_SHORT_SPLITS,
+                                                scale_log2=trtllm_fmha_abi.SCALE_LOG2)
+            for l in ops["mla_attn_short"]["impl"]["launches"]:
+                l.update(short)
         if head:
             del ops["last_row"], ops["argmax_f32_one"]
             ops["last_rows"] = {
@@ -1101,6 +1130,15 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         buffers["mla_bsk"] = {"dtype": "i32", "shape": [T], "kind": "workspace"}
     if chunk and head:
         work("normed_last", H, var="seqs" if packed else 1)
+    if packed and mla:
+        # the absorbed attention of a short chunk (at most mla_short rows)
+        for name, width, dt in (("mla_row_table", max_pages, "i32"), ("mla_q_abs", HEADS * LATENT_ROW, "bf16"),
+                                ("mla_o_lat", HEADS * KV_LORA, "bf16"), ("mla_s_lse", HEADS, "f32"),
+                                ("mla_s_acc_o", MLA_SHORT_SPLITS * MLA_M_TILE * KV_LORA, "f32"),
+                                ("mla_s_acc_lse", MLA_SHORT_SPLITS * MLA_M_TILE, "f32")):
+            work(name, width, dt, var=mla_short)
+        for name in ("mla_row_lens", "mla_row_bsk"):
+            buffers[name] = {"dtype": "i32", "shape": [mla_short], "kind": "workspace"}
     if chunk:
         work("q_bf16", q_b_l)
         work("o_bf16", gate_l)
@@ -1345,7 +1383,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                     step(L + "prep", "mla_prep_gather", b("mla_fused_partial"), w("gamma_q_a"), w("gamma_kv_a"),
                          b("slot_mapping"), {"state": kv, "offset": layer_off * 2}, i64(page_stride), b("q_norm"),
                          b("block_table"), i32(max_pages), b("fmha_lens"), i32(pack + 1), {"var": "seqs"},
-                         b("latent_g"), dim(ctx_rows), B)
+                         b("latent_g"), dim(ctx_rows), b("mla_row_table"), b("mla_row_lens"), b("mla_row_bsk"),
+                         i32(MLA_SHORT_SPLITS), i32(mla_short), B)
                 else:
                     step(L + "mla_prep", "mla_prep", b("mla_fused_partial"), w("gamma_q_a"), w("gamma_kv_a"),
                          b("slot_mapping"), {"state": kv}, i64(layer_off), i64(page_stride), b("q_norm"), b("mla_gate"), B)
@@ -1359,16 +1398,25 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                         step(L + "gather", "latent_gather", {"state": kv, "offset": layer_off * 2}, b("block_table"),
                              i64(page_stride), b("fmha_lens"), b("latent_g"), dim(ctx_rows))
                     # the expansion while the gathered rows are still in L2
-                    step(L + "expand", "gemm_bf16", b("latent_g"), w("w_aug"), b("kv_exp"), dim(ctx_rows), i32(kv_exp_l),
-                         i32(KV_A), i32(kv_exp_l))
+                    step(L + "expand", "gemm_bf16_long" if packed and mla_short else "gemm_bf16", b("latent_g"), w("w_aug"),
+                         b("kv_exp"), dim(ctx_rows), i32(kv_exp_l), i32(KV_A), i32(kv_exp_l))
                     if packed:
                         q_b()
+                    if packed and mla_short:
+                        # a short chunk: q folded into the latent space, the attention over the latent pages
+                        # row by row (each row its own causal length), out through W_UV and the gate
+                        step(L + "absorb", "mla_absorb_short", b("q_bf16"), w("w_kv_b"), b("mla_q_abs"), B)
+                        step(L + "attn_short", "mla_attn_short", b("mla_q_abs"), b("mla_q_abs", KV_LORA * 2),
+                             {"state": kv, "offset": layer_off * 2}, {"state": kv, "offset": layer_off * 2 + KV_LORA * 2},
+                             b("mla_row_table"), b("mla_row_lens"), b("mla_row_bsk"), b("mla_o_lat"), b("mla_s_lse"),
+                             b("mla_s_acc_o"), b("mla_s_acc_lse"), B, i32(max_pages))
                     lens = (lambda k: b("fmha_lens", k * (pack + 1) * 4)) if packed else (lambda k: b("fmha_lens", 8 * k))
                     step(L + "attn", "mla_fmha", b("q_bf16"), b("kv_exp"), b("kv_exp", trtllm_fmha_abi.HQK * 2),
                          b("o_bf16"), lens(0), lens(1), lens(2), b("fmha_scratch"),
                          b("fmha_scratch", trtllm_fmha_abi.PARTIAL_O_OFFSET))
                     if packed:
-                        step(L + "gate", "mla_gate", b("gated"), b("o_bf16"), b("mla_fused_partial"), i32(gate_l), B)
+                        step(L + "gate", "mla_gate", b("gated"), b("o_bf16"), b("mla_fused_partial"), b("mla_o_lat"),
+                             w("w_kv_b"), i32(gate_l), i32(mla_short), B)
                     else:
                         step(L + "gate", "mla_gate", b("gated"), b("o_bf16"), b("mla_gate"), i32(ml), i32(NOPE_DIM),
                              i32(gate_l), i32(NOPE_DIM))
@@ -1710,6 +1758,9 @@ def main():
     ap.add_argument("--dcp", action="store_true",
                     help="the decode step as one replicated batch over the tp group (--tp == --ranks): KV dealt by "
                          "position, KDA by heads, every tp-th expert per rank")
+    ap.add_argument("--mla-short", type=int, default=128,
+                    help="a packed chunk of at most this many rows attends in the latent space (absorbed MLA) "
+                         "instead of expanding its context")
     ap.add_argument("--peer-ar", action="store_true",
                     help="a DCP step's sums by the Lamport one-shot over the group's peers instead of NCCL")
     a = ap.parse_args()
@@ -1719,7 +1770,8 @@ def main():
     if a.dcp and a.seqs > 64:
         ap.error("--dcp absorbs on tensor cores for at most 64 rows (k3_mla_absorb_mma BMAX)")
     json.dump(build(range(first, end), a.ranks, a.max_ctx, a.seqs, a.tp, a.mla_split_max, a.span_max, a.chunk, names,
-                    stage, a.experts, a.state_per_layer, a.pack, a.dcp, a.peer_ar), sys.stdout, indent=1)
+                    stage, a.experts, a.state_per_layer, a.pack, a.dcp, a.peer_ar, a.mla_short),
+              sys.stdout, indent=1)
     print()
 
 
