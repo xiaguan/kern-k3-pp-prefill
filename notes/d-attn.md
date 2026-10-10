@@ -163,6 +163,26 @@ deadline as well (a member's data never came: fail loudly, not garbage).
   8/16/24 rows 6.09/7.57/8.81 → 5.98/7.42/8.52 us, 36/48 rows much worse
   (2 blocks/SM). Not worth a `when` split for 0.1-0.3 us.
 
+- **bf16-output GEMMs for qkvg / wfu / q_b** (their readers land the f32
+  partial to bf16 first, so cublasLt's bf16 epilogue would be the same
+  rounding): one-GPU timing (work/t/gemm.cu, W over 4 copies) of cublas
+  f32-out vs cublasLt bf16-out heuristics #0-3 at 8-48 rows: within ±0.5 us
+  everywhere (qkvg 18.5-20 us, wfu 13, q_b 11). Same kernels, same split-K.
+  Not pursued (and GEMMs are out of scope).
+- **kda_core prologue loads up front** (w_f_b tile by cp.async into 32 KB
+  smem, the scalars in registers): 150 regs, slower at every size. Dropped.
+
+## Where the half stands (16 rows @128k, nsys, after the commits above)
+
+Per 16-layer step: DSL split kernel 254 us (prebuilt, ~4.7 TB/s, the only
+build in the index), kda_core 123 (12 x 10.3), dcp_exchange 55 (4 x 13.9),
+absorb 27, mla_prep 12, split plan 2. Exchange breakdown (debug cubin,
+work/t/k3_dcp_dbg2.cu): 16 rows send 1.3 us per item, first peer data at
+~7 us, merge done ~11-13 us; 48 rows send ~8 us (4.8 MB a rank over
+NVLink is ~5 us by itself), merge items 288 > 256 blocks so 32 blocks take
+two. The GEMMs around (qkvg + splitK reduce 20 us, wfu 14, q_b 12, o_proj
+7) are cuBLAS's.
+
 ## Profile (nsys, rank 0, 48 rows @128k, before the exchange kernel)
 
 work/prof.sh runs the bench with nsys on the first rank (`--capture-range-end
