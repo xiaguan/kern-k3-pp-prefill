@@ -7,13 +7,38 @@
 | main (2026-10-10) | 325 (27.1/layer) | 56.82 ms/item | 105.9 ms |
 | 6463ad5 packed gather | 298 (24.8/layer) | 54.34 ms/item | 100.6 ms |
 | 6abb2fe k3_kda_rec | 280 (23.3/layer) | 53.37 ms/item | 98.6 ms |
+| main 40c1cda (p-glue merged) | 230 (19.2/layer) | 52.87 (52.70 re-measured) | 97.28 |
+| 26f8f07 gate on idle SMs | 230 (19.2/layer) | 52.40 ms/item | 96.61 ms |
 
 A KDA layer now (non-GEMM launches): `span_gather` (1: conv, beta / flow,
-tile prefix) → span_g* → `flash_kda` (2: FlashKDA prepare, then
-source/k3_kda_rec.cu: recurrence from/to the line + K11 gate + windows).
+tile prefix, zeroes rec's progress counters) → span_g* → `flash_kda` (2:
+FlashKDA prepare, then source/k3_kda_rec.cu: 96 recurrence CTAs (state
+from/to the line, windows) + 56 gate CTAs on the idle SMs (K11)).
 
 Per-layer times at 8192 rows (l13, `work/calls.py`): span_gather 263 us,
-FlashKDA prepare 276 us + k3_kda_rec 634 us.
+FlashKDA prepare 276 us + k3_kda_rec ~515 us.
+
+## PROPOSAL for the orchestrator: KDA^2 (branch agent/p-kda-kda2, c92ec75)
+
+NVlabs KDA^2's static-PTX stream kernel (kda-cake-ptx, the 2-CTA-cluster
+`varlen_mixed` build), vendored in source/kda2 with a patch so it reads and
+writes each sequence's state in its KDA line (bit-identical to upstream on
+random inputs). On GB300: 371 us for 8192 rows x 96 heads (FlashKDA prepare
++ recurrence 983, ours 790), 192 us at 4096, 58 us at 1000, 12 us at 17.
+The layer: gather (conv, flow, KDA^2's tables + descriptors) -> f_b GEMM ->
+KDA^2 -> k3_kda_gate (K11 + windows): same 230 launches, 8192 rows 96.60 ->
+93.89 ms (~ -3%).
+
+It FAILs loop/p/check vs main: 19/23 argmax agree, 3 near-tie flips within
+the KL limit, 1 beyond (the prefill's last row, KL 5.9e-2, main's margin
+0.19). Cause: FlashKDA rounds the state to bf16 every 16 tokens, KDA^2 keeps
+fp32. Against an fp64 token-by-token reference (work/kda2/ref2.cu, random
+inputs) KDA^2's output is 4e-3 and final state 3e-3 relative RMS; NVlabs'
+README measures FlashKDA's final state ~4% off on a real 8K prefill. So the
+difference is main's error, but the A/B check cannot tell; it needs a
+precision oracle (e.g. an fp64 / fp32-state reference P manifest) or the
+orchestrator's call. The fixed-h96 build is 4% faster but stores a wrong
+final state after a partial last chunk (do not use it).
 
 ## Tools (work/, not committed)
 
@@ -64,6 +89,22 @@ FlashKDA prepare 276 us + k3_kda_rec 634 us.
   rec / abi / gen that go with it: work/*_fused.py, k3_kda_rec_wsv.cu).
   The conv contraction is fma(x,w3, fma(t2,w2, fma(t0,w0, t1*w1))) (nvcc's
   choice; spelling it out rebuilds the gather to the same cubin).
+
+- Gate on idle SMs (26f8f07): rec CTAs publish output tiles (st.release,
+  every 4 tiles) to q's buffer, 56 gate CTAs poll (ld.acquire by lane 0,
+  nanosleep 256) and stage rows by cp.async. Lessons: ld.acquire.gpu
+  compiles to LDG.STRONG + CCTL.IVALL (invalidates L1): 32 lanes polling
+  made the kernel 3x slower; a per-tile __threadfence also; the gate CTA
+  reading rows by plain LDG (L1 invalidated) was too slow, cp.async to smem
+  fixed it; gate CTAs FIRST in the grid cost 2 ms/item (the recurrence lands
+  on other SMs); a separate 200 MB raw-output buffer cost ~2 ms/item across
+  all memory-bound kernels (footprint / layout), reusing span_q fixed it.
+- Software-pipelining the recurrence (phase 6 of tile c interleaved with
+  phase 1 of tile c+1): no gain (476 vs 450 us MMA-only). HMMA m16n8k16 on
+  GB300: 8 cycles issue per SMSP, 20 cycles latency (work/mb/hmma.cu); the
+  recurrence's tensor floor is ~832 cycles/tile on 96 SMs (213 us), it runs
+  ~1000-1760.
+- kern supports `pdl: true` on a launch (griddepcontrol.wait) and `cluster`.
 
 ## Constraints learned
 
