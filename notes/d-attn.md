@@ -19,6 +19,7 @@
 | rebased on main 049ff65+ (without embedding/argmax) | 13.2 | 4.099 ms/step |
 | MLA split slots 32 → 16 | 13.2 | 4.066 ms/step |
 | main ad97493 (all of the above merged, with d-mlp's handshake + top-k) | — | 4.026 ms/step |
+| main 0c3c812 (+ d-mlp's PDL triggers, embedding, argmax, residual work) | 13.0 | 3.930 ms/step |
 
 ## Status (2026-10-10 ~21:30 UTC): lane closed at its launch floor
 
@@ -68,10 +69,9 @@ d-mlp's (MLP, all-reduces, embedding, argmax, head).
   Pitfalls hit: (1) the lat slice is loop-invariant over dv, so a layout
   with 8 lanes x 64 columns made ptxas hoist 128 regs of it and spill;
   (2) a 128 KB staging buffer (1 block/SM, 152 blocks = every SM) PASSed a
-  one-GPU 8-virtual-rank harness (work/t/xchg8.cu) bit for bit but broke the
-  real TP8 check (garbage, 10x slower steps): presumably not all 152 blocks
-  were resident at once -> Lamport waits time out. Keep this kernel at
-  >= 2 blocks/SM worth of resources.
+  one-GPU 8-virtual-rank harness (work/t/xchg8.cu) bit for bit but broke its
+  one real TP8 check (garbage, 10x slower steps) — most likely the startup
+  init race found later, not residency; the 64 KB form was kept anyway.
   (3) `cmd | tail` hides a FAIL exit status: chain on the check's own rc.
 
 - **Exchange latency**: at 48 rows @128k it was 29.6 us (nsys). Its send
@@ -86,11 +86,10 @@ d-mlp's (MLP, all-reduces, embedding, argmax, head).
   second wave; now 384 x 256 threads, W fragments in registers across row
   tiles, rope copy spread over every block. 48 rows 11.9 → 9.9 us (one GPU,
   work/t/absorb.cu). Bit-identical.
-- **Lamport deadline on clock64()**: d-mlp found %globaltimer jumps early in
-  a run (resync to host time) and fires the 2 s timeout with nothing late
-  (tp_err = 1 + rank at step 0, ranks diverge). That is the likely cause of
-  my 128 KB-staging exchange failing the real check while passing the
-  8-virtual-rank harness. The exchange now counts 2 * timeout_ns SM cycles.
+- **Lamport deadline on clock64()** (the exchange counts 2 * timeout_ns SM
+  cycles). Suspected %globaltimer jumps turned out a red herring: the step-0
+  timeouts were the startup init race (below), which is also the likely
+  cause of the 128 KB-staging exchange failing its one real check.
 
 - **Exchange, round 2** (instrumented with %globaltimer printf from a
   debug cubin swapped into a copied manifest, work/t/k3_dcp_dbg.cu): at 16
@@ -138,8 +137,7 @@ d-mlp's (MLP, all-reduces, embedding, argmax, head).
 ## Resolved: intermittent check failure (orchestrator, 20:00 UTC)
 
 Fixed by d-mlp's first-call Lamport handshake (main d116f05); main
-ad97493 checked 3/3 bit-identical with the exchange on top.
-
+ad97493 checked 3/3 bit-identical with the exchange on top. The analysis:
 
 main + my 1a53ac8 56d8cf6 05d3ad6 (exchange loads-in-flight, absorb, clock64
 deadline) failed 1 of 3 d/checks with ~2-3 s of extra step time (one
@@ -262,10 +260,14 @@ DSL reduce 9.2, fixup 1.1, pack 2.2, NCCL 23 (+2.8 gap), combine 2.8,
 vup_gate 14.8. KDA layer: qkvg 18.5 + splitK reduce 4, kda_core 15.4.
 Gaps between graph nodes are ~0.2 us: a launch costs its ramp, not a gap.
 
-## Ideas / queue
+## Ideas / queue (for a next session)
 
-1. MLA DCP: fixup + pack + nccl all-to-all + combine → one peer-memory
-   Lamport kernel; then fold the DSL's split reduction into its send side,
-   and maybe the vup_gate into its receive side.
-2. MLA prep: `mla_prep` writes q_norm for the q_b GEMM, so it cannot merge
-   with `mla_absorb` (the GEMM sits between).
+1. Tiered MLA split slots (≤7 rows 32, 8-15 16, 16-31 8, ≥32 4: ~-0.6%
+   more) need either `min` in kern's launch expressions or loop/count not
+   counting mutually exclusive `when` launches; proposed, not done.
+2. Everything else measured in this lane is in "Tried and dropped". The
+   one-GPU harnesses in work/t/ (xchg8.cu exchange on 8 virtual ranks,
+   kdat.cu kda_core, absorb.cu, gemm.cu) and work/prof.sh (nsys of one rank
+   of the TP8 bench; `check` profiles the teacher-forced run) are the
+   tools; a debug cubin can be swapped into a copied manifest by sha
+   (cache blobs) to printf from inside a real TP8 run.
