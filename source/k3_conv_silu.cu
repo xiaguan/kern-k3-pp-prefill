@@ -36,7 +36,7 @@
 //   Per thread: 1 x 16 B f32 load (partial), 4 x 16 B f32 loads (cw), 3 x 8 B
 //   bf16 loads + 3 x 8 B bf16 stores (window), 1 x 8 B bf16 store (out); a warp
 //   therefore moves 512 B / 512 B / 256 B contiguous per access, fully
-//   coalesced with no bounds predication.  BLOCK x VEC was swept on tray07:
+//   coalesced with no bounds predication.  BLOCK x VEC was swept on one GB300:
 //   128x4 and 96x4 tie for best at B=64 (harness median 10.4 us), 256x8 is the
 //   worst (12.3 us), and the ABI document's default 256x1 scalar tiling is
 //   14.1 us -- the 4-wide accesses are worth 1.35x.  Because the tiling is not
