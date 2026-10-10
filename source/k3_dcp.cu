@@ -242,18 +242,28 @@ __device__ __forceinline__ void stage_w(uint4* sw, const bf16* w_kv_b, int j, in
 template <int pending>
 __device__ __forceinline__ void wait_w() { asm volatile("cp.async.wait_group %0;" ::"n"(pending) : "memory"); }
 
-// Spins until the vector at p has arrived; `fail` takes 1 + `from` past the deadline.
-__device__ __forceinline__ uint4 await(const uint4* p, int from, long long timeout_ns, int& fail) {
+// v[q] = the vector at p + q * stride for every member q, all loads in flight at once, re-polling the
+// ones that have not arrived; `fail` takes 1 + a late member past the deadline.
+__device__ __forceinline__ void await_all(uint4 (&v)[NRANKS], const uint4* p, long long stride, long long timeout_ns,
+                                          int& fail) {
+#pragma unroll
+  for (int q = 0; q < NRANKS; ++q) v[q] = ld_volatile(p + q * stride);
   unsigned long long t0 = 0;
   while (true) {
-    const uint4 v = ld_volatile(p);
-    if (arrived(v) || fail) return v;
+    int missing = 0;
+#pragma unroll
+    for (int q = 0; q < NRANKS; ++q)
+      if (!arrived(v[q])) {
+        v[q] = ld_volatile(p + q * stride);
+        missing = 1 + q;
+      }
+    if (!missing || fail) return;
     const unsigned long long now = gtimer();
     if (t0 == 0) {
       t0 = now;
     } else if ((long long)(now - t0) > timeout_ns) {
-      fail = 1 + from;
-      return v;
+      fail = missing;
+      return;
     }
   }
 }
@@ -286,20 +296,22 @@ extern "C" __global__ void __launch_bounds__(256, 1) kern_k3_dcp_exchange(
       const int tiles = (n + M_TILE - 1) / M_TILE, per = (tiles + bsk[b] - 1) / bsk[b], splits = (tiles + per - 1) / per;
       const long long rec = (long long)b * M_TILE + h;
       const float* ls = acc_lse + rec * split_max;
-      float m = -CUDART_INF_F;
+      const float4* src = reinterpret_cast<const float4*>(acc_o + rec * split_max * LAT) + 2 * lane;
+      const float4 x0 = src[0], y0 = src[1];
+      const float l0 = ls[0];
+      float m = l0;
 #pragma unroll 1
-      for (int i = 0; i < splits; ++i) m = fmaxf(m, ls[i]);
+      for (int i = 1; i < splits; ++i) m = fmaxf(m, ls[i]);
       if (m == -CUDART_INF_F) m = 0.f;
-      float sum = 0.f;
+      float sum = ex2(l0 - m);
 #pragma unroll 1
-      for (int i = 0; i < splits; ++i) sum += ex2(ls[i] - m);
+      for (int i = 1; i < splits; ++i) sum += ex2(ls[i] - m);
       l = sum != 0.f ? m + lg2(sum) : CUDART_INF_F;
       float a[VEC] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
-      const float4* src = reinterpret_cast<const float4*>(acc_o + rec * split_max * LAT) + 2 * lane;
 #pragma unroll 1
       for (int i = 0; i < splits; ++i, src += LAT / 4) {
         const float w = ex2(ls[i] - l);
-        const float4 x = src[0], y = src[1];
+        const float4 x = i ? src[0] : x0, y = i ? src[1] : y0;
         a[0] = fmaf(x.x, w, a[0]), a[1] = fmaf(x.y, w, a[1]), a[2] = fmaf(x.z, w, a[2]), a[3] = fmaf(x.w, w, a[3]);
         a[4] = fmaf(y.x, w, a[4]), a[5] = fmaf(y.y, w, a[5]), a[6] = fmaf(y.z, w, a[6]), a[7] = fmaf(y.w, w, a[7]);
       }
@@ -327,18 +339,21 @@ extern "C" __global__ void __launch_bounds__(256, 1) kern_k3_dcp_exchange(
       reinterpret_cast<uint4*>(lat[sub])[lane] = make_uint4(0, 0, 0, 0);
     } else {
     const uint4* rec = mine + ((long long)b * HL + j) * REC;
+    uint4 v[NRANKS];
+    await_all(v, rec + LANES, slot, timeout_ns, fail);
     float l[NRANKS];
     float m = -CUDART_INF_F;
 #pragma unroll
     for (int q = 0; q < NRANKS; ++q) {
-      l[q] = word_lse(await(rec + q * slot + LANES, q, timeout_ns, fail));
+      l[q] = word_lse(v[q]);
       m = fmaxf(m, l[q]);
     }
+    await_all(v, rec + lane, slot, timeout_ns, fail);
     float acc[VEC] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
     float den = 0.f;
 #pragma unroll
     for (int q = 0; q < NRANKS; ++q) {
-      const uint4 x = await(rec + q * slot + lane, q, timeout_ns, fail);
+      const uint4 x = v[q];
       const float w = m == -CUDART_INF_F ? 0.f : expf(l[q] - m);
       if (w == 0.f) continue;
       den += w;

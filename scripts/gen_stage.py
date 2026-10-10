@@ -187,6 +187,7 @@ CTX = "ctx"
 TP_GRID = 256
 TP_AR_GRID = 152  # the GB300's SM count, a multiple of the cluster of 8 and under the 256-row flag table
 TP_TIMEOUT_NS = 30_000_000_000  # a deadline that passes traps: long enough for any start skew
+DCP_GRID = 256  # two exchange blocks fit an SM: every block resident with room to spare
 ONESHOT_MAX_ROWS = 192  # peer_allreduce.cu: wider batches go two-shot, the Lamport stages hold this many rows
 
 # Launch geometry per entry, as the kernel headers document it
@@ -815,7 +816,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
             "params": ["in buffer<f32>", "in buffer<f32>", "in buffer<i32>", "in buffer<i32>", "i32", "in buffer<bf16>",
                        "in buffer<bf16>", "out buffer<bf16>", "inout buffer<u8>", "in buffer<u64>", "inout buffer<i32>", "out buffer<i32>", "i32", "i32", "i64",
                        "i64"],
-            "impl": {"launches": [launch("k3_dcp", "kern_k3_dcp_exchange", grid=[TP_AR_GRID, 1, 1],
+            "impl": {"launches": [launch("k3_dcp", "kern_k3_dcp_exchange", grid=[DCP_GRID, 1, 1],
                                          block=[256, 1, 1], smem=HEAD_DIM // 2 * KV_LORA * 2)]},
         }
         ops["dcp_init"] = {

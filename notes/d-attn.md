@@ -9,6 +9,7 @@
 | after dcp exchange kernel | 23.2 | 4.409 ms/step |
 | exchange merges the DSL splits | 22.9 | 4.400 ms/step |
 | exchange runs v-up + gate | 22.7 | 4.394 ms/step |
+| exchange latency (loads in flight, grid 256) | 22.7 | 4.366 ms/step |
 
 ## Done
 
@@ -51,6 +52,29 @@
   were resident at once -> Lamport waits time out. Keep this kernel at
   >= 2 blocks/SM worth of resources.
   (3) `cmd | tail` hides a FAIL exit status: chain on the check's own rc.
+
+- **Exchange latency**: at 48 rows @128k it was 29.6 us (nsys). Its send
+  loop was a chain of dependent loads per record (lse, then acc_o) and the
+  receiver polled its 8 peers' lse, then their o, one vector at a time (16
+  round trips per item). Now split 0's acc_o is loaded with its lse, the
+  receiver loads all 8 peers' vectors at once and re-polls only the late
+  ones, and the grid is 256 (2 blocks/SM fit: 120 regs, 68 KB smem; 304
+  would be exactly full). Same numerics as before. 4.394 → 4.366.
+
+## Tried and dropped
+
+- **MLA split plan for a full GPU** (work/k3_mla_split_plan.cu): at 39-48
+  rows kern's plan gives every row one split (48 of 76 clusters busy); a
+  makespan search picked 3 splits (2 waves of 43 tiles). The DSL split
+  kernel stayed at 190 us (48 rows @128k, 906 MB of latent per rank: ~4.8
+  TB/s either way, it is at its bandwidth), the exchange grew with the
+  splits and the plan kernel itself took 14 us. 4.394 → 4.412: reverted.
+  "Fewer, longer splits" in kern's comment holds.
+- **kda_core: L2 bulk prefetch of the head's state at entry** (so the
+  prologue overlaps the HBM read): +30 regs (158, 3 blocks/SM); with
+  ROWS_PER_ITER=2 87 regs. Timed on one GPU (work/t/kdat.cu, state over 4
+  rotating line sets): 48 rows 16.2 us now vs 18.6 / 17.7 / 17.4 for the
+  variants; 24 rows 8.8 vs 8.0 best. Not worth it.
 
 ## Profile (nsys, rank 0, 48 rows @128k, before the exchange kernel)
 
