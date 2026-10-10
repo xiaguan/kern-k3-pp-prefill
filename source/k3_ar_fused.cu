@@ -9,7 +9,9 @@
 // The exchange runs over a row's RV sixteen-byte vectors at a time. Every
 // block pushes (and re-poisons) a grid-stride share of all rows' vectors;
 // block b < B then waits for row b and runs the epilogue on it, a row per
-// 1024 threads with the reduction trees of the kernels it replaces; the
+// 1024 threads with the reduction trees of the kernels it replaces. From
+// TWO_SHOT_ROWS rows a row goes to its owner (row % NRANKS) only, whose row
+// block sums it as the one-shot does and gathers the sum to the others. The
 // blocks past B pull the next GEMM's weight `pf` (`pf_bytes`) into L2.
 //
 //   kern_k3_ar_attnres_rms(const bf16* x, u8* lamport, const u64* lamport_peers, i32* state,
@@ -53,6 +55,9 @@
 #define KEPS 1e-5f
 #define KTHREADS 1024
 #define TOPK 16
+#ifndef TWO_SHOT_ROWS
+#define TWO_SHOT_ROWS 33
+#endif
 
 typedef __nv_bfloat16 bf16_t;
 typedef __nv_bfloat162 bf162_t;
@@ -196,6 +201,38 @@ __device__ __forceinline__ uint4 lamport_sum(const Lamport& l, long long i, long
     acc[4] += lo(vals[r].z), acc[5] += hi(vals[r].z), acc[6] += lo(vals[r].w), acc[7] += hi(vals[r].w);
   }
   return make_uint4(pack2(acc[0], acc[1]), pack2(acc[2], acc[3]), pack2(acc[4], acc[5]), pack2(acc[6], acc[7]));
+}
+
+// Vector i of slot q alone: a two-shot's gathered sum.
+__device__ __forceinline__ uint4 lamport_one(const Lamport& l, int q, long long i, long long timeout_ns, int& fail) {
+  unsigned long long t0 = 0;
+  while (true) {
+    const uint4 v = ld_volatile(l.mine + (long long)q * l.tot + i);
+    if (arrived(v)) return v;
+    const unsigned long long now = gtimer();
+    if (t0 == 0) {
+      t0 = now;
+    } else if ((long long)(now - t0) > timeout_ns) {
+      fail = 1 + q;
+      return v;
+    }
+  }
+}
+
+// Vector i of a row's sum: the one-shot's sum of the slots, or a two-shot's (`owner` of the row): the
+// owner sums the slots in rank order as the one-shot does, keeps -0.0 as +0.0 (as it is sent) and gathers
+// the sum into every peer's slot `rank`; the others read the owner's slot.
+__device__ __forceinline__ uint4 lamport_get(const Lamport& l, bool two, int owner, int rank, long long i,
+                                             long long timeout_ns, int& fail) {
+  if (two && owner != rank) return lamport_one(l, owner, i, timeout_ns, fail);
+  uint4 v = lamport_sum(l, i, timeout_ns, fail);
+  if (two) {
+    v = make_uint4(unpoison(v.x), unpoison(v.y), unpoison(v.z), unpoison(v.w));
+#pragma unroll 1
+    for (int q = 0; q < NRANKS; ++q)
+      if (q != rank) l.slot[q][i] = v;
+  }
+  return v;
 }
 
 __device__ __forceinline__ void lamport_close(const Lamport& l, int* state, int* err, int fail) {
@@ -416,7 +453,14 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_attnres_rms
   }
   const long long tot = (long long)B * KVEC;
   const Lamport l = lamport_open(lamport, lamport_peers, state, err, rank, tot, stage_bytes, timeout_ns);
-  for (long long i = (long long)b * KTHREADS + t; i < tot; i += (long long)gridDim.x * KTHREADS) lamport_push(l, i, x[i]);
+  const bool two = B >= TWO_SHOT_ROWS;  // as kern_k3_ar_finalize_rms's
+  for (long long i = (long long)b * KTHREADS + t; i < tot; i += (long long)gridDim.x * KTHREADS) {
+    const uint4 v = x[i];
+    if (two)
+      l.slot[(i / KVEC) % NRANKS][i] = make_uint4(unpoison(v.x), unpoison(v.y), unpoison(v.z), unpoison(v.w));
+    else
+      lamport_push(l, i, v);
+  }
   lamport_clear(l);
   l2_prefetch(pf, pf_bytes, B);
 
@@ -426,7 +470,9 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_attnres_rms
     V8 pv;
     pv.w[0] = 0u, pv.w[1] = 0u, pv.w[2] = 0u, pv.w[3] = 0u;
     if (act) {
-      const V8 lp = asv(lamport_sum(l, (long long)b * KVEC + t, timeout_ns, fail));
+      const long long i = (long long)b * KVEC + t;
+      const int owner = b % NRANKS;
+      const V8 lp = asv(lamport_get(l, two, owner, rank, i, timeout_ns, fail));
       if (snapshot) {
         pv = lp;
       } else {
@@ -520,9 +566,16 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_finalize_rm
   const int t = threadIdx.x, b = blockIdx.x;
   const long long tot = (long long)B * ROWV;
   const Lamport l = lamport_open(lamport, lamport_peers, state, err, rank, tot, stage_bytes, timeout_ns);
+  // From TWO_SHOT_ROWS rows the sum runs as two shots: every row goes to its owner (row % NRANKS) only, the
+  // owner sums it and gathers the sum to the others, 2 x 7/8 of a partial out of each rank instead of 7.
+  const bool two = B >= TWO_SHOT_ROWS;
   for (long long i = (long long)b * KTHREADS + t; i < tot; i += (long long)gridDim.x * KTHREADS) {
     const int row = (int)(i / ROWV), c = (int)(i % ROWV);
-    lamport_push(l, i, c < KLATV ? finalize(fc2, exp2perm, wts, row, c) : shared[(long long)row * KVEC + c - KLATV]);
+    const uint4 v = c < KLATV ? finalize(fc2, exp2perm, wts, row, c) : shared[(long long)row * KVEC + c - KLATV];
+    if (two)
+      l.slot[row % NRANKS][i] = make_uint4(unpoison(v.x), unpoison(v.y), unpoison(v.z), unpoison(v.w));
+    else
+      lamport_push(l, i, v);
   }
   lamport_clear(l);
   l2_prefetch(pf, pf_bytes, B);
@@ -530,13 +583,15 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_finalize_rm
   int fail = 0;
   if (b < B) {
     const long long base = (long long)b * ROWV;
-    if (t < KVEC) shared_sum[(long long)b * KVEC + t] = lamport_sum(l, base + KLATV + t, timeout_ns, fail);
+    const int owner = b % NRANKS;
+    const auto summed = [&](long long i) { return lamport_get(l, two, owner, rank, i, timeout_ns, fail); };
+    if (t < KVEC) shared_sum[(long long)b * KVEC + t] = summed(base + KLATV + t);
     // kern_k3_rms at h = KLAT: vector t of the row, its squares serially, a warp
     // butterfly, then the 32 warp slots (zero past the row) by another
     uint4 x = make_uint4(0u, 0u, 0u, 0u), g;
     float sum = 0.f;
     if (t < KLATV) {
-      x = lamport_sum(l, base + t, timeout_ns, fail);
+      x = summed(base + t);
       g = reinterpret_cast<const uint4*>(gamma)[t];
       const V8 v = asv(x);
 #pragma unroll
