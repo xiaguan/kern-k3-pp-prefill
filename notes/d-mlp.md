@@ -147,4 +147,7 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
   harness, and in loop/d/check with every K1d forced onto it). Harness: nb 8 9.1 -> 7.1 us, nb 2-3 ~0.4 us
   better, nb 0 1 us worse. Used for nb >= 3 (69 calls of the 93-layer step): 19.54 -> 19.52 / 26.42 ->
   26.40 ms at 24 / 48 rows, nothing. Reverted.
+- moe_front routing by slots claimed with atomics in each row's block (the last block then only scans the
+  112 counts and places the picks; rows within an expert in arrival order, as FlashInfer's tables had
+  them): 6.7 vs 6.4 us (harness), the atomic round trip lands on every row's path. Discarded.
 
