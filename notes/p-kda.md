@@ -9,6 +9,11 @@
 | 6abb2fe k3_kda_rec | 280 (23.3/layer) | 53.37 ms/item | 98.6 ms |
 | main 40c1cda (p-glue merged) | 230 (19.2/layer) | 52.87 (52.70 re-measured) | 97.28 |
 | 26f8f07 gate on idle SMs | 230 (19.2/layer) | 52.40 ms/item | 96.61 ms |
+| 64d3f13 one TMA box an array | 230 (19.2/layer) | 52.07 ms/item | 95.85 ms |
+
+Stage 0 (scored from 2026-10-10 19:48; real data, power-limited): flash_kda
+6.9% -> 6.6% of 8192@0 with 64d3f13; per layer at 8192@0 span_gather ~334
+us, flash_kda ~976 us (FlashKDA prepare + k3_kda_rec), qkvg 3.0 ms.
 
 A KDA layer now (non-GEMM launches): `span_gather` (1: conv, beta / flow,
 tile prefix, zeroes rec's progress counters) → span_g* → `flash_kda` (2:
@@ -18,27 +23,38 @@ from/to the line, windows) + 56 gate CTAs on the idle SMs (K11)).
 Per-layer times at 8192 rows (l13, `work/calls.py`): span_gather 263 us,
 FlashKDA prepare 276 us + k3_kda_rec ~515 us.
 
-## PROPOSAL for the orchestrator: KDA^2 (branch agent/p-kda-kda2, c92ec75)
+## KDA^2: tried, not precise enough for P (branch agent/p-kda-kda2)
 
 NVlabs KDA^2's static-PTX stream kernel (kda-cake-ptx, the 2-CTA-cluster
-`varlen_mixed` build), vendored in source/kda2 with a patch so it reads and
+`varlen_mixed` build) vendored in source/kda2 with a patch so it reads and
 writes each sequence's state in its KDA line (bit-identical to upstream on
-random inputs). On GB300: 371 us for 8192 rows x 96 heads (FlashKDA prepare
-+ recurrence 983, ours 790), 192 us at 4096, 58 us at 1000, 12 us at 17.
-The layer: gather (conv, flow, KDA^2's tables + descriptors) -> f_b GEMM ->
-KDA^2 -> k3_kda_gate (K11 + windows): same 230 launches, 8192 rows 96.60 ->
-93.89 ms (~ -3%).
+random inputs). Layer: gather (conv, flow, KDA^2's piece / CTA tables and
+descriptors) -> f_b GEMM -> KDA^2 -> k3_kda_gate (K11, windows). Fast: 371
+us for 8192 rows x 96 heads on stage 1 (FlashKDA prepare + recurrence ~710);
+stage 0 same-lease A/B at 8192@0: 140.2 / 138.8 -> 138.0 / 136.3 ms.
 
-It FAILs loop/p/check vs main: 19/23 argmax agree, 3 near-tie flips within
-the KL limit, 1 beyond (the prefill's last row, KL 5.9e-2, main's margin
-0.19). Cause: FlashKDA rounds the state to bf16 every 16 tokens, KDA^2 keeps
-fp32. Against an fp64 token-by-token reference (work/kda2/ref2.cu, random
-inputs) KDA^2's output is 4e-3 and final state 3e-3 relative RMS; NVlabs'
-README measures FlashKDA's final state ~4% off on a real 8K prefill. So the
-difference is main's error, but the A/B check cannot tell; it needs a
-precision oracle (e.g. an fp64 / fp32-state reference P manifest) or the
-orchestrator's call. The fixed-h96 build is 4% faster but stores a wrong
-final state after a partial last chunk (do not use it).
+Numerics, the blocker:
+- Its partial last chunk is inaccurate on real data (check INCONCLUSIVE at
+  a 5990-row prefill, PASS at 6016 / 6144; random data in a harness never
+  showed it). The last branch commit stops every chain at the sequence's
+  last whole chunk and runs the rest (< 32 rows) in the gate kernel, token
+  by token in f32 from the state KDA^2 left in the line.
+- That f32 path over every row (`K14_ALL_ROWS` + `K9_NO_CHUNKS`) is an f32
+  reference build of the packed KDA. `kern test --reference <it>` over
+  seeds 0-3: per span, from the same inputs, main's gated output (FlashKDA +
+  k3_kda_rec + K11) is within 1e-3 .. 1e-2 max abs of it, KDA^2's within
+  0.2 .. 0.96 (growing with depth). End to end KDA^2 is a little closer on
+  the prefill's last rows but spikes on single decode tokens that main and
+  the reference agree on: vs main max KL 9.7e-3 (seed 0, PASS), 3.6e-2 with
+  a flip (seed 2, FAIL); vs the reference 1.0e-2 / 3.2e-2 where main is
+  4.0e-3 / 6.2e-3. Upstream states a 5e-2 numeric contract and falls back
+  to an exact M64 schedule on large states or failed decay proofs; FlashKDA
+  (bf16 state every 16 rows) is far closer to f32 than KDA^2 is.
+
+So FlashKDA's chunked math stays; a faster P KDA has to keep its precision.
+The reference build is the tool to judge one (a recipe: build the kda2
+branch with those two defines, `loop/gen`, keep the manifest and the two
+cubins next to `build/`, pass it as the check's reference, vary `--seed`).
 
 ## Tools (work/, not committed)
 
@@ -122,5 +138,4 @@ final state after a partial last chunk (do not use it).
    152 SMs; each warp owns 32 dv columns independently -> split dv over
    CTAs; the per-row rms over 128 dv then needs a cluster / DSMEM sum).
 2. Own prepare with the conv in its load (q/k never written).
-3. KDA^2 (nvkda kda-cake-ptx): fixed_h96 PTX needs host-built piece/CTA
-   tables from cu_seqlens (58 KB Python scheduler); no varlen h96 PTX.
+3. KDA^2: done, rejected on precision (above).
