@@ -9,10 +9,10 @@
 //
 // Row b's block:
 //   * the router top-k of columns [0, EXPERTS): k3_router_argmax.cu's
-//     kern_k3_router_topk, by warp 0;
-//   * meanwhile warps 1..14 land the latent (columns EXPERTS + [0, LATENT)) to
+//     kern_k3_router_topk, by warps 0..7 (below);
+//   * meanwhile warps 8..21 land the latent (columns EXPERTS + [0, LATENT)) to
 //     bf16 and quantise it to mxfp8 as k3_moe_prefill.cu's kern_k3_moe_quant
-//     (four threads per 32-element group), and warps 15..20 run k3_land.cu's
+//     (four threads per 32-element group), and warps 22..27 run k3_land.cu's
 //     land_situ on the shared expert's gate | up (the SH columns after it);
 // then the last block to finish (`done`, a zeroed carry it re-zeroes) builds
 // the routing tables of this rank's experts `first + j * STRIDE` (j < LOCAL)
@@ -44,14 +44,19 @@
 #define LOCAL (EXPERTS / STRIDE)
 #define THREADS 1024
 #define WARPS (THREADS / 32)
-#define PER_LANE (EXPERTS / 32)
-#define QUANT_WARP0 1
+#ifndef TOPK_WARPS
+#define TOPK_WARPS 8
+#endif
+#define SLICE (EXPERTS / TOPK_WARPS)
+#define PER ((SLICE + 31) / 32)
+#define CPER (TOPK_WARPS * TOPK / 32)
+#define QUANT_WARP0 TOPK_WARPS
 #define QUANT_THREADS (LATENT / 8)
-#define SITU_WARP0 (QUANT_WARP0 + QUANT_THREADS / 32)
+#define SITU_WARP0 (TOPK_WARPS - SITU_THREADS / 32)  // the slices' warps but the merging one, after their slice
 #define SITU_THREADS (SH / 4)
-static_assert(EXPERTS % 32 == 0 && EXPERTS <= THREADS, "one expert per thread, PER_LANE per lane");
+static_assert(EXPERTS % TOPK_WARPS == 0 && TOPK_WARPS * TOPK % 32 == 0 && EXPERTS <= THREADS, "slices, candidates");
 static_assert(QUANT_THREADS % 32 == 0 && SH % 4 == 0, "whole warps");
-static_assert((SITU_WARP0 * 32 + SITU_THREADS) <= THREADS, "the side work fits the block");
+static_assert(SITU_WARP0 > 0 && (QUANT_WARP0 * 32 + QUANT_THREADS) <= THREADS, "the side work fits the block");
 static_assert(LOCAL <= THREADS && TOPK * 64 <= THREADS, "one expanded id per thread");
 
 typedef unsigned int u32;
@@ -59,16 +64,6 @@ typedef unsigned int u32;
 __device__ __forceinline__ u32 ord_f32(float f) {
   u32 b = __float_as_uint(f);
   return (b & 0x80000000u) ? ~b : (b | 0x80000000u);
-}
-
-template <int L, int N>
-__device__ __forceinline__ u32 tree_max(const u32 (&o)[PER_LANE]) {
-  if constexpr (N == 1) {
-    return o[L];
-  } else {
-    constexpr int h = N > 4 ? (N > 8 ? (N > 16 ? 16 : 8) : 4) : (N > 2 ? 2 : 1);
-    return max(tree_max<L, h>(o), tree_max<L + h, N - h>(o));
-  }
 }
 
 __device__ __forceinline__ float tanh_approx(float x) {
@@ -86,46 +81,93 @@ __device__ __forceinline__ float situ_f(float pg, float pu) {
   return (a * s) * c;
 }
 
-// k3_router_argmax.cu's picks over s_sig / s_ord by warp 0, lane t holding
-// experts t * PER_LANE + j.
-__device__ __forceinline__ void topk(const float* s_sig, const u32* s_ord, int* s_e, float* s_w, const float rs,
-                                     int* __restrict__ idx, float* __restrict__ wts, int b, int t) {
-  u32 o[PER_LANE];
-  float g[PER_LANE];
+// k3_router_argmax.cu's picks (largest biased score, ties to the smallest expert, sixteen
+// rounds) in two levels: warp w < TOPK_WARPS takes its slice's top 16 (lane l holding
+// experts w * SLICE + l * PER + j), then warp 0 the top 16 of those candidates (lane l
+// holding candidates l * CPER + j). The order is total, so the second level picks the
+// first level's union down to the global picks in the global order.
+struct Cand {
+  u32 key[TOPK_WARPS * TOPK];
+  int e[TOPK_WARPS * TOPK];
+  float sig[TOPK_WARPS * TOPK];
+};
+
+// A round over a lane's N slots: the largest key (REDUX.MAX), the smallest expert holding
+// it (REDUX.MIN); the lane holding that expert blanks the slot and returns true.
+template <int N>
+__device__ __forceinline__ bool pick(u32 (&o)[N], const int (&e)[N], const float (&g)[N], u32& m, int& ew,
+                                     float& gw) {
+  m = o[0];
 #pragma unroll
-  for (int j = 0; j < PER_LANE; ++j) {
-    o[j] = s_ord[t * PER_LANE + j];
-    g[j] = s_sig[t * PER_LANE + j];
+  for (int j = 1; j < N; ++j) m = max(m, o[j]);
+  m = __reduce_max_sync(0xffffffffu, m);
+  u32 my = 0xffffffffu;
+#pragma unroll
+  for (int j = 0; j < N; ++j)
+    if (o[j] == m) my = min(my, (u32)e[j]);
+  ew = (int)__reduce_min_sync(0xffffffffu, my);
+  bool won = false;
+#pragma unroll
+  for (int j = 0; j < N; ++j)
+    if (e[j] == ew && o[j] == m) {
+      gw = g[j];
+      o[j] = 0u;  // strictly below ord() of any real float
+      won = true;
+    }
+  return won;
+}
+
+__device__ __forceinline__ void topk_slice(const float* s_sig, const u32* s_ord, Cand& c, int w, int lane) {
+  u32 o[PER];
+  int e[PER];
+  float g[PER];
+#pragma unroll
+  for (int j = 0; j < PER; ++j) {
+    const int k = lane * PER + j;
+    e[j] = k < SLICE ? w * SLICE + k : 0x7fffffff;
+    o[j] = k < SLICE ? s_ord[e[j]] : 0u;
+    g[j] = k < SLICE ? s_sig[e[j]] : 0.f;
   }
   for (int r = 0; r < TOPK; ++r) {
-    u32 m = tree_max<0, PER_LANE>(o);
-    m = __reduce_max_sync(0xffffffffu, m);
-    u32 my = 0xffffffffu;
+    u32 m;
+    int ew;
+    float gw;
+    if (pick(o, e, g, m, ew, gw)) {
+      c.key[w * TOPK + r] = m;
+      c.e[w * TOPK + r] = ew;
+      c.sig[w * TOPK + r] = gw;
+    }
+  }
+}
+
+__device__ __forceinline__ void topk_merge(const Cand& c, int* s_e, float* s_w, const float rs, int* __restrict__ idx,
+                                           float* __restrict__ wts, int b, int lane) {
+  u32 o[CPER];
+  int e[CPER];
+  float g[CPER];
 #pragma unroll
-    for (int j = PER_LANE - 1; j >= 0; --j)
-      if (o[j] == m) my = (u32)(t * PER_LANE + j);
-    u32 ew = __reduce_min_sync(0xffffffffu, my);
-    if (my == ew) {
-      int jw = (int)ew - t * PER_LANE;
-      float gw = 0.0f;
-#pragma unroll
-      for (int j = 0; j < PER_LANE; ++j)
-        if (j == jw) {
-          gw = g[j];
-          o[j] = 0u;
-        }
-      s_e[r] = (int)ew;
+  for (int j = 0; j < CPER; ++j) {
+    o[j] = c.key[lane * CPER + j];
+    e[j] = c.e[lane * CPER + j];
+    g[j] = c.sig[lane * CPER + j];
+  }
+  for (int r = 0; r < TOPK; ++r) {
+    u32 m;
+    int ew;
+    float gw;
+    if (pick(o, e, g, m, ew, gw)) {
+      s_e[r] = ew;
       s_w[r] = gw;
     }
   }
   __syncwarp();
-  if (t < TOPK) {
-    float sg = s_w[t];
+  if (lane < TOPK) {
+    float sg = s_w[lane];
     float den = sg;
 #pragma unroll
     for (int off = TOPK / 2; off > 0; off >>= 1) den += __shfl_xor_sync(0x0000ffffu, den, off);
-    wts[b * TOPK + t] = (sg / (den + 1e-20f)) * rs;
-    idx[b * TOPK + t] = s_e[t];
+    wts[b * TOPK + lane] = (sg / (den + 1e-20f)) * rs;
+    idx[b * TOPK + lane] = s_e[lane];
   }
 }
 
@@ -175,7 +217,7 @@ __device__ __forceinline__ void route(const int* __restrict__ idx, int first, in
   __syncthreads();
   if (i < LOCAL) {
     int run = 0;
-    for (int w = 0; w < WARPS; ++w) {
+    for (int w = 0; w < (T * TOPK + 31) / 32; ++w) {
       const int c = hist[w][i];
       hist[w][i] = run;
       run += c;
@@ -184,11 +226,11 @@ __device__ __forceinline__ void route(const int* __restrict__ idx, int first, in
   }
   __syncthreads();
   if (warp == 0) {  // off = exclusive scan of the experts' CTA counts
-    constexpr int PER = (LOCAL + 31) / 32;
-    int c[PER], sum = 0;
+    constexpr int EPL = (LOCAL + 31) / 32;
+    int c[EPL], sum = 0;
 #pragma unroll
-    for (int k = 0; k < PER; ++k) {
-      const int e = lane * PER + k;
+    for (int k = 0; k < EPL; ++k) {
+      const int e = lane * EPL + k;
       c[k] = e < LOCAL ? (count[e] + TILE - 1) / TILE : 0;
       sum += c[k];
     }
@@ -200,8 +242,8 @@ __device__ __forceinline__ void route(const int* __restrict__ idx, int first, in
     }
     int run = incl - sum;
 #pragma unroll
-    for (int k = 0; k < PER; ++k) {
-      const int e = lane * PER + k;
+    for (int k = 0; k < EPL; ++k) {
+      const int e = lane * EPL + k;
       if (e < LOCAL) off[e] = run;
       run += c[k];
     }
@@ -240,6 +282,7 @@ extern "C" __global__ void __launch_bounds__(THREADS, 1) kern_k3_moe_front(
   __shared__ int s_e[TOPK];
   __shared__ float s_w[TOPK];
   __shared__ int s_last;
+  __shared__ Cand s_cand;
 
   const int b = blockIdx.x, t = threadIdx.x, warp = t / 32;
   const float* row = S + (long long)b * LDS;
@@ -250,11 +293,14 @@ extern "C" __global__ void __launch_bounds__(THREADS, 1) kern_k3_moe_front(
   }
   __syncthreads();
 
-  if (warp == 0) {
-    topk(s_sig, s_ord, s_e, s_w, __bfloat162float(rs[0]), idx, wts, b, t);
-  } else if (warp < SITU_WARP0) {
+  if (warp < TOPK_WARPS) {
+    topk_slice(s_sig, s_ord, s_cand, warp, t % 32);
+    asm volatile("bar.sync 1, %0;" ::"n"(TOPK_WARPS * 32));
+    if (warp == 0) topk_merge(s_cand, s_e, s_w, __bfloat162float(rs[0]), idx, wts, b, t);
+  } else if (warp < QUANT_WARP0 + QUANT_THREADS / 32) {
     quant8(row + EXPERTS, q + (long long)b * LATENT, sf + (long long)b * (LATENT / 32), t - QUANT_WARP0 * 32);
-  } else if (t < SITU_WARP0 * 32 + SITU_THREADS) {
+  }
+  if (t >= SITU_WARP0 * 32 && t < SITU_WARP0 * 32 + SITU_THREADS) {
     const int k = t - SITU_WARP0 * 32;
     const float4 g = reinterpret_cast<const float4*>(row + EXPERTS + LATENT)[k];
     const float4 u = reinterpret_cast<const float4*>(row + EXPERTS + LATENT + SH)[k];
@@ -264,14 +310,14 @@ extern "C" __global__ void __launch_bounds__(THREADS, 1) kern_k3_moe_front(
     reinterpret_cast<uint2*>(act + (long long)b * SH)[k] = *reinterpret_cast<const uint2*>(o);
   }
 
-  __threadfence();
+  if (warp == 0) __threadfence();  // the ids, the one output the last block reads
   __syncthreads();
   if (t == 0) {
     s_last = atomicAdd(done, 1) == T - 1;
+    __threadfence();
   }
   __syncthreads();
   if (!s_last) return;
-  __threadfence();
   route(idx, first, T, cta_batch, cta_limit, num_non_exiting, total_padded, route_map, exp2perm);
   if (t == 0) *done = 0;
 }
