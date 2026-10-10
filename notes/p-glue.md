@@ -159,6 +159,14 @@ The orchestrator ruled GEMM merges out of scope (18:13). Measured before that:
   −0.7 us at 354 rows in the harness, no change in the bench.
 - Residual with packed FFMA2 mix + FADD2 butterflies on top of the 40-register form: spills, slower.
 
+### Mid-size chunks (129 .. ~1000 rows): what is left is the MLA attention
+- At 354 rows over 131k (stage 0, 47.4 ms an item) the expand (2.6 ms) and FMHA (4.5 ms) take 21 ms
+  of the item; the FMHA there streams each head's 84 MB of expanded K/V once per 256-row Q tile on
+  192 CTAs (1.26 waves). The absorbed decode kernel is worse (+9%: heads padded to 128, every row its
+  own pass). An absorbed prefill kernel with rows × heads in M would need ~9.7 TFLOP (6.5 ms at
+  1.5 PF) but only as a tcgen05 kernel: mma.sync peaks at 605 TFLOP/s here (work/mma), which would
+  make it slower than today's path.
+
 ## Tooling gap (fixed by the orchestrator in a405bd0)
 `kern test` diffs ops, not module bytes: a kernel-only change read "nothing to test". loop/p/check
 now replays a rebuilt module under its old name (`work/forcediff.py` did the same by hand).
