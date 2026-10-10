@@ -10,6 +10,9 @@
 | exchange merges the DSL splits | 22.9 | 4.400 ms/step |
 | exchange runs v-up + gate | 22.7 | 4.394 ms/step |
 | exchange latency (loads in flight, grid 256) | 22.7 | 4.366 ms/step |
+| main 1242531 (all of the above + d-mlp, p-*) | 13.2 | 4.175 ms/step |
+| exchange latency, rebased | 13.2 | 4.135 ms/step |
+| absorb: 384 blocks, W frags held | 13.2 | 4.133 ms/step |
 
 ## Done
 
@@ -60,6 +63,16 @@
   receiver loads all 8 peers' vectors at once and re-polls only the late
   ones, and the grid is 256 (2 blocks/SM fit: 120 regs, 68 KB smem; 304
   would be exactly full). Same numerics as before. 4.394 → 4.366.
+
+- **Absorb**: 768 blocks but 5/SM fit (regs + 40 KB smem) → 8 blocks in a
+  second wave; now 384 x 256 threads, W fragments in registers across row
+  tiles, rope copy spread over every block. 48 rows 11.9 → 9.9 us (one GPU,
+  work/t/absorb.cu). Bit-identical.
+- **Lamport deadline on clock64()**: d-mlp found %globaltimer jumps early in
+  a run (resync to host time) and fires the 2 s timeout with nothing late
+  (tp_err = 1 + rank at step 0, ranks diverge). That is the likely cause of
+  my 128 KB-staging exchange failing the real check while passing the
+  8-virtual-rank harness. The exchange now counts 2 * timeout_ns SM cycles.
 
 ## Tried and dropped
 

@@ -198,11 +198,6 @@ __device__ __forceinline__ uint4 ld_volatile(const uint4* p) {
   return v;
 }
 
-__device__ __forceinline__ unsigned long long gtimer() {
-  unsigned long long t;
-  asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(t));
-  return t;
-}
 
 __device__ __forceinline__ bool poisoned(uint32_t w) { return (w & 0xffffu) == 0x8000u || (w >> 16) == 0x8000u; }
 
@@ -248,7 +243,9 @@ __device__ __forceinline__ void await_all(uint4 (&v)[NRANKS], const uint4* p, lo
                                           int& fail) {
 #pragma unroll
   for (int q = 0; q < NRANKS; ++q) v[q] = ld_volatile(p + q * stride);
-  unsigned long long t0 = 0;
+  // The deadline counts SM cycles (~2 per ns): %globaltimer is resynced to the host clock early in a
+  // run and its jumps fired the timeout with nothing late.
+  long long t0 = 0;
   while (true) {
     int missing = 0;
 #pragma unroll
@@ -258,10 +255,10 @@ __device__ __forceinline__ void await_all(uint4 (&v)[NRANKS], const uint4* p, lo
         missing = 1 + q;
       }
     if (!missing || fail) return;
-    const unsigned long long now = gtimer();
+    const long long now = clock64();
     if (t0 == 0) {
       t0 = now;
-    } else if ((long long)(now - t0) > timeout_ns) {
+    } else if (now - t0 > 2 * timeout_ns) {
       fail = missing;
       return;
     }
