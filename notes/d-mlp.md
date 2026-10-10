@@ -37,6 +37,10 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
   both release, retry in lockstep every 5 s). `work/lease8.sh` (not committed) retries single passes with a
   random 2-9 s pause; `work/dcheck.sh` / `work/dbench.sh` are loop/d/check / bench through it.
 - **Launch gaps inside the graph are ~0.15 us**: fusing saves the kernel ramp and tail, not launch latency.
+- **`pdl: true` on my kernels (griddepcontrol.wait at their start) is unsafe for K1d**: with it on
+  land_add2_attnres_rms alone the check FAILs (430 flips, ranks agree); on the two AR kernels alone or
+  moe_front alone it is bit-identical. Unexplained (its predecessor is lat_up's cuBLASLt GEMM); the whole
+  gain was 4.061 -> 4.049, so dropped. d-attn saw no gain from it either. The trigger alone (committed) is safe.
 - Profiling: nsys is on the hosts (`/usr/local/bin/nsys`), not in the container. `work/dprof.sh` runs rank 0
   under nsys with k3_step `--profile R@CTX` and `--cuda-graph-trace=node`; `work/kstats.py`, `work/kmin.py`,
   `work/ktimeline.py` read the export.
