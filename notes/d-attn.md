@@ -316,6 +316,17 @@ A main copy for A/B: `git archive main | tar -x -C work/p/main`, copy
 loop/local.env, `loop/build`, `loop/gen` inside it, bench its p-stage0
 with its own loop/p/bench.
 
+## Status (2026-10-10 ~23:00 UTC): P MLA attention at its floor
+
+On the branch: the split (3bd4751), expand +512 (e031007), the gate
+(883de0f), harnesses (f0a24a2: harness/p_fmha_split.cu,
+harness/p_split_layout.cu). The FMHA at 8192 rows is MMA-bound at the
+power cap with near-minimal HBM traffic. Small calls are split. The gate
+is at 4.3 TB/s. What is left in the MLA half of a P layer is cuBLAS
+(wfu, q_b, expand, o_proj) and the prebuilt FMHA. The rest of P's
+non-GEMM time is p-glue's (residual / MoE glue, its energy work) and
+p-kda's (flash_kda, span_gather).
+
 ## What the kernel is and what it reaches
 
 - `fmhaSm103aKernel_QkvBfloat16OBfloat16HQk192HV128SeparateQkvCausalVarSeqQ256Kv128PersistentContext`
@@ -393,6 +404,10 @@ with its own loop/p/bench.
 - D's MLA decode (the DSL split kernel; d-mlp asked): at 48 rows a rank
   does 164 GFLOP on 906 MB (181 FLOP/B), so 8 TB/s would need ~1.45 PF of
   MMA; it runs ~0.86 PF in 190 us. Not a bandwidth kernel to rewrite.
+- kern can pin a cuBLASLt algorithm per launch (`algo`, checked against
+  every shape the launch runs), and the generator pins none. A per-shape
+  search over the P GEMMs (28% of the score) might pay, but picking
+  cuBLASLt's kernels is GEMM territory: not done.
 - Packed multi-sequence calls run grid z = seqs with x = ceil(tokens / 256)
   each, so most CTAs are empty; the harness shows empty FMHA sequences cost
   3-5% at long contexts. The bench has one sequence a call; real traffic
