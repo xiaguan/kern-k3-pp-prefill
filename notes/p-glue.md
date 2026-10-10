@@ -11,9 +11,15 @@ Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check l
 | situ in route | 23.2 | 56.64 | shared expert's situ made by the route kernel |
 | (main 8f3d6a4, with p-kda) | 20.9 | 54.19 | |
 | residual on 14 warps | 20.9 | 53.96 | K1a/K1b/K1d 448 threads a row, bit-identical |
+| (main 4df7918, with p-kda) | 19.4 | 52.99 | |
+| mla prep + gather | 19.2 | 52.87 | prep head + varlen gather one launch; gate reads the f32 projection |
+| residual sw from L1, 3 rows/SM | 19.2 | 52.75 | 60 → 40 regs |
+| route reciprocals | 19.2 | 52.65 | rcp/div fast paths without the IEEE slow-path branch |
+| finalize smem picks + FFMA2 | 19.2 | 52.53 | 190 → 163 us at 8192 rows |
 
 A MoE layer is now: `land_add_attnres_rms_bf16` → router* → lat_down* → wsh* → `moe_route` →
 fc1* → fc2* → `moe_finalize_rms` → lat_up* → sh_down* → next `land_add2_attnres_rms`.
+An MLA layer: wfu* → `mla_prep_gather` → expand* → q_b* → `mla_fmha` → `mla_gate` → o_proj*.
 Non-GEMM launches: 4 a layer (+ `moe_route_init` once a stage). Without touching the GEMMs that is
 the floor: every remaining glue kernel sits between two GEMMs.
 
@@ -68,8 +74,45 @@ The orchestrator ruled GEMM merges out of scope (18:13). Measured before that:
   weighted (one bf16 partial instead of two; `land_add2_attnres_rms` with two = 0). Numerics:
   hidden = bf16(prefix2 + bf16(latup + shdown)) instead of bf16(prefix2 + bf16(latup) + bf16(shdown)).
 
+### MLA glue (k3_mla_glue.cu, bit-identical)
+- `kern_k3g_mla_prep_gather`: grid = B head blocks (mla_prep's fast head minus the gate) + ceil(ctx/7)
+  gather blocks (7 rows × 72 lanes of 512 threads); the chunk's own latent rows go from the head
+  blocks to latent_g, the gather skips them. Packed chunk only.
+- `kern_k3g_mla_gate` reads the gate's f32 columns of the fused projection and lands them itself:
+  mla_prep no longer writes a bf16 gate copy (−403 MB read, −201 MB write per MLA layer at 8192).
+- The fused kernel looked +10 us/MLA layer slower at 354 rows than prep + gather separately
+  (variant B, within noise); kept for the launch.
+- rcp_fast in the gate (sigmoid): −2% of the gate kernel, no measurable change: not kept.
+
+### Reciprocals without the slow-path branch (route)
+- nvcc's `1.0f / d`, `__frcp_rn(d)` and `a / 448.f` each emit a fast path + FCHK/exponent test +
+  BSSY/CALL slow path per element; in the route kernel 116 BSSY / 70 CALL. `rcp_fast` (rcp.approx,
+  fma residual, fma correction) equals both for every float in [2^-126, 2^126) (exhaustive check,
+  work/hx/t.cu); taken when a warp vote says every lane is in range. `div448` equals a / 448.f for
+  every bf16 magnitude but inf (passed through). Route 126.8 → 109.5 us at 8192, 21 → 15.4 at 354.
+
+### Finalize
+- 16 (row, weight) picks staged in smem by 16 threads instead of 32 broadcast global loads a thread,
+  FFMA2 accumulation: 182.8 → 157.6 us (harness; a pure gather of the same rows is 148.8 us).
+- Tried: 16 / 8 / 4 loads in flight per thread (104 / 64 / 56 regs): slower at 8192 (occupancy);
+  2 or 4 rows a block: slower.
+
+### Tried, not kept
+- PDL (`pdl: true` + griddepcontrol.wait at the top) on every glue launch: 10 rows −0.5%, but 8192
+  rows +0.9% (the early-resident blocks slow the GEMMs' tails); weighted +0.7%.
+- Route phase 2 with the first row's places computed before the scan + a tight barrier spin:
+  −0.7 us at 354 rows in the harness, no change in the bench.
+- Residual with packed FFMA2 mix + FADD2 butterflies on top of the 40-register form: spills, slower.
+
+## Tooling gap (fixed by the orchestrator in a405bd0)
+`kern test` diffs ops, not module bytes: a kernel-only change read "nothing to test". loop/p/check
+now replays a rebuilt module under its old name (`work/forcediff.py` did the same by hand).
+
 ## Next
 
-1. moe_finalize_rms speed (190 us at 8192 vs ~125 floor).
-2. latent_gather into mla_prep (−1 launch per MLA layer).
-3. mla_gate: only neighbours are the prebuilt FMHA and cuBLAS o_proj: no fusion without our own FMHA.
+- Launches: every glue kernel left sits between GEMMs / the prebuilt FMHA; the only one left is
+  `moe_route_init` (1 a stage), which needs a zeroed workspace (a carry is refused by `kern cut`).
+- mla_gate: only neighbours are the prebuilt FMHA and cuBLAS o_proj: no fusion without our own FMHA.
+- Time: residual K1b / K1d (153 / 163 us at 8192, nb 2; floor ~86 / 100 us): issue-bound half the
+  time (58% issue, ~14k warp-instr a row); finalize at the gather floor + 9 us; route 108 us
+  (situ ~45 us of it, MUFU-bound: 4 MUFU an element).
