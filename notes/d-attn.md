@@ -3,8 +3,10 @@
 The D lane closed at 21:04 UTC (sections from "State" on). The orchestrator
 then moved this run to P's MLA attention (`mla_fmha`): see "P: MLA attention"
 at the end. That lane closed at 22:31 UTC; the last task (cuBLASLt pinning
-headroom on P, measure only, last section) is done, and the orchestrator
-said to stop after it. A new session: wait for a new message in `ROUND.md`.
+headroom on P, measure only, last section) is done. At 23:04 UTC the
+orchestrator gave this run the error budget: `notes/error-budget.md` (the
+sources of numerical difference in main, P and D, each measured), tools and
+the D isolation variants' patch in `harness/error-budget/`.
 
 ## State
 
