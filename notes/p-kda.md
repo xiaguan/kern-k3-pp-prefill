@@ -11,6 +11,11 @@
 | 26f8f07 gate on idle SMs | 230 (19.2/layer) | 52.40 ms/item | 96.61 ms |
 | 64d3f13 one TMA box an array | 230 (19.2/layer) | 52.07 ms/item | 95.85 ms |
 
+Stage 0 now (main dcf6ec0, 2026-10-10 22:10): 17.2 launches/layer, ~125
+ms/item weighted. A KDA layer's non-GEMM launches: span_gather, FlashKDA
+prepare, k3_kda_rec (3; the floor while the prepare stays FlashKDA's
+prebuilt cubin). At 8192@0 per layer: span_gather ~283 us, flash_kda ~880 us.
+
 Stage 0 (scored from 2026-10-10 19:48; real data): flash_kda 6.9% -> 6.6%
 of 8192@0 with 64d3f13; per layer at 8192@0 span_gather ~334 us (~283 after
 eaf2849), flash_kda ~900-1000 us (FlashKDA prepare ~300 + k3_kda_rec), qkvg
