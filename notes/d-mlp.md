@@ -109,7 +109,9 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
   were issued. Chunked pushes (every block a contiguous share, staged in smem): issue 3.6 us, last issue
   1.3 us earlier, polls only 0.3 us earlier. Delivery is fabric-bound (2.4 MB a member at 24 rows lands at
   an effective ~270 GB/s, plus a ~3 us hop seen at 4 rows), which also explains why the two-shot (half
-  the bytes, two hops) did not pay. The all-reduce line is closed.
+  the bytes, two hops) did not pay. Pushing each chunk with cp.async.bulk (one bulk copy a peer from the
+  staged smem) instead of 16-byte stores: polls done 10.0 vs 10.2 us, so it is not per-packet overhead.
+  The all-reduce line is closed.
 - **Real model, 93 layers, 128k** (work/d93bench.sh; 2 min weight load): start 3ad4ec9 23.88 / 30.87 ms
   a step at 24 / 48 rows, this branch 19.54 / 26.42 (-18% / -14%; every run's work). nsys at 24 rows:
   ar_finalize median 27 us (MoE skew), ar_attnres 12.9, kda_core 10.9, moe_front 7.3, K1d 6.9 (snapshot
