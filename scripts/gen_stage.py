@@ -769,22 +769,22 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                 "impl": {"launches": [{"entry": f"extern:nccl_{kind}_{dt}", "params": io + ["i32"],
                                        "args": [{"param": 0}, {"param": 1}, {"param": 2}, {"rank": "tp"}]}]}}
 
+    if xchg:
+        # The MLA partials change hands in one kernel (source/k3_dcp.cu): every
+        # head's partial pushed into its owner's Lamport stage over NVLink, the
+        # members' partials of this member's heads merged by their LSE.
+        ops["dcp_exchange"] = {
+            "params": ["in buffer<bf16>", "in buffer<f32>", "in buffer<i32>", "out buffer<bf16>", "inout buffer<u8>",
+                       "in buffer<u64>", "inout buffer<i32>", "out buffer<i32>", "i32", "i32", "i64", "i64"],
+            "impl": {"launches": [launch("k3_dcp", "kern_k3_dcp_exchange", grid=[TP_AR_GRID, 1, 1],
+                                         block=[256, 1, 1])]},
+        }
+        ops["dcp_init"] = {
+            "params": ["inout buffer<u8>", "i64"],
+            "impl": {"launches": [launch("peer_allreduce_bf16", "kern_peer_lamport_init_bf16", defines={"NRANKS": tp},
+                                         grid=[256, 1, 1], block=[256, 1, 1])]},
+        }
     if dcp:
-        # The MLA partials change hands (source/k3_dcp.cu): fixup clears the
-        # rows this member holds no position of, pack lays every head out for
-        # the member that owns it, one all-to-all, combine merges the members'
-        # partials of this member's heads by their LSE. Every sum is NCCL's
-        # in bf16, as SGLang's.
-        def dcp_op(entry, params, grid):
-            return {"params": params,
-                    "impl": {"launches": [launch("k3_dcp", entry, grid=grid, block=[256, 1, 1])]}}
-        ops["dcp_fixup"] = dcp_op("kern_k3_dcp_fixup", ["inout buffer<bf16>", "inout buffer<f32>", "in buffer<i32>",
-                                                        "i32"], [T, 1, 1])
-        ops["dcp_pack"] = dcp_op("kern_k3_dcp_pack", ["in buffer<bf16>", "in buffer<f32>", "out buffer<bf16>", "i32"],
-                                 [T, HEADS // 4, 1])
-        ops["dcp_combine"] = dcp_op("kern_k3_dcp_combine", ["in buffer<bf16>", "out buffer<bf16>", "i32"],
-                                    [T, hl // 4, 1])
-        ops["nccl_alltoall_bf16"] = nccl("alltoall", "bf16")
         ops["nccl_allreduce_bf16"] = nccl("allreduce", "bf16")
     if xchg and peer_ar:
         # `--peer-ar`: one kernel, every rank's partial pushed into every
@@ -885,6 +885,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     # bytes: one Lamport stage, `tp` slots of f32 [rows, H], or of a DCP step's widest bf16 sum: a MoE
     # layer's, the routed latent's `seqs_max` rows, then the shared expert's
     ar_stage = tp * seqs_max * (LATENT + H) * 2 if dcp else tp * min(rows_max, ONESHOT_MAX_ROWS) * H * 4
+    dcp_stage = tp * seqs_max * hl * (KV_LORA // 8 + 1) * 16
     if tray:
         buffers.update({
             "tp_sym": {"dtype": "u8", "shape": [2 * tp * ag_region * 16], "kind": "carry", "export": True},
@@ -1016,9 +1017,13 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         work("o_partial", H)
     if xchg and mla:
         work("o_lat_l", mo * KV_LORA)
-        # the exchange: one chunk per peer at the bound, R * HL * (512 + 2) bf16 each
-        for n in ["dcp_send", "dcp_recv"]:
-            buffers[n] = {"dtype": "bf16", "shape": [tp * seqs_max * hl * (KV_LORA + 2)], "kind": "workspace"}
+        # the exchange's Lamport stages: a slot per member, a record of 65 vectors per (row, head) in it
+        buffers.update({
+            "dcp_lamport": {"dtype": "u8", "shape": [3 * dcp_stage], "kind": "carry", "export": True},
+            "dcp_lamport_peers": {"dtype": "u64", "shape": [tp], "kind": "peer", "of": "dcp_lamport", "group": "tp"},
+            "dcp_state": {"dtype": "i32", "shape": [8], "kind": "carry"},
+            "tp_err": {"dtype": "i32", "shape": [1], "kind": "output", "fill": "error"},
+        })
     if dcp:
         # the flat MoE all-reduce: the routed latent's rows at the bound, then the shared expert's
         for n in ["moe_flat", "moe_sum"] if xchg else ["moe_flat"]:
@@ -1329,11 +1334,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                          b("o_lat"), b("mla_lse"), b("mla_acc_o"), b("mla_acc_lse"), B, i32(max_pages))
                     if xchg:
                         # every head over this member's positions → this member's heads over all of them
-                        step(L + "dcp_fixup", "dcp_fixup", b("o_lat"), b("mla_lse"), b("seq_lens"), B)
-                        step(L + "dcp_pack", "dcp_pack", b("o_lat"), b("mla_lse"), b("dcp_send"), B)
-                        step(L + "dcp_a2a", "nccl_alltoall_bf16", b("dcp_send"), b("dcp_recv"),
-                             {"expr": {"mul": [T, hl * (KV_LORA + 2)]}})
-                        step(L + "dcp_combine", "dcp_combine", b("dcp_recv"), b("o_lat_l"), B)
+                        step(L + "dcp", "dcp_exchange", b("o_lat"), b("mla_lse"), b("seq_lens"), b("o_lat_l"),
+                             b("dcp_lamport"), b("dcp_lamport_peers"), b("dcp_state"), b("tp_err"), {"rank": "tp"}, B,
+                             i64(dcp_stage), i64(TP_TIMEOUT_NS))
                         step(L + "vup", "mla_vup_gate", b("o_lat_l"), w("w_kv_b_l"), b("mla_gate"), b("gated"), B)
                     else:
                         step(L + "vup", "mla_vup_gate", b("o_lat"), w("w_kv_b"), b("mla_gate"), b("gated"), B)
@@ -1579,10 +1582,11 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         programs["prefill"] = kern_manifest.program(emit(False, chunk=True), groups=seqs_max, rows=T, context=CTX)
     # Run once after the peers are imported: the Lamport stages must read
     # -0.0 before the first allreduce, and a carry starts at zero.
-    if tray or (xchg and peer_ar):
-        init = "tp_lamport_init_bf16" if dcp else "tp_lamport_init"
-        programs["tp_init"] = kern_manifest.program(
-            [{"label": "tp_init", "op": init, "args": [b("tp_ar_lamport"), i64(3 * ar_stage)]}], once=True)
+    init = ([{"label": "tp_init", "op": "tp_lamport_init_bf16" if dcp else "tp_lamport_init",
+              "args": [b("tp_ar_lamport"), i64(3 * ar_stage)]}] if tray or (xchg and peer_ar) else []) + (
+        [{"label": "dcp_init", "op": "dcp_init", "args": [b("dcp_lamport"), i64(3 * dcp_stage)]}] if xchg and mla else [])
+    if init:
+        programs["tp_init"] = kern_manifest.program(init, once=True)
     m = {
         "schema_version": kern_manifest.SCHEMA_VERSION,
         "model": f"{CHECKPOINTS[experts]}/" + (f"l{first}-{end}" if stage else f"{end}l") + f"/ep{ranks}"

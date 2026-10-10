@@ -49,9 +49,35 @@
 //   Summation order is q = 0 .. NRANKS - 1, so the result is the same bytes on
 //   every run.
 //
+// kern_k3_dcp_exchange is the four steps above in one launch: fixup, pack,
+// the all-to-all and combine, with the group's peer-mapped Lamport stages for
+// the wire instead of NCCL (TensorRT-LLM's one-shot protocol, as
+// peer_allreduce_bf16.cu runs it).
+//
+//   extern "C" __global__ void kern_k3_dcp_exchange(
+//       const bf16* o_lat, const float* lse,   // [R, HEADS, LAT], [R, HEADS]
+//       const int* seq_lens,                   // [R]
+//       bf16* o,                               // [R, HL, LAT]
+//       uint8_t* lamport,                      // 3 stages of `stage_bytes`
+//       const unsigned long long* peers,       // [NRANKS] every member's `lamport`
+//       int* state, int* err,                  // [8] zeroed carry; sticky 1 + the late member
+//       int rank, int R, long long stage_bytes, long long timeout_ns);
+//   grid: any grid whose blocks are all resident at once   block 256
+//
+//   A stage holds NRANKS slots, slot q member q's partials of this member's
+//   heads: R * HL records of REC 16-byte vectors, a head's o (LANES vectors,
+//   -0.0 sent as +0.0: a bf16 -0.0 in a 16-byte vector means "not arrived")
+//   and then its lse, one byte per 32-bit word (low half 0x01XX, never the
+//   poison). The empty partial (seq_lens[b] == 0, or an lse of NaN / +inf)
+//   travels as o = 0, lse = -inf, so the receiver merges exactly as combine
+//   does. Every block sends, re-poisons its share of the stage the previous
+//   call used, then merges; the stages rotate through state[2] as the
+//   all-reduce's do.
+//
 //   nvcc -cubin -arch=sm_103a source/k3_dcp.cu
 #include <cuda_bf16.h>
 #include <math_constants.h>
+#include <cstdint>
 
 #ifndef HEADS
 #define HEADS 96
@@ -130,4 +156,133 @@ extern "C" __global__ void __launch_bounds__(256) kern_k3_dcp_combine(const bf16
 #pragma unroll
   for (int k = 0; k < VEC / 2; ++k) o2[k] = __floats2bfloat162_rn(acc[2 * k] * r, acc[2 * k + 1] * r);
   reinterpret_cast<uint4*>(o + ((long long)b * HL + j) * LAT)[v] = out;
+}
+
+#define REC (LANES + 1)
+
+__device__ __forceinline__ uint4 ld_volatile(const uint4* p) {
+  uint4 v;
+  asm volatile("ld.volatile.global.v4.u32 {%0, %1, %2, %3}, [%4];" : "=r"(v.x), "=r"(v.y), "=r"(v.z), "=r"(v.w) : "l"(p));
+  return v;
+}
+
+__device__ __forceinline__ unsigned long long gtimer() {
+  unsigned long long t;
+  asm volatile("mov.u64 %0, %%globaltimer;" : "=l"(t));
+  return t;
+}
+
+__device__ __forceinline__ bool poisoned(uint32_t w) { return (w & 0xffffu) == 0x8000u || (w >> 16) == 0x8000u; }
+
+__device__ __forceinline__ bool arrived(uint4 v) {
+  return !(poisoned(v.x) || poisoned(v.y) || poisoned(v.z) || poisoned(v.w));
+}
+
+__device__ __forceinline__ uint32_t unpoison(uint32_t w) {
+  if ((w & 0xffffu) == 0x8000u) w &= 0xffff0000u;
+  if ((w >> 16) == 0x8000u) w &= 0x0000ffffu;
+  return w;
+}
+
+__device__ __forceinline__ uint4 lse_word(float l) {
+  const uint32_t u = __float_as_uint(l);
+  return make_uint4((u & 0xffu) | 0x100u, ((u >> 8) & 0xffu) | 0x100u, ((u >> 16) & 0xffu) | 0x100u, (u >> 24) | 0x100u);
+}
+
+__device__ __forceinline__ float word_lse(uint4 v) {
+  return __uint_as_float((v.x & 0xffu) | (v.y & 0xffu) << 8 | (v.z & 0xffu) << 16 | (v.w & 0xffu) << 24);
+}
+
+// Spins until the vector at p has arrived; `fail` takes 1 + `from` past the deadline.
+__device__ __forceinline__ uint4 await(const uint4* p, int from, long long timeout_ns, int& fail) {
+  unsigned long long t0 = 0;
+  while (true) {
+    const uint4 v = ld_volatile(p);
+    if (arrived(v) || fail) return v;
+    const unsigned long long now = gtimer();
+    if (t0 == 0) {
+      t0 = now;
+    } else if ((long long)(now - t0) > timeout_ns) {
+      fail = 1 + from;
+      return v;
+    }
+  }
+}
+
+extern "C" __global__ void __launch_bounds__(256) kern_k3_dcp_exchange(
+    const bf16* __restrict__ o_lat, const float* __restrict__ lse, const int* __restrict__ seq_lens,
+    bf16* __restrict__ o, uint8_t* lamport, const unsigned long long* __restrict__ peers, int* state, int* err,
+    int rank, int R, long long stage_bytes, long long timeout_ns) {
+  const int flag = state[2];
+  long long* clear_ptr = reinterpret_cast<long long*>(state + 4);
+  const long long clear_count = *clear_ptr;
+  const long long slot = (long long)R * HL * REC;
+  const long long stage = (flag % 3) * stage_bytes;
+  const uint4* mine = reinterpret_cast<const uint4*>(lamport + stage);
+  uint4* clear_buf = reinterpret_cast<uint4*>(lamport + ((flag + 2) % 3) * stage_bytes);
+  __syncthreads();
+  if (threadIdx.x == 0) atomicAdd(state, 1);
+
+  const int lane = threadIdx.x % LANES, sub = threadIdx.x / LANES;
+  for (int it = blockIdx.x; it < R * (HEADS / HPB); it += gridDim.x) {
+    const int b = it / (HEADS / HPB), h = it % (HEADS / HPB) * HPB + sub;
+    const bool empty = seq_lens[b] == 0;
+    uint4 v = empty ? make_uint4(0, 0, 0, 0)
+                    : reinterpret_cast<const uint4*>(o_lat + ((long long)b * HEADS + h) * LAT)[lane];
+    v = make_uint4(unpoison(v.x), unpoison(v.y), unpoison(v.z), unpoison(v.w));
+    uint4* dst = reinterpret_cast<uint4*>(reinterpret_cast<uint8_t*>(peers[h / HL]) + stage) + rank * slot +
+                 ((long long)b * HL + h % HL) * REC;
+    dst[lane] = v;
+    if (lane == 0) {
+      const float l = empty ? -CUDART_INF_F : lse[(long long)b * HEADS + h];
+      dst[LANES] = lse_word(l != l || l == CUDART_INF_F ? -CUDART_INF_F : l);
+    }
+  }
+  const uint4 poison = make_uint4(0x80008000u, 0x80008000u, 0x80008000u, 0x80008000u);
+  for (long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x; i < clear_count; i += (long long)gridDim.x * blockDim.x)
+    clear_buf[i] = poison;
+
+  int fail = 0;
+  for (int it = blockIdx.x; it < R * (HL / HPB); it += gridDim.x) {
+    const int b = it / (HL / HPB), j = it % (HL / HPB) * HPB + sub;
+    const uint4* rec = mine + ((long long)b * HL + j) * REC;
+    float l[NRANKS];
+    float m = -CUDART_INF_F;
+#pragma unroll
+    for (int q = 0; q < NRANKS; ++q) {
+      l[q] = word_lse(await(rec + q * slot + LANES, q, timeout_ns, fail));
+      m = fmaxf(m, l[q]);
+    }
+    float acc[VEC] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+    float den = 0.f;
+#pragma unroll
+    for (int q = 0; q < NRANKS; ++q) {
+      const uint4 x = await(rec + q * slot + lane, q, timeout_ns, fail);
+      const float w = m == -CUDART_INF_F ? 0.f : expf(l[q] - m);
+      if (w == 0.f) continue;
+      den += w;
+      const __nv_bfloat162* x2 = reinterpret_cast<const __nv_bfloat162*>(&x);
+#pragma unroll
+      for (int k = 0; k < VEC / 2; ++k) {
+        const float2 f = __bfloat1622float2(x2[k]);
+        acc[2 * k] = fmaf(w, f.x, acc[2 * k]);
+        acc[2 * k + 1] = fmaf(w, f.y, acc[2 * k + 1]);
+      }
+    }
+    const float r = den > 0.f ? 1.0f / den : 0.f;
+    uint4 out;
+    __nv_bfloat162* o2 = reinterpret_cast<__nv_bfloat162*>(&out);
+#pragma unroll
+    for (int k = 0; k < VEC / 2; ++k) o2[k] = __floats2bfloat162_rn(acc[2 * k] * r, acc[2 * k + 1] * r);
+    reinterpret_cast<uint4*>(o + ((long long)b * HL + j) * LAT)[lane] = out;
+  }
+  if (fail) atomicMax(err, fail);
+
+  if (blockIdx.x == 0 && threadIdx.x == 0) {
+    while (*reinterpret_cast<volatile int*>(state) != (int)gridDim.x) {
+    }
+    state[2] = (flag + 1) % 3;
+    *clear_ptr = NRANKS * slot;
+    state[0] = 0;
+  }
 }

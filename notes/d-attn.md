@@ -6,6 +6,7 @@
 |---|---|---|
 | main (2026-10-10) | 24.7 | 4.562 ms/step |
 | after kda conv fold | 23.9 | 4.556 ms/step |
+| after dcp exchange kernel | 23.2 | 4.409 ms/step |
 
 ## Done
 
@@ -14,6 +15,27 @@
   shifts the window in place; conv_q/k/v buffers gone. Same f32 sums and bf16
   landings, so bit-identical (check: bit-identical vs main). Cost 4.556 vs
   4.562 (noise). 128 regs vs 160 before, no spills.
+
+- **MLA DCP: fixup + pack + NCCL all-to-all + combine → `dcp_exchange`**
+  (source/k3_dcp.cu): one launch, grid 152 x 256, all blocks resident. Each
+  block pushes its (row, head) records (64 o vectors + one lse vector, lse
+  one byte per word so it can never look like the 0x8000 poison) into the
+  owner's Lamport stage (`dcp_lamport`, own 3-stage rotation and
+  `dcp_state`), re-poisons its share of the previous stage, then merges its
+  (row, local head) records exactly as combine did. Bit-identical. 4.556 →
+  4.409 ms/step: the NCCL SendRecv alone was 23 us + a 3 us gap at 48 rows.
+  The receiver waits for every vector even when its weight is 0, so no
+  write of call c can land after the stage's re-poison in call c + 1.
+
+## Profile (nsys, rank 0, 48 rows @128k, before the exchange kernel)
+
+work/prof.sh runs the bench with nsys on the first rank (`--capture-range-end
+stop`; the default stop-shutdown kills the rank and hangs the other 7).
+MLA layer: mla_prep 4.7, q_b 12.8, absorb_mma 11.0, DSL split 187.7 (grid
+2x48x32: the split plan gives 1 split per row at 48 rows, 48 of 76 clusters),
+DSL reduce 9.2, fixup 1.1, pack 2.2, NCCL 23 (+2.8 gap), combine 2.8,
+vup_gate 14.8. KDA layer: qkvg 18.5 + splitK reduce 4, kda_core 15.4.
+Gaps between graph nodes are ~0.2 us: a launch costs its ramp, not a gap.
 
 ## Ideas / queue
 

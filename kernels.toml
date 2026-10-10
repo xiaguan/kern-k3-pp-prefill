@@ -41,7 +41,7 @@ source = "source/k3_conv_silu.cu"
 defines = { HEADS = 12 }
 
 [kernels."k3_dcp"]
-sha256 = "bb04305d61990db3538dc5caf167ef4e493db7a2c8d90965fcc74e3c6d4286a7"
+sha256 = "90b68fb3c698d5958c1a286b388dd6a83ee5fbbb299c7952825e104b0211d605"
 source = "source/k3_dcp.cu"
 
 [kernels."k3_kda_core+HEADS=12"]
