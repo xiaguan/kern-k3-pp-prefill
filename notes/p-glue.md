@@ -22,6 +22,16 @@ Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check l
   the 512 latent dims instead of 128 + 64), and loop/p/check's 2048-row chunks would not exercise
   the short path.
 
+- **Proposal (a GEMM epilogue, so not done): sh_down accumulates onto lat_up's output.** With
+  `cublaslt_bf16_tn_acc` (beta 1, D in place) the shared expert's down projection adds into
+  `routed_partial`; the next layer's `land_add2_attnres_rms` then reads one partial (two = 0):
+  −234 MB a MoE layer at 8192 rows (~30 us, ~0.35% of the 8192-row item). Numerics: hidden =
+  bf16(prefix2 + bf16(bf16(latup) + shdown)) instead of bf16(prefix2 + bf16(latup) + bf16(shdown)).
+- **Robustness note:** `moe_route`'s grid barrier needs its 304 blocks (two an SM, the whole
+  register file) co-resident. A kernel running beside it on another stream (a PP transfer) only
+  delays it (its blocks wait for that kernel to drain), it cannot deadlock it unless that kernel
+  waits on this stream.
+
 ## State
 
 | commit | launches/layer (stage1) | cost ms/item | note |
@@ -36,6 +46,7 @@ Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check l
 | residual sw from L1, 3 rows/SM | 19.2 | 52.75 | 60 → 40 regs |
 | route reciprocals | 19.2 | 52.65 | rcp/div fast paths without the IEEE slow-path branch |
 | finalize smem picks + FFMA2 | 19.2 | 52.53 | 190 → 163 us at 8192 rows |
+| route: pieces to warps without a top-k row | 19.2 | 52.48 | short chunks: top-k beside quant/situ |
 
 A MoE layer is now: `land_add_attnres_rms_bf16` → router* → lat_down* → wsh* → `moe_route` →
 fc1* → fc2* → `moe_finalize_rms` → lat_up* → sh_down* → next `land_add2_attnres_rms`.
