@@ -201,7 +201,7 @@ source = "source/k3_ar_fused.cu"
 defines = { NRANKS = 8 }
 
 [kernels."k3_moe_route"]
-sha256 = "c263ef1bd6cfacc5ef4a9dab9fa6318a2e0b501f8e4f9c1bfdc5bc6cc0dc66d3"
+sha256 = "b88aa07546168bc1ab1dbec49e14e6aff35994a2980ec714b2b0461868490cb8"
 source = "source/k3_moe_route.cu"
 
 [kernels."k3_mla_glue"]

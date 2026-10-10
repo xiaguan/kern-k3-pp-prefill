@@ -343,15 +343,18 @@ extern "C" __global__ void __launch_bounds__(THREADS, 2) kern_k3g_moe_route(
       atomicOr(cur.bits + pick_e * WORDS + b / 32, 1u << (b & 31));
     }
   }
-  // the rows' latent and shared activation, 256 columns a warp a pass over every warp
+  // the rows' latent and shared activation, 256 columns a warp a pass over every warp, the first
+  // pieces to the warps that had no top-k row (on a short chunk, the top-k and these overlap)
+  const int nq = B * (LATENT / 256), ns = B * (SHARED / 256);
+  const int i0 = (r0 + rstride - min(B, rstride)) % rstride;
 #pragma unroll 4
-  for (int i = r0; i < B * (LATENT / 256); i += rstride) {
+  for (int i = i0; i < nq; i += rstride) {
     const int b = i / (LATENT / 256), c = i % (LATENT / 256) * 256 + lane * 8;
     quant8(x + (long long)b * ldx + c, q + (long long)b * LATENT + c, sf + (long long)b * (LATENT / 32) + c / 32,
            lane);
   }
 #pragma unroll 4
-  for (int i = r0; i < B * (SHARED / 256); i += rstride) {
+  for (int i = (i0 + rstride - nq % rstride) % rstride; i < ns; i += rstride) {
     const int b = i / (SHARED / 256), c = i % (SHARED / 256) * 256 + lane * 8;
     const bf16_t* gate = gu + (long long)b * ldgu + c;
     situ8(gate, gate + SHARED, act + (long long)b * SHARED + c);
