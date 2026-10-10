@@ -15,6 +15,7 @@
 | absorb: 384 blocks, W frags held | 13.2 | 4.133 ms/step |
 | main 7d6ea4f + the above (measured with PDL, = without) | 13.2 | 4.144 ms/step |
 | exchange: split loads at once, half-head merge items, gate in smem | 13.2 | 4.120 ms/step |
+| launch_dependents at entry of kda_core / mla_prep / dcp_exchange | 13.2 | 4.101 ms/step |
 
 ## Done
 
@@ -86,6 +87,14 @@
   splits at a time, a merge item is half a head (8 passes, its 64 KB of
   W_UV staged before the send), the item's gate rows sit in smem. 4.144 →
   4.120. Bit-identical.
+
+- **`griddepcontrol.launch_dependents` at entry** of the kernels followed
+  by a cuBLAS GEMM (kda_core → o_proj, mla_prep → q_b, dcp_exchange →
+  o_proj): cuBLASLt launches its GEMMs as programmatic dependents and waits
+  inside, so the GEMM's blocks land while ours run (d-mlp's find). The
+  exchange's trigger fires only once every block ran it, so all its
+  blocks are resident before a GEMM block takes an SM. 4.120 → 4.101.
+  (absorb is followed by the DSL kernel, which has no PDL: no trigger.)
 
 ## Tried and dropped
 

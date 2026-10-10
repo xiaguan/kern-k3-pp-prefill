@@ -186,6 +186,11 @@ extern "C" __global__ __launch_bounds__(128) void kern_k3_kda_core(
   const int b = blockIdx.x;
   const int h = blockIdx.y;
 #endif
+#if KDA_CONV
+  // cuBLAS's GEMM behind this kernel launches as a programmatic dependent and waits on its own:
+  // let it get its blocks onto the SMs now.
+  asm volatile("griddepcontrol.launch_dependents;");
+#endif
   if ((unsigned)(b - span_at[0]) < (unsigned)span) return;
   const int d = threadIdx.x;
   const int base = h * KD;

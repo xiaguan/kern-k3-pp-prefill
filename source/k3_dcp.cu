@@ -281,6 +281,9 @@ extern "C" __global__ void __launch_bounds__(256, 1) kern_k3_dcp_exchange(
   uint4* clear_buf = reinterpret_cast<uint4*>(lamport + ((flag + 2) % 3) * stage_bytes);
   __syncthreads();
   if (threadIdx.x == 0) atomicAdd(state, 1);
+  // o_proj's GEMM behind this kernel launches as a programmatic dependent and waits on its own; the
+  // trigger fires once every block has run it, so every block is resident before a GEMM block lands.
+  asm volatile("griddepcontrol.launch_dependents;");
   extern __shared__ uint4 sw[];  // [2][QROWS][LAT / 8]
   // a merge item is (row group, local head j, half of j's dv): `it` = (rows * HL + j) * 2 + half
   const int items = (R + RB - 1) / RB * HL * 2;

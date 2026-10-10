@@ -131,6 +131,9 @@ extern "C" __global__ __launch_bounds__(MAXNT) void kern_k3_mla_prep(
     __nv_bfloat16* __restrict__ q_norm,            // [B, Q_LORA]
     __nv_bfloat16* __restrict__ mla_gate,          // [B, INNER]
     int B) {
+  // cuBLAS's GEMM behind this kernel launches as a programmatic dependent and waits on its own:
+  // let it get its blocks onto the SMs now.
+  asm volatile("griddepcontrol.launch_dependents;");
   const int b = blockIdx.x;
   if (b >= B) return;
   const int t = threadIdx.x;
