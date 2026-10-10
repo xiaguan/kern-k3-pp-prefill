@@ -11,14 +11,25 @@
 | 26f8f07 gate on idle SMs | 230 (19.2/layer) | 52.40 ms/item | 96.61 ms |
 | 64d3f13 one TMA box an array | 230 (19.2/layer) | 52.07 ms/item | 95.85 ms |
 
-Stage 0 (scored from 2026-10-10 19:48; real data, power-limited): flash_kda
-6.9% -> 6.6% of 8192@0 with 64d3f13; per layer at 8192@0 span_gather ~334
-us, flash_kda ~976 us (FlashKDA prepare + k3_kda_rec), qkvg 3.0 ms.
+Stage 0 (scored from 2026-10-10 19:48; real data): flash_kda 6.9% -> 6.6%
+of 8192@0 with 64d3f13; per layer at 8192@0 span_gather ~334 us (~283 after
+eaf2849), flash_kda ~900-1000 us (FlashKDA prepare ~300 + k3_kda_rec), qkvg
+3.0 ms.
+
+Stage 0 is power-capped: with real activations the GPU sits at its power
+limit, so an item's time follows its energy more than its kernels' latency.
+eaf2849 cut span_gather by 20% a call (-640 us an 8192 item, same lease)
+and the item total did not move: the GEMMs after it ran that much slower
+(lower clocks). A memory-bound kernel finishing sooner buys little there;
+fewer DRAM bytes / instructions overall is what can count. Per-call p50s
+(`work/opsum.py OP SCENARIO runs...`) show a kernel's own change; the
+weighted A/B is what is scored.
 
 A KDA layer now (non-GEMM launches): `span_gather` (1: conv, beta / flow,
 tile prefix, zeroes rec's progress counters) → span_g* → `flash_kda` (2:
 FlashKDA prepare, then source/k3_kda_rec.cu: 96 recurrence CTAs (state
-from/to the line, windows) + 56 gate CTAs on the idle SMs (K11)).
+from/to the line, windows) + 56 gate CTAs on the idle SMs (K11, a warp pair
+per quarter of a head's rows, 381c3b5)).
 
 Per-layer times at 8192 rows (l13, `work/calls.py`): span_gather 263 us,
 FlashKDA prepare 276 us + k3_kda_rec ~515 us.
@@ -121,6 +132,26 @@ cubins next to `build/`, pass it as the check's reference, vary `--seed`).
   recurrence's tensor floor is ~832 cycles/tile on 96 SMs (213 us), it runs
   ~1000-1760.
 - kern supports `pdl: true` on a launch (griddepcontrol.wait) and `cluster`.
+- Where k3_kda_rec's time goes at 8192 rows (clock64 / globaltimer printf
+  from one MMA warp, in the bench): 4 us prologue; the tile loop ~1665
+  cycles a tile (full wait 84, phase 1 520, phases 2-4 210, phase 6 670,
+  output-ring wait 90); the MMA warps issue ~345 instructions a tile each.
+  With whole heads per gate CTA, the 40 two-head gate CTAs ended ~140 us
+  after the recurrence: double-buffered loads (each warp's next 4-tile
+  group in flight) and quarter-head units (<= 7/4 heads a CTA) fixed it
+  (381c3b5; visible in one lease of five, flat in the others).
+- Rejected on k3_kda_rec (all bit-identical, all slower or flat):
+  - K11 inside the recurrence CTAs (4 idle warps gating from the output
+    ring, the gate's projection by cp.async; no raw round trip, no gate
+    CTAs): the MMA phases slowed 30-60% (issue / shared-memory contention
+    on the MMA warps' SMSPs), flash_kda 976 -> 1168 us.
+  - Starting warps 4-7 half a tile late so the two MMA warps of an SMSP are
+    in different phases: the offset random-walks (thousands of cycles
+    either way by tile 400) and no phase got shorter.
+  - Phase 1's q MMAs (out = S qd^T) moved into phases 2-4 (whose chain only
+    u feeds): +250 us an item, 24 B of stack.
+  - Phase 6's fma.ftz pairs as fma.rn.ftz.f32x2: +250 us an item (packing
+    movs, 8 B of stack). f32x2 paid off in the gather (eaf2849), not here.
 
 ## Constraints learned
 
