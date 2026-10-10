@@ -121,16 +121,16 @@ source = "source/k3_router_argmax.cu"
 defines = { EXPERTS = 896 }
 
 [kernels."k3_span_gather"]
-sha256 = "f9039b0e0aa0ba0140b60f0e0fbde391b6580205607b40fbaf9348057667d652"
+sha256 = "161d55e650acf861b296879beb93752e3d9e0c6026e78ed0e719a6370e4365c9"
 source = "source/k3_span_gather.cu"
 
 [kernels."k3_span_gather+PARTIAL_BF16=1"]
-sha256 = "94b9525ba655d1b4fdd03cd2373e7c007af1a5a9502c74c220d97f2421566522"
+sha256 = "acf1ea341b7963cb8ff2e61612e8f8a722147c59983fea1be61841c616e6b3b3"
 source = "source/k3_span_gather.cu"
 defines = { PARTIAL_BF16 = 1 }
 
 [kernels."k3_span_state"]
-sha256 = "c55c411c7ec3b992b324078683897a8f71f6760ce2e3978730db300c0fa57d7b"
+sha256 = "a1b9e40e420f4bcd4cd542006dd171dbcde299d6912b3a1b9ff5b04d8c171ffd"
 source = "source/k3_span_state.cu"
 
 [kernels."k3_weight_prep"]

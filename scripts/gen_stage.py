@@ -696,29 +696,28 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         }} if not bmm or coll or dcp else {}),
     }
     if packed:
-        # The packed call's per-sequence ops (docs in the kernel sources): every
-        # sequence's KDA line by its column of the line table, its rows by `cu_seqlens`.
-        state_op = lambda io: {
-            "params": [f"{io} state", "in buffer<i32>", "i64", "out buffer<f32>" if io == "in" else "in buffer<f32>",
-                       "i32"],
-            "impl": {"launches": [launch("k3_span_state", "kern_k3_span_state_varlen", grid=[hl, 32, "seqs"],
-                                         block=[128, 1, 1], defines=kda_defs)]}}
-        ops["span_state_load"], ops["span_state_store"] = state_op("in"), state_op("inout")
+        # The packed call's per-sequence ops (docs in source/k3_span_gather.cu):
+        # every sequence's KDA line by its column of the line table, its rows by
+        # `cu_seqlens`. The gather also stages the states and FlashKDA's tile
+        # prefix; the state's way back advances the conv windows.
+        del ops["span_state_load"]
+        conv_blocks = {"mul": [{"ceil_div": [SV, 48]}, 3 * (inner_l // 1024) + 1]}
         ops["span_gather"] = {
-            "params": ["in buffer<bf16>", "in buffer<f32>", "inout state", "in buffer<i32>", "i64", "in buffer<bf16>",
+            "params": ["in buffer<bf16>", "in buffer<f32>", "in state", "in buffer<i32>", "i64", "in buffer<bf16>",
                        "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>",
-                       "out buffer<bf16>", "in buffer<i64>", "i32", "i32"],
+                       "out buffer<bf16>", "in buffer<i64>", "i32", "i32", "out buffer<f32>", "out buffer<i32>"],
             "impl": {"launches": [
-                launch("k3_span_gather", "kern_k3_span_gather_varlen", grid=[inner_l // 512, 4, {"ceil_div": [SV, 8]}],
-                       block=[128, 1, 1], defines=part_defs),
-                launch("k3_span_gather", "kern_k3_span_window", grid=[inner_l // 512, 3, "seqs"], block=[128, 1, 1],
-                       defines=part_defs,
-                       params=["in buffer<bf16>", "inout state", "in buffer<i32>", "i64", "in buffer<i64>"],
-                       args=[{"param": 0}, {"param": 2}, {"param": 3}, {"param": 4}, {"param": 11}]),
-            ]},
+                launch("k3_span_gather", "kern_k3_span_gather_packed",
+                       grid=[{"add": [conv_blocks, {"mul": ["seqs", hl * 4]}]}, 1, 1], block=[128, 1, 1],
+                       defines=part_defs)]},
         }
-        ops["flash_kda"] = varlen_abi.kda_op(hl, run_max, pack, module(varlen_abi.KDA_MODULE),
-                                             module(varlen_abi.KDA_MODULE), SV, "seqs")
+        ops["span_state_store"] = {
+            "params": ["inout state", "in buffer<i32>", "i64", "in buffer<f32>", "in buffer<bf16>", "in buffer<i64>"],
+            "impl": {"launches": [launch("k3_span_gather", "kern_k3_span_state_out_packed",
+                                         grid=[{"mul": ["seqs", hl * 4 + 3 * (inner_l // 1024)]}, 1, 1],
+                                         block=[128, 1, 1], defines=part_defs)]},
+        }
+        ops["flash_kda"] = varlen_abi.kda_op(hl, run_max, pack, module(varlen_abi.KDA_MODULE), SV, "seqs")
         ops["fmha_lens"] = {
             "params": ["in buffer<i32>", "in buffer<i64>", "out buffer<i32>", "i32", "i32"],
             "impl": {"launches": [launch("k3_prefill", "kern_k3_fmha_lens_varlen", grid=[1, 1, 1], block=[32, 1, 1])]},
@@ -1222,8 +1221,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
             N = {"var": "seqs"}
             step(L + "span_gather", "span_gather", b("kda_partial"), w("cw"), {"state": kda}, line, i64(line_l),
                  b("wsm_partial"), b("span_q"), b("span_k"), b("span_v"), b("span_beta"), b("span_flow"),
-                 b("cu_seqlens"), N, S)
-            step(L + "span_state_in", "span_state_load", {"state": kda}, line, i64(line_l), b("span_state_in"), i32(0))
+                 b("cu_seqlens"), N, S, b("span_state_in"), b("span_tile_prefix"))
             step(L + "span_g", "gemm_bf16", b("span_flow"), w("w_f_b"), b("span_g"), S, i32(inner_l), i32(HEAD_DIM),
                  i32(inner_l))
             step(L + "span_kda", "flash_kda", b("span_q"), b("span_k"), b("span_v"), b("span_g"), b("span_beta"),
@@ -1231,7 +1229,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                  *(b(n) for n in ["span_ws_kd", "span_ws_qd", "span_ws_kr", "span_ws_gt", "span_ws_inv", "span_ws_mqk"]),
                  S, b("cu_seqlens"), b("span_tile_prefix"), N)
             step(L + "span_state_out", "span_state_store", {"state": kda}, line, i64(line_l), b("span_state_out"),
-                 i32(1))
+                 b("kda_partial"), b("cu_seqlens"))
             return
         step(L + "span_gather", "span_gather", b("kda_partial"), w("cw"), {"state": kda}, line, i64(line_l),
              b("wsm_partial"), b("span_q"), b("span_k"), b("span_v"), b("span_beta"), b("span_flow"), b("span_at"), S)

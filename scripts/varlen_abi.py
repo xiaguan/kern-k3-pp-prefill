@@ -11,14 +11,14 @@ out and block j of the f32 state in and out ([seqs][heads][128][128]).
 Kernel 1 runs a tile per 16 rows of a sequence: a sequence adds at most
 one partial tile, so `ceil(rows / 16) + seqs` bounds the grid, the
 workspace and `total_tiles` (the workspace's head stride, the same in both
-kernels); excess CTAs return. `_flash_kda_build_tile_prefix` fills the
-tile prefix kernel 1 searches, kernel 2 runs one CTA per (sequence, head).
+kernels); excess CTAs return. The tile prefix kernel 1 searches comes
+filled (upstream's `_flash_kda_build_tile_prefix`, folded into the packed
+gather), kernel 2 runs one CTA per (sequence, head).
 """
 import flash_kda_abi as kda
 import trtllm_fmha_abi as fmha
 
 KDA_MODULE = "flash_kda_d128_varlen"
-BUILD_TILE_PREFIX = "_Z28_flash_kda_build_tile_prefixPKliiPi"
 PREPARE = kda.PREPARE.replace("Li16ELi128ELi256ELb0EE", "Li16ELi128ELi256ELb1EE")
 RECURRENCE = kda.RECURRENCE.replace("Li192ELb1ELb1ELb1ELb0EE", "Li192ELb1ELb1ELb1ELb1EE")
 assert PREPARE != kda.PREPARE and RECURRENCE != kda.RECURRENCE
@@ -45,7 +45,7 @@ def kda_workspace(hl, rows_max, seqs_max):
     }
 
 
-def kda_op(hl, rows_max, seqs_max, module, prefix_module, rows, seqs, scale=kda.QSCALE):
+def kda_op(hl, rows_max, seqs_max, module, rows, seqs, scale=kda.QSCALE):
     """Interface: flash_kda_abi.op's seventeen, then cu_seqlens (i64 [seqs + 1]) | tile_prefix (i32
     [seqs + 1]) | seqs. `rows` / `seqs` are the call's row and sequence vars."""
     n = tiles_max(rows_max, seqs_max) * hl
@@ -63,11 +63,6 @@ def kda_op(hl, rows_max, seqs_max, module, prefix_module, rows, seqs, scale=kda.
     ws_sq = lambda param: tc(param, "bf16", [kda.CHUNK, kda.CHUNK, n], [32, 512], [8, kda.CHUNK, 1])
     state = lambda param: tc(param, "f32", [D, D, hl * seqs_max], [512, 65536], [8, D, 1], swizzle=32)
     copies = ["bytes<256>"] * 11
-    prefix = {
-        **prefix_module, "entry": BUILD_TILE_PREFIX, "block": [32, 1, 1], "grid": [1, 1, 1],
-        "params": ["in buffer<i64>", "i32", "i32", "out buffer<i32>"],
-        "args": [cu, N, {"i32": kda.CHUNK}, tp],
-    }
     prepare = {
         **module, "entry": PREPARE, "block": [256, 1, 1], "grid": [tiles_expr, hl, 1], "shared_mem": 21248,
         "params": copies + ["f32", "i32", "i32", "i32", "in buffer<i64>", "bytes<4>", "in buffer<f32>", "f32",
@@ -85,8 +80,8 @@ def kda_op(hl, rows_max, seqs_max, module, prefix_module, rows, seqs, scale=kda.
         "params": ["in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>",
                    "in buffer<f32>", "in buffer<f32>", "in buffer<f32>", "out buffer<f32>", "out buffer<bf16>",
                    "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "out buffer<f32>", "out buffer<bf16>",
-                   "out buffer<bf16>", "i32", "in buffer<i64>", "out buffer<i32>", "i32"],
-        "impl": {"launches": [prefix, prepare, recurrence]},
+                   "out buffer<bf16>", "i32", "in buffer<i64>", "in buffer<i32>", "i32"],
+        "impl": {"launches": [prepare, recurrence]},
     }
 
 

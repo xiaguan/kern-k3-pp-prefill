@@ -35,6 +35,7 @@
 // z == 0 block reads the old window (rows 0..2 need it) and only it writes
 // the new one, after its reads, so no two blocks touch the window.
 #include <cuda_bf16.h>
+#include <climits>
 
 #ifndef HEADS
 #define HEADS 96
@@ -176,16 +177,43 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather(
   }
 }
 
-// `kern_k3_span_gather_varlen`: the same for a packed call, rows
-// [cu_seqlens[j], cu_seqlens[j + 1]) sequence j's, each with its own window
-// (line_index[j]). Rows read only their own sequence's taps; the windows are
-// left untouched here and advanced by `kern_k3_span_window` afterwards, so
-// every block reads the old ones.
+// The packed call's KDA prologue and epilogue around FlashKDA: rows
+// [cu_seqlens[j], cu_seqlens[j + 1]) are sequence j's, its KDA line
+// line_index[j]. FlashKDA's descriptors are fixed at load, so its inputs land
+// in the span buffers and its f32 state is staged in a flat buffer
+// ([nseq][HEADS][128][128]) on the way in and out.
 //
-//   kern_k3_span_gather_varlen(partial, cw, kda_base, line_index, line_bytes, wsm_partial,
+// `kern_k3_span_gather_packed`: K9's conv + SiLU of every row (each sequence
+// reads its own window, left untouched here), beta / flow transposed, every
+// sequence's state staged, and FlashKDA's tile prefix (16-row tiles per
+// sequence, upstream's `_flash_kda_build_tile_prefix`).
+//
+//   kern_k3_span_gather_packed(partial, cw, kda_base, line_index, line_bytes, wsm_partial,
 //                              span_q, span_k, span_v, span_beta, span_flow,
-//                              const long long* cu_seqlens, int nseq, int span);
-//   grid (INNER/512, 4, ceil(span/8))   block 128
+//                              const long long* cu_seqlens, int nseq, int span,
+//                              float* state_in, int* tile_prefix);
+//   grid (37 * ceil(span / 48) + nseq * HEADS * 4)   block 128
+//   block b < 37 * ceil(span / 48): rows 48 * (b / 37) ..; b % 37 < 36 is stream (b % 37) / 12,
+//   columns 1024 * (b % 12) + 8 * thread; b % 37 == 36 beta / flow. The rest copy 16 KiB of a
+//   sequence's state each; the first of them also writes the tile prefix.
+//
+// `kern_k3_span_state_out_packed`: every sequence's state back into its line,
+// and its window advanced to its last three inputs (the old window filling in
+// for a sequence shorter than three). Runs after the gather, so no reader of
+// the old window is left.
+//
+//   kern_k3_span_state_out_packed(kda_base, line_index, line_bytes, state_out, partial, cu_seqlens);
+//   grid (nseq * (HEADS * 4 + 36))   block 128
+#ifdef PARTIAL_BF16
+#define K9_PROWS 48
+#define K9_PUNROLL 12
+#define K9_PVEC 8
+#define K9_PCOLS (K9_BLOCK * K9_PVEC)
+#define K9_PCOL_BLOCKS (K9_INNER / K9_PCOLS)
+#define K9_PCONV (3 * K9_PCOL_BLOCKS + 1)
+#define K9_STATE_BLOCKS (HEADS * 4)
+#define K9_TILE 16
+
 __device__ __forceinline__ int k9_seq_of(const long long* cu, int nseq, int i) {
   int j = 0;
   while (j + 1 < nseq && cu[j + 1] <= i) ++j;
@@ -196,17 +224,91 @@ __device__ __forceinline__ bf16* k9_win(void* kda_base, const int* line_index, l
   return (bf16*)((char*)kda_base + (long long)line_index[j] * line_bytes + K9_REC_BYTES + (long long)s * K9_WIN_BYTES);
 }
 
-// x_i of sequence row i (bos the sequence's first row): its window before bos.
-__device__ __forceinline__ void k9_input_seq(const part_t* __restrict__ partial, const bf16* win, int bos, int s, int c,
-                                             int i, float* x) {
-  if (i < bos) {
-    k9_unpack(*(const uint2*)(win + (size_t)(i - bos + 3) * K9_INNER + c), x);
-  } else {
-    k9_input(partial, win, s, c, i, x);
+// K9's SiLU, the same value without the IEEE division's per-element
+// slow-path branch (its reconvergence serializes a thread's columns):
+// exp(-sb) by ex2.ftz (__expf's value wherever it is not subnormal, and then
+// 1 + it is 1 either way), the quotient by one reciprocal and two Newton
+// steps over a denominator scaled by 2^-64, correctly rounded, scaled back
+// exactly while it stays normal (down to sb = -88, or an f32-subnormal sb).
+// The negated residual keeps a zero's sign; an infinite denominator is -0.
+__device__ __forceinline__ float k9_silu_fast(float y) {
+  const float sb = __bfloat162float(__float2bfloat16(y));
+  float e, r;
+  asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(e) : "f"(sb * -1.4426950408889634f));
+  const float d = 1.0f + e, ds = d * 0x1p-64f;
+  asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(r) : "f"(ds));
+  r = fmaf(r, fmaf(-ds, r, 1.0f), r);
+  const float q = sb * r;
+  const float qs = fmaf(-r, fmaf(ds, q, -sb), q) * 0x1p-64f;
+  return d == INFINITY ? -0.0f : qs;
+}
+
+__device__ __forceinline__ void k9_unpack8(uint4 raw, float* x) {
+  const unsigned w[4] = {raw.x, raw.y, raw.z, raw.w};
+#pragma unroll
+  for (int k = 0; k < 4; ++k) {
+    x[2 * k] = __uint_as_float(w[k] << 16);
+    x[2 * k + 1] = __uint_as_float(w[k] & 0xffff0000u);
   }
 }
 
-extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_varlen(
+
+// x_i of stream s, 8 columns from c: the window before the sequence's first row bos.
+__device__ __forceinline__ uint4 k9_tap(const part_t* __restrict__ partial, const bf16* win, int bos, int s, int c,
+                                        int i) {
+  return i < bos ? *(const uint4*)(win + (size_t)(i - bos + 3) * K9_INNER + c)
+                 : *(const uint4*)(partial + (size_t)i * K9_KDA_FUSED + (size_t)s * K9_INNER + c);
+}
+
+__device__ __forceinline__ void k9_cp_async(unsigned smem, const void* gmem) {
+  asm volatile("cp.async.cg.shared.global [%0], [%1], 16;\n cp.async.commit_group;" ::"r"(smem), "l"(gmem));
+}
+
+// One row of 8 columns: conv over the taps and x, SiLU, landed; x becomes the newest tap.
+__device__ __forceinline__ uint4 k9_conv_row(uint4 raw, const float (&wt)[4][K9_PVEC], float* t0, float* t1,
+                                             float* t2) {
+  float x[K9_PVEC];
+  k9_unpack8(raw, x);
+  uint4 o;
+  unsigned* ow = (unsigned*)&o;
+#pragma unroll
+  for (int k = 0; k < K9_PVEC; k += 2) {
+    const float y0 = t0[k] * wt[0][k] + t1[k] * wt[1][k] + t2[k] * wt[2][k] + x[k] * wt[3][k];
+    const float y1 =
+        t0[k + 1] * wt[0][k + 1] + t1[k + 1] * wt[1][k + 1] + t2[k + 1] * wt[2][k + 1] + x[k + 1] * wt[3][k + 1];
+    const __nv_bfloat162 pair = __floats2bfloat162_rn(k9_silu_fast(y0), k9_silu_fast(y1));
+    ow[k / 2] = *(const unsigned*)&pair;
+  }
+#pragma unroll
+  for (int k = 0; k < K9_PVEC; ++k) {
+    t0[k] = t1[k];
+    t1[k] = t2[k];
+    t2[k] = x[k];
+  }
+  return o;
+}
+
+// 16 KiB of sequence j's state, line <-> flat buffer, 8 float4 a thread.
+__device__ __forceinline__ void k9_state_copy(void* kda_base, const int* line_index, long long line_bytes, float* flat,
+                                              int b, bool to_line) {
+  const int j = b / K9_STATE_BLOCKS, part = b % K9_STATE_BLOCKS;
+  float4* rec = (float4*)((char*)kda_base + (long long)line_index[j] * line_bytes) + (size_t)part * 1024;
+  float4* buf = (float4*)flat + ((size_t)j * K9_STATE_BLOCKS + part) * 1024;
+  float4 v[8];
+  if (to_line) {
+#pragma unroll
+    for (int k = 0; k < 8; ++k) v[k] = buf[k * K9_BLOCK + threadIdx.x];
+#pragma unroll
+    for (int k = 0; k < 8; ++k) rec[k * K9_BLOCK + threadIdx.x] = v[k];
+  } else {
+#pragma unroll
+    for (int k = 0; k < 8; ++k) v[k] = rec[k * K9_BLOCK + threadIdx.x];
+#pragma unroll
+    for (int k = 0; k < 8; ++k) buf[k * K9_BLOCK + threadIdx.x] = v[k];
+  }
+}
+
+extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_packed(
     const part_t* __restrict__ partial,
     const float* __restrict__ cw,
     void* __restrict__ kda_base,
@@ -218,85 +320,118 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_varle
     bf16* __restrict__ span_flow,
     const long long* __restrict__ cu_seqlens,
     int nseq,
-    int span) {
-  const int row0 = blockIdx.z * K9_ROWS;
-  if (blockIdx.y == 3) {
-    const int i = row0 + (threadIdx.x >> 4), k = threadIdx.x & 15;
-    if (i >= span) return;
-    const part_t* row = wsm_partial + (size_t)i * K9_WSM;
-    for (int h = k; h < HEADS; h += 16) span_beta[(size_t)h * span + i] = k9_land(row[h]);
-    bf16 f[8];
-#pragma unroll
-    for (int j = 0; j < 8; ++j) f[j] = k9_land(row[K9_WSM_FA + k * 8 + j]);
-    *(uint4*)(span_flow + (size_t)i * 128 + k * 8) = *(const uint4*)f;
+    int span,
+    float* __restrict__ state_in,
+    int* __restrict__ tile_prefix) {
+  const int nconv = (span + K9_PROWS - 1) / K9_PROWS * K9_PCONV;
+  const int b = blockIdx.x;
+  if (b >= nconv) {
+    if (b == nconv && threadIdx.x == 0) {
+      int acc = 0;
+      tile_prefix[0] = 0;
+      for (int j = 0; j < nseq; ++j) {
+        acc += (int(cu_seqlens[j + 1] - cu_seqlens[j]) + K9_TILE - 1) / K9_TILE;
+        tile_prefix[j + 1] = acc;
+      }
+    }
+    k9_state_copy(kda_base, line_index, line_bytes, state_in, b - nconv, false);
     return;
   }
-  const int rows = min(K9_ROWS, span - row0);
-  if (rows <= 0) return;
-  const int s = blockIdx.y;
-  const int c = (int)(blockIdx.x * K9_BLOCK + threadIdx.x) * K9_VEC;
+  const int row0 = b / K9_PCONV * K9_PROWS, role = b % K9_PCONV;
+  const int rows = min(K9_PROWS, span - row0);
+  if (role == 3 * K9_PCOL_BLOCKS) {
+    // beta: 32 rows of a head per warp pass; flow: a row's 128 columns per 16 threads
+    const int lane = threadIdx.x & 31, w = threadIdx.x >> 5;
+    for (int i = lane; i < rows; i += 32)
+      for (int h = w; h < HEADS; h += 4)
+        span_beta[(size_t)h * span + row0 + i] = k9_land(wsm_partial[(size_t)(row0 + i) * K9_WSM + h]);
+    for (int r = threadIdx.x >> 4; r < rows; r += K9_BLOCK / 16) {
+      const int k = threadIdx.x & 15;
+      const part_t* row = wsm_partial + (size_t)(row0 + r) * K9_WSM + K9_WSM_FA + k * 8;
+      bf16 f[8];
+#pragma unroll
+      for (int e = 0; e < 8; ++e) f[e] = k9_land(row[e]);
+      *(uint4*)(span_flow + (size_t)(row0 + r) * 128 + k * 8) = *(const uint4*)f;
+    }
+    return;
+  }
+  const int s = role / K9_PCOL_BLOCKS;
+  const int c = (role % K9_PCOL_BLOCKS) * K9_PCOLS + threadIdx.x * K9_PVEC;
   bf16* __restrict__ out = s == 0 ? span_q : s == 1 ? span_k : span_v;
   const float* __restrict__ w = cw + (size_t)s * 4 * K9_INNER + c;
-  const float4 w0 = *(const float4*)(w), w1 = *(const float4*)(w + K9_INNER),
-               w2 = *(const float4*)(w + 2 * K9_INNER), w3 = *(const float4*)(w + 3 * K9_INNER);
-  const float wt[4][K9_VEC] = {{w0.x, w0.y, w0.z, w0.w}, {w1.x, w1.y, w1.z, w1.w},
-                               {w2.x, w2.y, w2.z, w2.w}, {w3.x, w3.y, w3.z, w3.w}};
+  float wt[4][K9_PVEC];
+#pragma unroll
+  for (int t = 0; t < 4; ++t) {
+    const float4 lo = *(const float4*)(w + t * K9_INNER), hi = *(const float4*)(w + t * K9_INNER + 4);
+    wt[t][0] = lo.x; wt[t][1] = lo.y; wt[t][2] = lo.z; wt[t][3] = lo.w;
+    wt[t][4] = hi.x; wt[t][5] = hi.y; wt[t][6] = hi.z; wt[t][7] = hi.w;
+  }
   int j = k9_seq_of(cu_seqlens, nseq, row0);
   int bos = (int)cu_seqlens[j];
+  int next = j + 1 < nseq ? (int)cu_seqlens[j + 1] : INT_MAX;
   const bf16* win = k9_win(kda_base, line_index, line_bytes, j, s);
-  float t0[K9_VEC], t1[K9_VEC], t2[K9_VEC], xs[K9_ROWS][K9_VEC];
+  float t0[K9_PVEC], t1[K9_PVEC], t2[K9_PVEC];
+  k9_unpack8(k9_tap(partial, win, bos, s, c, row0 - 3), t0);
+  k9_unpack8(k9_tap(partial, win, bos, s, c, row0 - 2), t1);
+  k9_unpack8(k9_tap(partial, win, bos, s, c, row0 - 1), t2);
+  const part_t* src = partial + (size_t)row0 * K9_KDA_FUSED + (size_t)s * K9_INNER + c;
+  bf16* dst = out + (size_t)row0 * K9_INNER + c;
+  if (rows == K9_PROWS && row0 + K9_PROWS <= next) {
+    // The common block: whole, inside one sequence. Each thread streams its
+    // rows through its own ring of K9_PUNROLL shared slots (cp.async, one
+    // group a row), so that many loads stay in flight; the taps rotate by
+    // register renaming.
+    __shared__ uint4 ring[K9_PUNROLL][K9_BLOCK];
+    const unsigned slot0 = (unsigned)__cvta_generic_to_shared(&ring[0][threadIdx.x]);
 #pragma unroll
-  for (int r = 0; r < K9_ROWS; ++r)
-    if (r < rows) k9_input(partial, win, s, c, row0 + r, xs[r]);
-  k9_input_seq(partial, win, bos, s, c, row0 - 3, t0);
-  k9_input_seq(partial, win, bos, s, c, row0 - 2, t1);
-  k9_input_seq(partial, win, bos, s, c, row0 - 1, t2);
+    for (int r = 0; r < K9_PUNROLL; ++r) k9_cp_async(slot0 + r * K9_BLOCK * 16, src + (size_t)r * K9_KDA_FUSED);
+    for (int r0 = 0; r0 < K9_PROWS; r0 += K9_PUNROLL) {
 #pragma unroll
-  for (int r = 0; r < K9_ROWS; ++r) {
-    if (r >= rows) break;
+      for (int r = 0; r < K9_PUNROLL; ++r) {
+        asm volatile("cp.async.wait_group %0;" ::"n"(K9_PUNROLL - 1));
+        const uint4 x = ring[r][threadIdx.x];
+        if (r0 + K9_PUNROLL + r < K9_PROWS)
+          k9_cp_async(slot0 + r * K9_BLOCK * 16, src + (size_t)(r0 + K9_PUNROLL + r) * K9_KDA_FUSED);
+        else
+          asm volatile("cp.async.commit_group;");
+        *(uint4*)(dst + (size_t)(r0 + r) * K9_INNER) = k9_conv_row(x, wt, t0, t1, t2);
+      }
+    }
+    return;
+  }
+  for (int r = 0; r < rows; ++r) {
     const int i = row0 + r;
-    if (j + 1 < nseq && i == cu_seqlens[j + 1]) {
-      ++j;
+    if (i >= next) {
+      while (j + 1 < nseq && i >= cu_seqlens[j + 1]) ++j;
       bos = i;
+      next = j + 1 < nseq ? (int)cu_seqlens[j + 1] : INT_MAX;
       win = k9_win(kda_base, line_index, line_bytes, j, s);
-      k9_input_seq(partial, win, bos, s, c, i - 3, t0);
-      k9_input_seq(partial, win, bos, s, c, i - 2, t1);
-      k9_input_seq(partial, win, bos, s, c, i - 1, t2);
+      k9_unpack8(k9_tap(partial, win, bos, s, c, i - 3), t0);
+      k9_unpack8(k9_tap(partial, win, bos, s, c, i - 2), t1);
+      k9_unpack8(k9_tap(partial, win, bos, s, c, i - 1), t2);
     }
-    const float* x = xs[r];
-    bf16 o[K9_VEC];
-#pragma unroll
-    for (int k = 0; k < K9_VEC; ++k) {
-      const float y = t0[k] * wt[0][k] + t1[k] * wt[1][k] + t2[k] * wt[2][k] + x[k] * wt[3][k];
-      o[k] = __float2bfloat16(k9_silu_bf16(y));
-      t0[k] = t1[k];
-      t1[k] = t2[k];
-      t2[k] = x[k];
-    }
-    *(uint2*)(out + (size_t)i * K9_INNER + c) = *(const uint2*)o;
+    *(uint4*)(dst + (size_t)r * K9_INNER) = k9_conv_row(*(const uint4*)(src + (size_t)r * K9_KDA_FUSED), wt, t0, t1, t2);
   }
 }
 
-// `kern_k3_span_window`: sequence j's window after a packed call, its last
-// three inputs (the old window filling in for a sequence shorter than three).
-// Each thread reads its three values before writing them, and no other
-// thread touches its columns of its sequence's window.
-//
-//   kern_k3_span_window(partial, kda_base, line_index, line_bytes, const long long* cu_seqlens);
-//   grid (INNER/512, 3, nseq)   block 128
-extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_window(
-    const part_t* __restrict__ partial, void* __restrict__ kda_base, const int* __restrict__ line_index,
-    long long line_bytes, const long long* __restrict__ cu_seqlens) {
-  const int s = blockIdx.y, j = blockIdx.z;
-  const int c = (int)(blockIdx.x * K9_BLOCK + threadIdx.x) * K9_VEC;
+extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_state_out_packed(
+    void* __restrict__ kda_base, const int* __restrict__ line_index, long long line_bytes,
+    const float* __restrict__ state_out, const part_t* __restrict__ partial, const long long* __restrict__ cu_seqlens) {
+  const int per_seq = K9_STATE_BLOCKS + 3 * K9_PCOL_BLOCKS;
+  const int j = blockIdx.x / per_seq, part = blockIdx.x % per_seq;
+  if (part < K9_STATE_BLOCKS) {
+    k9_state_copy(kda_base, line_index, line_bytes, (float*)state_out, j * K9_STATE_BLOCKS + part, true);
+    return;
+  }
+  const int s = (part - K9_STATE_BLOCKS) / K9_PCOL_BLOCKS;
+  const int c = (part - K9_STATE_BLOCKS) % K9_PCOL_BLOCKS * K9_PCOLS + threadIdx.x * K9_PVEC;
   const int bos = (int)cu_seqlens[j], len = (int)(cu_seqlens[j + 1] - cu_seqlens[j]);
   if (len <= 0) return;
   bf16* win = k9_win(kda_base, line_index, line_bytes, j, s);
-  float nt[3][K9_VEC];
-  for (int t = 0; t < 3; ++t) k9_input_seq(partial, win, bos, s, c, bos + len - 3 + t, nt[t]);
-  for (int t = 0; t < 3; ++t) {
-    bf16 o[K9_VEC];
-    k9_pack(nt[t], o);
-    *(uint2*)(win + (size_t)t * K9_INNER + c) = *(const uint2*)o;
-  }
+  uint4 nt[3];
+#pragma unroll
+  for (int t = 0; t < 3; ++t) nt[t] = k9_tap(partial, win, bos, s, c, bos + len - 3 + t);
+#pragma unroll
+  for (int t = 0; t < 3; ++t) *(uint4*)(win + (size_t)t * K9_INNER + c) = nt[t];
 }
+#endif
