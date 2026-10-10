@@ -20,6 +20,9 @@
 //         reads the hidden it just made from registers.
 //     grid (B, 1, 1)   block (448, 1, 1)   smem 0 dynamic
 //
+//   kern_k3g_embed_rms(ids, table, hidden, blocks, gamma, normed, B)
+//         layer 0's K1a with the embedding gather: the row from the table, hidden and snapshot 0.
+//
 //   [K1c] kern_k3g_land_add2(p1, p2, prefix2, hidden, two, B)
 //         K1c alone, before a snapshot layer and at a stage's end.
 //     grid (B, 4, 1)   block (224, 1, 1)
@@ -269,6 +272,31 @@ extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_attnres_rms(
     for (int k = 0; k < RGROUPS; ++k) stv(blocks + ((size_t)b * KNB_MAX + nb) * KH + (t + k * RTHREADS) * 8, pv[k]);
 
   attnres_rms_row(blocks + (size_t)b * KNB_MAX * KH, pv, sw, gamma, normed + (size_t)b * KH, nb, t, s);
+}
+
+// ---------------------------------------------------------------- K1a, first layer
+// The chunk's embedding gather and layer 0's mix and norm (nb == 0: the mix is the row): hidden and
+// snapshot 0 are the embedding row, normed its rms by gamma.
+extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_embed_rms(
+    const long long* __restrict__ ids, const bf16_t* __restrict__ table, bf16_t* __restrict__ hidden,
+    bf16_t* __restrict__ blocks, const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int B) {
+  __shared__ RowSmem s;
+  const int b = blockIdx.x;
+  if (b >= B) return;
+  const int t = threadIdx.x;
+  zero_pads(s, t);
+
+  const bf16_t* __restrict__ row = table + ids[b] * KH;
+  V8 pv[RGROUPS];
+#pragma unroll
+  for (int k = 0; k < RGROUPS; ++k) pv[k] = ldv(row + (t + k * RTHREADS) * 8);
+#pragma unroll
+  for (int k = 0; k < RGROUPS; ++k) {
+    stv(hidden + (size_t)b * KH + (t + k * RTHREADS) * 8, pv[k]);
+    stv(blocks + (size_t)b * KNB_MAX * KH + (t + k * RTHREADS) * 8, pv[k]);
+  }
+
+  attnres_rms_row(blocks + (size_t)b * KNB_MAX * KH, pv, nullptr, gamma, normed + (size_t)b * KH, 0, t, s);
 }
 
 // ---------------------------------------------------------------- K1b

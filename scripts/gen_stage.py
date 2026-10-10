@@ -516,12 +516,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                        "i32", "i32", "i32"],
             "impl": {"launches": [residual("kern_k3_attnres_rms", "kern_k3g_attnres_rms")]},
         }} if embed else {}),
-        # A DCP step's embedding gather and its first layer's norm (nb == 0: the mix is the row) in one launch.
+        # A DCP step's (a lone chunk's) embedding gather and its first layer's norm (nb == 0: the mix is the
+        # row) in one launch.
         **({"embed_rms": {
             "params": ["in buffer<i64>", "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "in buffer<bf16>",
                        "out buffer<bf16>", "i32"],
-            "impl": {"launches": [launch("k3_ar_fused", "kern_k3_embed_rms", grid=[RV, 1, 1], block=[1024, 1, 1])]},
-        }} if embed and dcp else {}),
+            "impl": {"launches": [launch("k3_ar_fused", "kern_k3_embed_rms", grid=[RV, 1, 1], block=[1024, 1, 1]) if dcp
+                                  else residual(None, "kern_k3g_embed_rms")]},
+        }} if embed and (dcp or (chunk and not coll)) else {}),
         **({"land_add_attnres_rms": {
             "params": ["in buffer<f32>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "in buffer<bf16>",
                        "out buffer<bf16>", "out buffer<bf16>", "i32", "i32", "i32"],
@@ -1362,8 +1364,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             # the reduce-scatter sums them, no o_proj writes them.
             step("zero_tail", "zero_rows", b("attn_part"), i32(H * 2), B, dim({"mul": [OG, tp]}))
         if embed:
-            # a DCP step's gather is its first layer's (embed_rms)
-            if not dcp:
+            # a DCP step's or a lone chunk's gather is its first layer's (embed_rms)
+            if not dcp and not (chunk and not coll):
                 step("embed", "embedding", b("ids_own") if coll else b("token_ids"), b("embed"), b("hidden"), RB, i32(H))
         else:
             step("in.hidden", "copy_rows", b("hidden"), b("hidden_in"), i32(H), i32(H), i32(H))
@@ -1432,7 +1434,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             # residual mix in + snapshot + norm → normed
             if closing and (dcp or not snapshot):
                 mix_in(L + "res_in", w("sw_attn"), w("gamma_in"), nb_in, int(snapshot))
-            elif embed and dcp and i == first:
+            elif embed and (dcp or (chunk and not coll)) and i == first:
                 step(L + "res_in", "embed_rms", b("token_ids"), b("embed"), b("hidden"), b("blocks"), w("gamma_in"),
                      b("normed"), RB)
             else:
