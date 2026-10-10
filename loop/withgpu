@@ -36,6 +36,7 @@ fi
 
 [[ -f $(dirname "$0")/local.env ]] && eval "$(grep -E '^WITHGPU_(HOSTS|HOST_FORMAT)=' "$(dirname "$0")/local.env")"
 hosts=${WITHGPU_HOSTS:-$(hostname -s)}
+pool_n=$(wc -w <<<"$hosts")
 gpus=${WITHGPU_GPUS:-0 1 2 3}
 locks=${WITHGPU_LOCKS:-/dev/shm/withgpu}
 here=$(pwd)
@@ -53,7 +54,9 @@ mkdir -p "$locks" && chmod 1777 "$locks" 2>/dev/null
 got=()
 for g in $gpus; do
   exec {fd}>>"$locks/gpu$g.lock"
-  if flock -n "$fd" && [[ -z $(nvidia-smi -i "$g" --query-compute-apps=pid --format=csv,noheader) ]]; then
+  # Memory too: a process in another container is invisible to --query-compute-apps.
+  if flock -n "$fd" && [[ -z $(nvidia-smi -i "$g" --query-compute-apps=pid --format=csv,noheader) ]] &&
+    (($(nvidia-smi -i "$g" --query-gpu=memory.used --format=csv,noheader,nounits) < 1024)); then
     got+=("$g")
     ((${#got[@]} == n)) && break
   else
@@ -83,8 +86,12 @@ on_host() {
 # One pass over the pool for K hosts at once: hold each host's lease through
 # a coprocess-like pipe; on a short pass, drop every hold taken so far.
 multi_pass() {
-  local held=() pids=() fds=() h line
+  local held=() pids=() fds=() h line left=$pool_n
   for h in $hosts; do
+    # Stop once the hosts left cannot complete the pass: a waiter that skipped past a busy host
+    # would take the next one from whoever holds the first, and both would fail in lockstep.
+    ((${#held[@]} + left < hosts_n)) && break
+    left=$((left - 1))
     local fifo_dir; fifo_dir=$(mktemp -d)
     mkfifo "$fifo_dir/in" "$fifo_dir/out"
     on_host "$h" "$n" "$locks" "$here" "$gpus" - <"$fifo_dir/in" >"$fifo_dir/out" &
@@ -127,5 +134,5 @@ while true; do
     exit 75
   fi
   ((announced)) || { echo "withgpu: waiting for $n free GPUs on $hosts_n host(s) of [$hosts]" >&2; announced=1; }
-  sleep 5
+  sleep $((3 + RANDOM % 6))
 done
