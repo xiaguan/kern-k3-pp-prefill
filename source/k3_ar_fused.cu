@@ -9,18 +9,19 @@
 // The exchange runs over a row's RV sixteen-byte vectors at a time. Every
 // block pushes (and re-poisons) a grid-stride share of all rows' vectors;
 // block b < B then waits for row b and runs the epilogue on it, a row per
-// 1024 threads with the reduction trees of the kernels it replaces.
+// 1024 threads with the reduction trees of the kernels it replaces; the
+// blocks past B pull the next GEMM's weight `pf` (`pf_bytes`) into L2.
 //
 //   kern_k3_ar_attnres_rms(const bf16* x, u8* lamport, const u64* lamport_peers, i32* state,
 //       i32* err, int rank, const bf16* prefix, const bf16* blocks, const f32* sw,
 //       const bf16* gamma, bf16* prefix2, bf16* normed, int nb, int snapshot, int B,
-//       i64 stage_bytes, i64 timeout_ns)
+//       i64 stage_bytes, i64 timeout_ns, const u8* pf, i64 pf_bytes)
 //     o_proj's partials x [B, H] summed, then k3_residual.cu's K1b (-DLAND_BF16) on the sum.
 //
 //   kern_k3_ar_finalize_rms(const bf16* fc2, const i32* exp2perm, const f32* wts,
 //       const bf16* shared, u8* lamport, const u64* lamport_peers, i32* state, i32* err,
 //       int rank, const bf16* gamma, bf16* latent_norm, bf16* shared_sum, int B,
-//       i64 stage_bytes, i64 timeout_ns)
+//       i64 stage_bytes, i64 timeout_ns, const u8* pf, i64 pf_bytes)
 //     A row's routed latent partial (k3_moe_prefill.cu's kern_k3_moe_finalize over this
 //     rank's experts, bf16) and its shared expert's down partial `shared` [B, H], summed;
 //     latent_norm = k3_land.cu's kern_k3_rms(latent sum, gamma), shared_sum the shared sum.
@@ -142,6 +143,15 @@ __device__ __forceinline__ Lamport lamport_open(uint8_t* lamport, const unsigned
   __syncthreads();
   if (threadIdx.x == 0) atomicAdd(state, 1);
   return l;
+}
+
+// The next GEMM's weight pulled into L2 by the blocks that hold no row (b >= B), once their pushes
+// are out, while the row blocks wait on the peers: a prefetch.global.L2 a 128-byte line.
+__device__ __forceinline__ void l2_prefetch(const uint8_t* w, long long bytes, int B) {
+  if ((int)blockIdx.x < B) return;
+  const long long step = (long long)(gridDim.x - B) * blockDim.x * 128;
+  for (long long o = ((long long)(blockIdx.x - B) * blockDim.x + threadIdx.x) * 128; o < bytes; o += step)
+    asm volatile("prefetch.global.L2 [%0];" ::"l"(w + o));
 }
 
 __device__ __forceinline__ void lamport_push(const Lamport& l, long long i, uint4 v) {
@@ -391,7 +401,7 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_attnres_rms
     const uint4* __restrict__ x, uint8_t* lamport, const unsigned long long* lamport_peers, int* state, int* err,
     int rank, const bf16_t* __restrict__ prefix, const bf16_t* __restrict__ blocks, const float* __restrict__ sw,
     const bf16_t* __restrict__ gamma, bf16_t* __restrict__ prefix2, bf16_t* __restrict__ normed, int nb, int snapshot,
-    int B, long long stage_bytes, long long timeout_ns) {
+    int B, long long stage_bytes, long long timeout_ns, const uint8_t* __restrict__ pf, long long pf_bytes) {
   extern __shared__ uint4 cand[];
   __shared__ RowSmem s;
   const int t = threadIdx.x, b = blockIdx.x;
@@ -408,6 +418,7 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_attnres_rms
   const Lamport l = lamport_open(lamport, lamport_peers, state, err, rank, tot, stage_bytes, timeout_ns);
   for (long long i = (long long)b * KTHREADS + t; i < tot; i += (long long)gridDim.x * KTHREADS) lamport_push(l, i, x[i]);
   lamport_clear(l);
+  l2_prefetch(pf, pf_bytes, B);
 
   int fail = 0;
   if (row) {
@@ -504,7 +515,7 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_finalize_rm
     const bf16_t* __restrict__ fc2, const int* __restrict__ exp2perm, const float* __restrict__ wts,
     const uint4* __restrict__ shared, uint8_t* lamport, const unsigned long long* lamport_peers, int* state, int* err,
     int rank, const bf16_t* __restrict__ gamma, bf16_t* __restrict__ latent_norm, uint4* __restrict__ shared_sum, int B,
-    long long stage_bytes, long long timeout_ns) {
+    long long stage_bytes, long long timeout_ns, const uint8_t* __restrict__ pf, long long pf_bytes) {
   __shared__ float sm[33];
   const int t = threadIdx.x, b = blockIdx.x;
   const long long tot = (long long)B * ROWV;
@@ -514,6 +525,7 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_finalize_rm
     lamport_push(l, i, c < KLATV ? finalize(fc2, exp2perm, wts, row, c) : shared[(long long)row * KVEC + c - KLATV]);
   }
   lamport_clear(l);
+  l2_prefetch(pf, pf_bytes, B);
 
   int fail = 0;
   if (b < B) {

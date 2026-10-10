@@ -193,6 +193,9 @@ TP_AR_GRID = 152  # the GB300's SM count, a multiple of the cluster of 8 and und
 TP_TIMEOUT_NS = 30_000_000_000  # a deadline that passes traps: long enough for any start skew
 DCP_GRID = 256  # two exchange blocks fit an SM: every block resident with room to spare
 CAND_SMEM = NB_MAX * H * 2  # k3_ar_fused.cu: a row's snapshots prefetched into shared memory
+PF_PARAMS = ["in buffer<bf16>", "i64"]  # k3_ar_fused.cu: the next GEMM's weight, prefetched into L2
+PF_OPS = {"ar_attnres_rms", "ar_finalize_rms"}
+PF_MAX = 96 << 20  # of the GB300's 129 MB L2
 ONESHOT_MAX_ROWS = 192  # peer_allreduce.cu: wider batches go two-shot, the Lamport stages hold this many rows
 
 # Launch geometry per entry, as the kernel headers document it
@@ -883,13 +886,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         lamport_params = ["inout buffer<u8>", "in buffer<u64>", "inout buffer<i32>", "out buffer<i32>", "i32"]
         ops["ar_attnres_rms"] = {
             "params": ["in buffer<bf16>", *lamport_params, "in buffer<bf16>", "in buffer<bf16>", "in buffer<f32>",
-                       "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "i32", "i32", "i32", "i64", "i64"],
+                       "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "i32", "i32", "i32", "i64", "i64",
+                       *PF_PARAMS],
             "impl": {"launches": [launch("k3_ar_fused", "kern_k3_ar_attnres_rms", defines={"NRANKS": tp},
                                          grid=[TP_AR_GRID, 1, 1], block=[1024, 1, 1], smem=CAND_SMEM)]},
         }
         ops["ar_finalize_rms"] = {
             "params": ["in buffer<bf16>", "in buffer<i32>", "in buffer<f32>", "in buffer<bf16>", *lamport_params,
-                       "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "i32", "i64", "i64"],
+                       "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "i32", "i64", "i64", *PF_PARAMS],
             "impl": {"launches": [launch("k3_ar_fused", "kern_k3_ar_finalize_rms", defines={"NRANKS": tp},
                                          grid=[TP_AR_GRID, 1, 1], block=[1024, 1, 1])]},
         }
@@ -1838,10 +1842,21 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                 mp["weights"](once, buffers, i, n)
 
     groups = {"tp": tp} if dcp else {"ep": ranks, **({"tp": tp} if tp > 1 else {})}
+    def prefetch_next(prog):
+        """Every PF_OPS call names the weight of the GEMM after it (up to PF_MAX bytes) for L2."""
+        gemms = [(k, c) for k, c in enumerate(prog) if c["op"] in ("gemm_f32", "gemm_bf16")]
+        for k, c in enumerate(prog):
+            if c["op"] in PF_OPS:
+                w = next(g["args"][1] for j, g in gemms if j > k)
+                d = buffers[w["buf"]]
+                size = math.prod(d["shape"]) * {"bf16": 2, "f32": 4, "u8": 1}[d["dtype"]] - w.get("offset", 0)
+                c["args"] += [w, i64(min(size, PF_MAX))]
+        return prog
+
     # A decode step over the batch; with a span, the same step in which
     # rows [span_at, span_at + span) are one sequence's prompt chunk.
     if decode:
-        programs["decode"] = kern_manifest.program(emit(False), groups=seqs_max, rows=1, graph=True)
+        programs["decode"] = kern_manifest.program(prefetch_next(emit(False)), groups=seqs_max, rows=1, graph=True)
     if span_max:
         programs["decode_span"] = kern_manifest.program(emit(True), groups=seqs_max, rows=1, span=SP, graph=True)
     if chunk:
