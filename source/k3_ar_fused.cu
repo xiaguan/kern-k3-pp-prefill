@@ -118,6 +118,7 @@ __device__ __forceinline__ void lamport_handshake(uint8_t* lamport, const unsign
 __device__ __forceinline__ Lamport lamport_open(uint8_t* lamport, const unsigned long long* peers, int* state, int* err,
                                                 int rank, long long tot, long long stage_bytes, long long timeout_ns) {
   __shared__ uint4* s_slot[NRANKS];
+  asm volatile("griddepcontrol.launch_dependents;");
   Lamport l;
   l.slot = s_slot;
   l.flag = state[2];
@@ -433,6 +434,7 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_land_add2_attn
   extern __shared__ uint4 cand[];
   __shared__ RowSmem s;
   const int b = blockIdx.x, t = threadIdx.x;
+  asm volatile("griddepcontrol.launch_dependents;");
   if (b >= B) return;
   const RowRegs r = row_prefetch(blocks + (size_t)b * KNB_MAX * KH, sw, gamma, cand, nb, t);
   V8 pv;

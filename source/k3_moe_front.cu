@@ -285,6 +285,7 @@ extern "C" __global__ void __launch_bounds__(THREADS, 1) kern_k3_moe_front(
   __shared__ Cand s_cand;
 
   const int b = blockIdx.x, t = threadIdx.x, warp = t / 32;
+  asm volatile("griddepcontrol.launch_dependents;");
   const float* row = S + (long long)b * LDS;
   if (t < EXPERTS) {
     float sg = 1.0f / (1.0f + expf(-row[t]));
