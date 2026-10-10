@@ -24,6 +24,7 @@ json.dump(cand, open(sys.argv[3], "w"))
 print("modules changed in place:", ", ".join(sorted(changed)) or "none")
 PY
 cand=$out.cand.json
+cd "$LOOP_DIR"  # kern reads a kern.toml in the cwd
 "$LOOP_DIR/withgpu" -n 1 env KERN_CACHE_DIR="$KERN_CACHE_DIR" LD_LIBRARY_PATH="$LD_LIBRARY_PATH" "$K3_KERN_BIN" test --reference "$base" --manifest "$cand" --kernels "$REPO/build" \
   --weights "$K3_WEIGHTS" --tokenizer "$K3_TOKENIZER" --gpu 0 --capacity 16384 --prefill 6000 --chunk 2048 \
   --out "$out.json" > "$out.log" 2>&1
