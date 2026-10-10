@@ -1,10 +1,10 @@
 # p-glue: the MoE glue and the MLA glue of a P layer
 
 Target: P stage 0 since 19:54 (`loop/p/bench loop/out/p-stage0.json`), check `loop/p/check
-loop/out/p-l12.json`. Small gains need `work/ab.sh A B OUT` (A, B, A, B in one lease; A-to-A spread
-0.5-1.2% at 8192 rows); `work/swapmod.py MANIFEST main OUT` re-pins a manifest's cubins to main's.
+loop/out/p-l12.json`. Every timing claim goes through `loop/p/ab A B OUT [N]` (A, B, A, B in one
+lease; A-to-A spread 0.5-1.2% at 8192 rows); `work/swapmod.py MANIFEST main OUT` re-pins a manifest's cubins to main's.
 
-## Where it stands (main 9850876, all of this run's commits merged)
+## Where it stands (main aa144e0, all of this run's commits merged)
 
 - Stage 0: 206 launches (17.2/layer), ~125 ms/item. A MoE layer: `land_add_attnres_rms_bf16`
   → router* → front* (lat_down | shared gate | up) → `moe_route` (top-k, mxfp8, routing tables,
@@ -22,6 +22,68 @@ loop/out/p-l12.json`. Small gains need `work/ab.sh A B OUT` (A, B, A, B in one l
   129..~1000-row chunks: ~9.7 TFLOP at 354 rows over 131k against 21 ms of expand + FMHA today,
   but only as a tcgen05 kernel (mma.sync peaks at 605 TFLOP/s here: work/mma).
 
+## Power cap (22:16 target; main aa144e0, 8192@0 unless said)
+
+Tools (uncommitted, work/): `ptrace.sh MANIFEST OUT N SCENARIO...` (one kern bench per scenario,
+nvidia-smi beside it), `pw/` (one kernel or a cuBLAS GEMM looped at 8192 rows; `mix:<filler>:<n>`
+times a GEMM after n fillers), `ncu_inner.sh` + `ncu_sum.py` (DRAM bytes per kernel of one stage pass).
+Pitfalls: nvidia-smi's index is not CUDA's device 0 on a lease (sample by the CUDA device's UUID,
+`pw/uuid`); NVML's clock and power refresh every ~100 ms whatever the poll rate (nvidia-smi -lms 10
+or a tight NVML loop alike), so no trace resolves a kernel; nsys is not installed.
+
+- Stage scenarios (40 samples each, active span): 1400 W limit, 2070 MHz max.
+
+  | scenario | power median | SM clock median / mean / min | capped | at 2070 |
+  |---|---|---|---|---|
+  | 8192@0 | 1368 W | 1507 / 1570 / 1425 | 88% | 13% |
+  | 8192@131k | 1352 W | 1657 / 1681 / 1462 | 92% | 9% |
+  | 10@131k | 1323 W | 1740 / 1820 / 1477 | 57% | 42% |
+  | 354@131k | 1337 W | 1687 / 1750 / 1462 | 77% | 23% |
+
+- One kernel alone, 5 s loops: a cuBLAS bf16 GEMM 8192×12288×7168 is capped by itself (1353 W,
+  1357 MHz, 889 us). DRAM-bound glue is not: K1d 1119 W, K1b 1132 W (153.6 us, 2070 MHz: 0.17 J a
+  call), finalize 965 W, a 235 MB D2D copy 964 W (6.4 TB/s). Idle with the clocks up: 231 W. So a
+  byte through DRAM costs ~(964 − 231) W / 6.4 TB/s ≈ 115 pJ (HBM + L2 + the copy's issue).
+- The controller is fast enough that a low-power gap pays the next GEMM back (`pw mix`, median of
+  300 GEMMs): back-to-back 851 us; after 129 us idle 773; after ≥0.3 ms idle 730-740; after a
+  152 us copy 799; after one K1d (190 us) 793; after 4 K1d (660 us) 748. A filler's effective
+  cost (its time minus the GEMM time it gives back): idle 0.40 of its time, copy 0.66, K1d 0.69.
+  So under the cap 1 us less of DRAM-bound glue is worth ~0.7 us of step, and an energy-equal
+  speedup is worth only its static share. p-kda's -0.6 ms gather is then ~-0.4 ms: inside the
+  stage A/B's spread.
+- Lost to throttling at 8192 rows: GEMM-type kernels are ~120 of the item's 145 ms in-program
+  (gemm_bf16 65, fc1 35, fc2 16, gemm_f32 4) and run ~14% slower capped than at the max clock
+  (851 vs 730 us for the probe GEMM): ~17 ms an 8192@0 item (~12%), all of it GEMM time.
+- DRAM per 8192@0 pass (ncu, 189 kernels): 316 GB read + 54 GB written. GEMMs and attention move
+  most of it (fc1 111 GB, fc2 66, nvjet 118, kda/flash-kda/gather 40). This lane's glue moves 31.6 GB
+  (8.5%):
+
+  | kernel | calls | read GB | write GB | in-program ms (dcf6ec0) |
+  |---|---|---|---|---|
+  | moe_finalize_rms | 11 | 10.35 | 0.57 | 2.02 |
+  | land_add_attnres_rms | 12 | 4.11 | 2.41 | 2.01 |
+  | land_add2_attnres_rms | 11 | 3.88 | 2.25 | 1.86 |
+  | moe_route (top-k, mxfp8, tables, situ) | 11 | 3.21 | 1.13 | 1.40 |
+  | mla_gate (bf16 gate since cb84767: was 1.81 + 0.54) | 3 | 1.21 | 0.50 | 1.01 |
+  | situ (layer 0) | 1 | 1.11 | 0.52 | 0.36 |
+  | embed_rms, land_add2, mla_prep_gather | 5 | 0.34 | 0.37 | 0.27 |
+
+  Energy: the item is ~187 J (145 ms × 1292 W mean). The glue's bytes are ~3.6 J (2%); the glue
+  whole is ~9 ms × ~1.05 kW ≈ 9.5 J (5%), worth ~6.5 ms of capped step.
+- Bytes the glue moves that it need not: none worth a commit.
+  - Every glue read and write is its contract minimum. finalize reads the FC2 output once (16
+    picks × 3584 bf16 a row, 0.94 GB); the residuals read partial, prefix and the nb blocks once
+    and write prefix2 and normed once; route reads S f32 (29 MB, routing precision) and the normed
+    row once.
+  - The one write-then-read pair a fusion could still remove is o_proj's partial (the GEMM adding
+    prefix as C, beta 1). That saves one 117 MB write a call (~1.4 GB, ~0.16 J, ~0.1 ms an
+    item), and it is a GEMM ABI change in the runtime: out of scope.
+  - The f32 intermediate in the MLA glue (wfu's gate columns) went bf16 with d-attn's cb84767
+    (gate −0.6 GB read a pass).
+- Threshold 256 rows with 8 splits vs main's 128 with 16, same-lease `loop/p/ab` on stage 0 (main
+  aa144e0): A 124.52 / 124.57, B 124.78 / 124.44 ms/item; the 10-row item (the only one it
+  changes: 354 stays long) 7.595 → 7.605 ms (+0.13%). No gain: not landed.
+
 ## For the orchestrator (measurement notes)
 
 - Stage 1's bench gets zero `fmha_lens` tables (cut input without a fill: the FMHA attends nothing)
@@ -38,8 +100,8 @@ loop/out/p-l12.json`. Small gains need `work/ab.sh A B OUT` (A, B, A, B in one l
   merge in the gate kernel is the DSL reduction's own arithmetic (bit-identical logits).
   Option measured, not committed (bench-neutral): threshold 256 with 8 splits (same 512 MB
   workspace): A/B 4 rows over 131k +3.7% (fewer splits), 10 rows -0.06%, 200 rows -4.8%; the
-  bench has no shape between 10 and 354, so it is the traffic's call (are there chunks under 10
-  rows, are there many of 129..256?).
+  bench has no shape between 10 and 354. On stage 0 after d-attn's FMHA split it is flat (see
+  "Power cap"): not landed.
 - Proposal not done (a GEMM epilogue): sh_down accumulating onto lat_up's output is moot now that
   the back GEMM sums them by K.
 
