@@ -221,11 +221,11 @@ source = "source/k3_head.cu"
 defines = { NRANKS = 8 }
 
 [kernels."k3_span_gather+K9_LD=49408+PARTIAL_BF16=1"]
-sha256 = "7904a3d949061a7232e3132bdd0aeabc93a983c4d0067d37261b65b1e9d54211"
+sha256 = "8b4a88ab8182727ddf73aa330e3a979513fe36823a5c92a8d5ce16d847bc45a1"
 source = "source/k3_span_gather.cu"
 defines = { K9_LD = 49408, PARTIAL_BF16 = 1 }
 
 [kernels."k3_kda_rec+K12_LD=49408"]
-sha256 = "583b888370ef4bbc0a70f96c4805dd430f98477395050e6b7c8865dfcd4f20c1"
+sha256 = "663253f41bd8eaaa4d586ddcedf826d7b3d06defc77f3b95c4cf235a830e81ad"
 source = "source/k3_kda_rec.cu"
 defines = { K12_LD = 49408 }
