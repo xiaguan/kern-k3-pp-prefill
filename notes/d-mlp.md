@@ -88,4 +88,16 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
   deadline and gave wrong values; now it costs only startup time. Steady state: in normal runs a few
   dozen all-reduce polls a run wait 5-9 ms (members waiting for member 0, whose host reads and scans
   4 x 163840 logits after every check step); the head's key wait never passed 5 ms.
+- **Residual-row epilogue floor** (single-GPU harness work/h/k1d_bench*.cu on land_add2_attnres_rms): empty
+  launch 0.7 us; nb = 0 2.3 us; nb = 1 4.3; nb = 2 4.9; nb = 8 8.4. Of nb = 1's extra 2 us, the snapshot copy is
+  ~0.2 and the mix ~1.3 (score of the prefix, two block barriers, combine, softmax, mix: two dependent block
+  reductions with a softmax between them, and rms needs the bf16-rounded mix, so no algebraic shortcut).
+  Interleaving the snapshots' butterflies: no gain. p-glue's 14-warp form (2 vectors a thread, same trees):
+  4.16 vs 4.29 us at nb = 1, ~3%. moe_front with pdl: 3.580 vs 3.581 (nothing). Two-shot attention
+  all-reduce from 33 rows (reduce-scatter to the row's owner, owner sums in rank order, gathers the bf16
+  sum): 36 rows unchanged, 48 rows -0.5%; reverted (and a `when` pair counts as two launches in loop/count).
+- Remaining D cost at 24 rows, per KDA layer ~180 us: MoE bmm ~75 (weight-bandwidth bound, varies by the
+  member's active experts: ar_finalize waits ~20 us median on the slowest member), other GEMMs ~55 (front
+  incl. cuBLAS split-K reduce, qkvg, o_proj, sh_down, lat_up), kda_core 11 (d-attn), my four kernels ~38.
+  MLA layers add the DSL attention (96 us at 24 rows / 128k, ~4.7 TB/s, prebuilt) and the exchange.
 
