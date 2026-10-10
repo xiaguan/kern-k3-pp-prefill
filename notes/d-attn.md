@@ -13,6 +13,8 @@
 | main 1242531 (all of the above + d-mlp, p-*) | 13.2 | 4.175 ms/step |
 | exchange latency, rebased | 13.2 | 4.135 ms/step |
 | absorb: 384 blocks, W frags held | 13.2 | 4.133 ms/step |
+| main 7d6ea4f + the above (measured with PDL, = without) | 13.2 | 4.144 ms/step |
+| exchange: split loads at once, half-head merge items, gate in smem | 13.2 | 4.120 ms/step |
 
 ## Done
 
@@ -74,6 +76,17 @@
   my 128 KB-staging exchange failing the real check while passing the
   8-virtual-rank harness. The exchange now counts 2 * timeout_ns SM cycles.
 
+- **Exchange, round 2** (instrumented with %globaltimer printf from a
+  debug cubin swapped into a copied manifest, work/t/k3_dcp_dbg.cu): at 16
+  rows the send took ~5 us (2 records a block, each a chain of dependent
+  split loads: lse, max, sum, then o one split at a time), the first
+  peer data arrived at ~8 us, and the merge + v-up took ~8 us more (16
+  serial dv passes, a global gate load per pass, two mid-item waits on W
+  quarters). Now the first 8 splits' lse load at once and o loads 4
+  splits at a time, a merge item is half a head (8 passes, its 64 KB of
+  W_UV staged before the send), the item's gate rows sit in smem. 4.144 →
+  4.120. Bit-identical.
+
 ## Tried and dropped
 
 - **MLA split plan for a full GPU** (work/k3_mla_split_plan.cu): at 39-48
@@ -100,6 +113,11 @@
   Every pair left is split by a cuBLAS GEMM (wfu, q_b, o_proj) or the
   prebuilt attention. The plan could ride in the embedding launch as an
   extra block, but that is two unrelated loops in one grid: not done.
+
+- **kda_core split in two 128-thread halves** (upper half streams its 64
+  rows during the lower half's prologue; work/kda_split_v2.cu): one GPU,
+  8/16/24 rows 6.09/7.57/8.81 → 5.98/7.42/8.52 us, 36/48 rows much worse
+  (2 blocks/SM). Not worth a `when` split for 0.1-0.3 us.
 
 ## Profile (nsys, rank 0, 48 rows @128k, before the exchange kernel)
 
