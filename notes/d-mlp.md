@@ -29,6 +29,8 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 | embedding gather + layer 0's `attnres_rms_first` → `kern_k3_embed_rms` (nb = 0: snapshot + rms of the gathered row) | 13.0 | 4.040 | bit-identical |
 | vocab-parallel lm_head (SGLang's layout for this group): each member's 20480-row slice GEMM, `kern_k3_head_argmax` copies the slice into member 0's full logits and exchanges one argmax key per row (3 stages, zero = not arrived) | 13.0 | 3.742 | lm_head GEMM at N = 20480 (another cuBLAS kernel): logits relRMS 1e-5 vs main, 0 flips |
 | (main 0c3c812 + the head: 3.930 -> 3.632) | 13.0 | 3.632 | |
+| (main 6bf21b5: 3.584) | 13.0 | 3.584 | |
+| the MLA split plan (`mla_split_plan`, one launch a step) computed by each `embed_rms` block for its row → `kern_k3_embed_rms_plan` | 12.9 | 3.586 | bit-identical (integer plan) |
 | the MoE batched GEMMs launch as programmatic dependents (`pdl: true` on fc1 / fc2: their cubins wait with griddepcontrol and trigger early) | 13.0 | 3.582 | unchanged (launch attribute only) |
 
 ## Findings

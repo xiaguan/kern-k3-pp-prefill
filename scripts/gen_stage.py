@@ -524,6 +524,12 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             "impl": {"launches": [launch("k3_ar_fused", "kern_k3_embed_rms", grid=[RV, 1, 1], block=[1024, 1, 1]) if dcp
                                   else residual(None, "kern_k3g_embed_rms")]},
         }} if embed and (dcp or (chunk and not coll)) else {}),
+        # ... and the MLA split plan (k3_mla_split_plan) in the same launch, a row's per block
+        **({"embed_rms_plan": {
+            "params": ["in buffer<i64>", "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "in buffer<bf16>",
+                       "out buffer<bf16>", "in buffer<i32>", "out buffer<i32>", "i32", "i32"],
+            "impl": {"launches": [launch("k3_ar_fused", "kern_k3_embed_rms_plan", grid=[RV, 1, 1], block=[1024, 1, 1])]},
+        }} if embed and dcp and mla else {}),
         **({"land_add_attnres_rms": {
             "params": ["in buffer<f32>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "in buffer<bf16>",
                        "out buffer<bf16>", "out buffer<bf16>", "i32", "i32", "i32"],
@@ -1376,7 +1382,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                  i32(pack + 1))
         elif chunk:
             step("fmha_lens", "fmha_lens", b("seq_lens"), b("fmha_lens"), B)
-        elif mla:
+        elif mla and not (dcp and embed):  # a DCP step plans in its embedding's launch
             step("mla_plan", "mla_split_plan", b("seq_lens"), b("mla_bsk"), i32(mla_split_max), B)
 
         blocks = blocks_in
@@ -1434,6 +1440,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             # residual mix in + snapshot + norm → normed
             if closing and (dcp or not snapshot):
                 mix_in(L + "res_in", w("sw_attn"), w("gamma_in"), nb_in, int(snapshot))
+            elif embed and dcp and mla and i == first:
+                step(L + "res_in", "embed_rms_plan", b("token_ids"), b("embed"), b("hidden"), b("blocks"),
+                     w("gamma_in"), b("normed"), b("seq_lens"), b("mla_bsk"), i32(mla_split_max), RB)
             elif embed and (dcp or (chunk and not coll)) and i == first:
                 step(L + "res_in", "embed_rms", b("token_ids"), b("embed"), b("hidden"), b("blocks"), w("gamma_in"),
                      b("normed"), RB)

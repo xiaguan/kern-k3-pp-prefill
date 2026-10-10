@@ -553,16 +553,19 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_finalize_rm
 // ---------------------------------------------------------------- embedding + K1a of the first layer
 // hidden = embed[ids[b]] (written, and snapshot 0 of blocks), normed = rms(hidden, gamma): the
 // gather and the first layer's attnres_rms with no snapshot to mix (nb = 0, the mix is the row).
+// kern_k3_embed_rms_plan also writes row b's MLA split count (kern's k3_mla_split_plan.cu,
+// whose integer plan needs only every row's tile count: each block sums them itself).
 //   kern_k3_embed_rms(const i64* ids, const bf16* table, bf16* hidden, bf16* blocks,
 //       const bf16* gamma, bf16* normed, int B)
+//   kern_k3_embed_rms_plan(..., const i32* seq_lens, i32* block_split_kvs, int split_max, int B)
 //   grid (B, 1, 1)   block (1024, 1, 1)
-extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_embed_rms(
-    const long long* __restrict__ ids, const bf16_t* __restrict__ table, bf16_t* __restrict__ hidden,
-    bf16_t* __restrict__ blocks, const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int B) {
+#define MLA_TILE 128
+
+__device__ __forceinline__ void embed_rms(const long long* __restrict__ ids, const bf16_t* __restrict__ table,
+                                          bf16_t* __restrict__ hidden, bf16_t* __restrict__ blocks,
+                                          const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int b,
+                                          int t) {
   __shared__ RowSmem s;
-  const int b = blockIdx.x, t = threadIdx.x;
-  asm volatile("griddepcontrol.launch_dependents;");
-  if (b >= B) return;
   const RowRegs r = row_prefetch(blocks, nullptr, gamma, nullptr, 0, t);
   V8 pv;
   pv.w[0] = 0u, pv.w[1] = 0u, pv.w[2] = 0u, pv.w[3] = 0u;
@@ -572,4 +575,40 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_embed_rms(
     stv(blocks + (size_t)b * KNB_MAX * KH + t * 8, pv);
   }
   row_finish(nullptr, r, pv, normed + (size_t)b * KH, 0, t, s);
+}
+
+extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_embed_rms(
+    const long long* __restrict__ ids, const bf16_t* __restrict__ table, bf16_t* __restrict__ hidden,
+    bf16_t* __restrict__ blocks, const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int B) {
+  asm volatile("griddepcontrol.launch_dependents;");
+  if (blockIdx.x >= B) return;
+  embed_rms(ids, table, hidden, blocks, gamma, normed, blockIdx.x, threadIdx.x);
+}
+
+extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_embed_rms_plan(
+    const long long* __restrict__ ids, const bf16_t* __restrict__ table, bf16_t* __restrict__ hidden,
+    bf16_t* __restrict__ blocks, const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed,
+    const int* __restrict__ seq_lens, int* __restrict__ block_split_kvs, int split_max, int B) {
+  asm volatile("griddepcontrol.launch_dependents;");
+  const int b = blockIdx.x, t = threadIdx.x;
+  if (b >= B) return;
+  if (t < 32) {  // the plan of row b: every row's 128-token tiles, a cluster wave's budget
+    long long total = 0;
+    for (int q = t; q < B; q += 32) total += (seq_lens[q] + MLA_TILE - 1) / MLA_TILE;
+#pragma unroll
+    for (int o = 16; o; o >>= 1) total += __shfl_xor_sync(0xffffffffu, total, o);
+    if (t == 0) {
+      unsigned nsm;
+      asm("mov.u32 %0, %%nsmid;" : "=r"(nsm));
+      long long budget = (long long)(nsm / 2) - B;
+      if (budget < 1) budget = 1;
+      long long per = (total + budget - 1) / budget;
+      if (per < 1) per = 1;
+      long long sp = ((seq_lens[b] + MLA_TILE - 1) / MLA_TILE + per - 1) / per;
+      if (sp < 1) sp = 1;
+      if (sp > split_max) sp = split_max;
+      block_split_kvs[b] = (int)sp;
+    }
+  }
+  embed_rms(ids, table, hidden, blocks, gamma, normed, b, t);
 }
