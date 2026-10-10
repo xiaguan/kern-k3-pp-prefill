@@ -26,8 +26,17 @@
 //     latent_norm = k3_land.cu's kern_k3_rms(latent sum, gamma), shared_sum the shared sum.
 //
 //   grid (G >= B, 1, 1), every block resident at once   block (1024, 1, 1)
+//   kern_k3_ar_attnres_rms: dynamic smem KCAND_BYTES (the row's snapshots, below)
 //   `err` gets 1 + the rank whose data did not show within `timeout_ns`, then the kernel traps.
 //   `lamport` holds the three stages, then NRANKS handshake words (the first call's, below).
+//
+// The residual rows around them, a row per 1024 threads with the same row routine:
+//   kern_k3_land_add2_attnres_rms   a layer's closing add, then the next layer's mix and norm
+//                                   (dynamic smem KCAND_BYTES)
+//   kern_k3_embed_rms(_plan)        the step's embedding gather and its first layer's norm
+//                                   (_plan: and the MLA split plan)
+// Every kernel here triggers its dependents at entry (griddepcontrol.launch_dependents): the
+// cuBLAS GEMM after it launches as a programmatic dependent and waits for this grid itself.
 
 #include <cuda_bf16.h>
 #include <cstdint>

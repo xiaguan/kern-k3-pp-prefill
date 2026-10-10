@@ -116,4 +116,7 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
   a step at 24 / 48 rows, this branch 19.54 / 26.42 (-18% / -14%; every run's work). nsys at 24 rows:
   ar_finalize median 27 us (MoE skew), ar_attnres 12.9, kda_core 10.9, moe_front 7.3, K1d 6.9 (snapshot
   counts up to 8: +2.3 us over the bench's nb 1-2), dcp_exchange 13.7.
+- moe_front top-k by threshold (the 16th largest ord by a 32-step block-wide __syncthreads_count search,
+  then the survivors compacted and bitonic-sorted in one warp; quant/situ moved before it): 9.4 vs 6.4 us
+  at 8-48 rows (harness). The counting barriers cost more than the two levels of warp rounds. Discarded.
 
