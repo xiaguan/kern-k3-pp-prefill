@@ -19,7 +19,7 @@
 //       bf16* gated,            // [rows, INNER]  rows span_at[0] + i
 //       const int* span_at,
 //       const long long* cu_seqlens, const int* tile_prefix,  // sequence j: rows cu[j]..cu[j+1], tiles from prefix[j]
-//       int* progress,          // [nseq][HEADS]  zero (the gather zeroes it; the gate CTAs leave it so)
+//       int* progress,          // [nseq][HEADS]  zero (the gather zeroes it)
 //       int tiles,              // the workspace's head stride (kernel 1's total_tiles)
 //       int span,               // rows of the call (beta's row stride)
 //       int nseq);
@@ -381,53 +381,35 @@ __device__ __forceinline__ void k12_cp_async(void* dst, const void* src) {
   asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(k12_smem(dst)), "l"(src) : "memory");
 }
 
-// A gate CTA: warps 8g..8g+8 take every other one of this CTA's (sequence, head) items
-// (e, e + K12_GATE_CTAS, ...), four tiles at a time as the recurrence publishes them: warp w
-// stages rows 2(w % 8) + half of each tile (the ungated output and the gate's projection) in
-// its own shared memory by cp.async, then gates them 16 lanes a row. Lane k sums the squares
-// of K11's lane group (columns 32(k/4) + 4l + k%4, l < 8) in K11's butterfly order, then
-// finishes columns 8k..8k+8 with K11's operations; the last group of an item resets its counter.
+// A gate CTA: warp pair p takes the units e + K12_GATE_CTAS (p + 8m), unit 4 item + quarter the
+// rows 4 quarter .. +4 of every tile of (sequence, head) item (a CTA gates at most 7/4 heads,
+// not 2): four tiles at a time as the recurrence publishes them, warp w stages rows
+// 4 quarter + 2 (w % 2) + half (the ungated output and the gate's projection) in its own shared
+// memory by cp.async, a group's loads in flight while it gates the group before, 16 lanes a row.
+// Lane k sums the squares of K11's lane group (columns 32(k/4) + 4l + k%4, l < 8) in K11's
+// butterfly order, then finishes columns 8k..8k+8 with K11's operations.
 __device__ __forceinline__ void k12_gate(int e, int nseq, const long long* cu_seqlens, const bf16* raw,
                                          const bf16* partial, const float* gamma_o, bf16* gated, long long at,
-                                         int* progress, unsigned char* smem) {
-  const int warp = threadIdx.x >> 5, lane = threadIdx.x & 31, gw = warp >> 3;
-  const int half = lane >> 4, k = lane & 15, i = 2 * (warp & 7) + half, grp = 64 * (k >> 2);
-  // this warp's rows: [tile 0..4][half 0..2] of 256 bytes, the output then the gate's projection
-  unsigned char* ro = smem + warp * 4096;
-  unsigned char* gp = ro + 2048;
+                                         const int* progress, unsigned char* smem) {
+  const int warp = threadIdx.x >> 5, lane = threadIdx.x & 31;
+  const int half = lane >> 4, k = lane & 15, grp = 64 * (k >> 2);
+  // this warp's two buffers of [tile 0..4][half 0..2] rows of 256 bytes, the output then the gate's projection
+  unsigned char* ro = smem + warp * 8192;
   float gam[8];
   {
     const float4 g0 = *(const float4*)(gamma_o + 8 * k), g1 = *(const float4*)(gamma_o + 8 * k + 4);
     gam[0] = g0.x, gam[1] = g0.y, gam[2] = g0.z, gam[3] = g0.w, gam[4] = g1.x, gam[5] = g1.y, gam[6] = g1.z,
     gam[7] = g1.w;
   }
-  const int items = nseq * HEADS;
-  for (int c0 = 0;; c0 += 4) {
-    bool any = false;
-    for (int item = e + gw * K12_GATE_CTAS; item < items; item += 2 * K12_GATE_CTAS) {
-      const int sq = item / HEADS, h = item % HEADS;
-      const long long bos = cu_seqlens[sq];
-      const int len = (int)(cu_seqlens[sq + 1] - bos), ntiles = (len + 15) >> 4;
-      if (c0 >= ntiles) continue;
-      any = true;
-      const int cend = min(c0 + 4, ntiles);
-      int* flag = progress + item;
-      if (lane == 0)
-        while (k12_ld_acquire(flag) < cend) __nanosleep(256);
-      __syncwarp();
-      for (int c = c0; c < cend; ++c) {
+  for (int u = e + K12_GATE_CTAS * (warp >> 1); u < 4 * nseq * HEADS; u += 8 * K12_GATE_CTAS) {
+    const int item = u >> 2, h = item % HEADS, i = 4 * (u & 3) + 2 * (warp & 1) + half;
+    const long long bos = cu_seqlens[item / HEADS];
+    const int len = (int)(cu_seqlens[item / HEADS + 1] - bos), ntiles = (len + 15) >> 4;
+    const int* flag = progress + item;
+    const auto gate = [&](int c0, int buf) {
+      for (int c = c0; c < min(c0 + 4, ntiles); ++c) {
         const int r = 16 * c + i;
-        if (r < len) {
-          k12_cp_async(ro + ((c - c0) * 2 + half) * 256 + 16 * k, raw + (bos + r) * K12_INNER + h * 128 + 8 * k);
-          k12_cp_async(gp + ((c - c0) * 2 + half) * 256 + 16 * k,
-                       partial + (at + bos + r) * K12_FUSED + 3 * K12_INNER + h * 128 + 8 * k);
-        }
-      }
-      asm volatile("cp.async.wait_all;" ::: "memory");
-      __syncwarp();
-      for (int c = c0; c < cend; ++c) {
-        const int r = 16 * c + i;
-        const unsigned char* row = ro + ((c - c0) * 2 + half) * 256;
+        const unsigned char* row = ro + buf * 4096 + ((c - c0) * 2 + half) * 256;
         float y[8];
 #pragma unroll
         for (int q = 0; q < 4; ++q) {
@@ -446,7 +428,7 @@ __device__ __forceinline__ void k12_gate(int e, int nseq, const long long* cu_se
                           __shfl_sync(0xffffffffu, wsum, base + 8) + __shfl_sync(0xffffffffu, wsum, base + 12);
         const float rr = rsqrtf(tot * (1.0f / 128.0f) + K12_RMS_EPS);
         const uint4 araw = *(const uint4*)(row + 16 * k);
-        const uint4 graw = *(const uint4*)(gp + ((c - c0) * 2 + half) * 256 + 16 * k);
+        const uint4 graw = *(const uint4*)(ro + buf * 4096 + 2048 + ((c - c0) * 2 + half) * 256 + 16 * k);
         const unsigned aw[4] = {araw.x, araw.y, araw.z, araw.w}, gwd[4] = {graw.x, graw.y, graw.z, graw.w};
         float ov[8], den[8], sig[8];
         bool far = false;
@@ -477,13 +459,33 @@ __device__ __forceinline__ void k12_gate(int e, int nseq, const long long* cu_se
         if (r < len) *(uint4*)(gated + (at + bos + r) * K12_INNER + h * 128 + 8 * k) = res;
       }
       __syncwarp();
-      if (cend == ntiles) {
-        // every warp of the group past the counter's last wait before it goes back to zero
-        asm volatile("bar.sync %0, 256;" ::"r"(1 + gw) : "memory");
-        if ((warp & 7) == 0 && lane == 0) *flag = 0;
+    };
+    for (int c0 = 0; c0 < ntiles; c0 += 4) {
+      const int buf = (c0 >> 2) & 1, cend = min(c0 + 4, ntiles);
+      if (lane == 0)
+        while (k12_ld_acquire(flag) < cend) __nanosleep(256);
+      __syncwarp();
+      for (int c = c0; c < cend; ++c) {
+        const int r = 16 * c + i;
+        if (r < len) {
+          k12_cp_async(ro + buf * 4096 + ((c - c0) * 2 + half) * 256 + 16 * k,
+                       raw + (bos + r) * K12_INNER + h * 128 + 8 * k);
+          k12_cp_async(ro + buf * 4096 + 2048 + ((c - c0) * 2 + half) * 256 + 16 * k,
+                       partial + (at + bos + r) * K12_FUSED + 3 * K12_INNER + h * 128 + 8 * k);
+        }
+      }
+      asm volatile("cp.async.commit_group;" ::: "memory");
+      if (c0 > 0) {
+        asm volatile("cp.async.wait_group 1;" ::: "memory");
+        __syncwarp();
+        gate(c0 - 4, buf ^ 1);
       }
     }
-    if (!__any_sync(0xffffffffu, any)) break;
+    if (ntiles > 0) {
+      asm volatile("cp.async.wait_group 0;" ::: "memory");
+      __syncwarp();
+      gate((ntiles - 1) & ~3, ((ntiles - 1) >> 2) & 1);
+    }
   }
 }
 
