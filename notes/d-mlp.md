@@ -153,6 +153,11 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 
 | moe_front: one `atom.acq_rel.gpu` hand-off instead of fence + atomic + fence; the routing tables slot each id with a shared atomic (no 32 x 112 histogram) | 12.9 | 3.517 (same session 3.529) | bit-identical (an expert's row order only permutes independent GEMM rows) |
 
+| both all-reduces run two shots from 33 rows (row r to its owner r % 8, the owner sums as the one-shot and gathers the bf16 sum into the peers' slot `rank`), same launch | 12.9 | 3.485 (same session 3.512; 48 rows -2.6%, 36 rows -1.4%) | bit-identical (d/check; and 48 rows x 64 steps teacher-forced vs main, `work/tf48.sh`) |
+
+Two-shot threshold: from 17 rows (24 rows too) 3.495 vs 3.488 at 33: 24 rows equal, so 33. Before the attention
+all-reduce also took two shots, the MoE one alone gave 3.518 -> 3.510 (48 rows -1.2%, 36 rows -0.3%).
+
 L2 prefetch trials (same-session A/B against the committed one-range per-line form, 3.535):
 - prefetch at kernel entry in every block, and in `land_add2_attnres_rms` (B blocks: ~100k lines an SM at 8
   rows): 3.834. An SM issues prefetches at ~1 a clock or slower; keep the count per SM small.
@@ -221,8 +226,7 @@ L2 prefetch trials (same-session A/B against the committed one-range per-line fo
   block staged in smem (4.104: pushes finish earlier, arrival does not); push before the state barrier and
   the prefetch (4.059, equal); AR grid 64 / 96 instead of 152 (equal). The end is set by arrival (peer
   skew + NVLink latency), not by the push.
-- Two-shot all-reduce for 36-48 rows estimated at ~0.4% weighted (one-shot pushes 7x the partial; only the
-  large row counts are bandwidth-bound). Not done.
+- Two-shot all-reduce for 36-48 rows: done in-kernel (log), -0.8% weighted.
 - The head was 370 us a step (every member computing all 163840 logits from a 2.35 GB weight). SGLang's
   captured graph for this group runs it vocab-parallel (a 1/8 GEMM, then a logits all-gather); now so do we,
   with the logits gathered to member 0 only (the caller reads member 0's) and the argmax by key exchange.
