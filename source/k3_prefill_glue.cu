@@ -429,34 +429,49 @@ extern "C" __global__ void __launch_bounds__(128) kern_k3g_router_topk(
 }
 
 // ---------------------------------------------------------------- MoE
+// The row's 16 (permuted row, weight) pairs staged in shared memory, read back
+// by every thread (a broadcast) instead of 32 global loads a thread; each pair
+// of columns accumulated by one packed fp32 FMA (FFMA2: two IEEE FMAs).
+__device__ __forceinline__ float2 fma2(float2 a, float2 b, float2 c) {
+  unsigned long long d;
+  asm("fma.rn.f32x2 %0, %1, %2, %3;"
+      : "=l"(d)
+      : "l"(*reinterpret_cast<unsigned long long*>(&a)), "l"(*reinterpret_cast<unsigned long long*>(&b)),
+        "l"(*reinterpret_cast<unsigned long long*>(&c)));
+  return *reinterpret_cast<float2*>(&d);
+}
+
 extern "C" __global__ void __launch_bounds__(1024) kern_k3g_finalize_rms(
     const bf16_t* __restrict__ fc2, const int* __restrict__ exp2perm, const float* __restrict__ wts,
     const bf16_t* __restrict__ gamma, bf16_t* __restrict__ out, int T, int cols) {
   __shared__ float sm[33];
+  __shared__ int sp[TOPK];
+  __shared__ float sw[TOPK];
   const int t = blockIdx.x, h = threadIdx.x;
   const int lane = h & 31, warp = h >> 5;
-  float acc[8] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+  if (h < TOPK && t < T) {
+    sp[h] = exp2perm[t * TOPK + h];
+    sw[h] = wts[t * TOPK + h];
+  }
+  __syncthreads();
+  float2 acc[4] = {{0.f, 0.f}, {0.f, 0.f}, {0.f, 0.f}, {0.f, 0.f}};
   if (t < T) {
 #pragma unroll
     for (int k = 0; k < TOPK; ++k) {
-      const int p = exp2perm[t * TOPK + k];
+      const int p = sp[k];
       if (p < 0) continue;
-      const float w = wts[t * TOPK + k];
+      const float w = sw[k];
       const uint4 u = reinterpret_cast<const uint4*>(fc2 + (long long)p * cols)[h];
       const bf162_t* v = reinterpret_cast<const bf162_t*>(&u);
 #pragma unroll
-      for (int l = 0; l < 4; ++l) {
-        const float2 f = __bfloat1622float2(v[l]);
-        acc[2 * l] += w * f.x;
-        acc[2 * l + 1] += w * f.y;
-      }
+      for (int l = 0; l < 4; ++l) acc[l] = fma2(make_float2(w, w), __bfloat1622float2(v[l]), acc[l]);
     }
   }
   bf162_t x[4];
   float sum = 0.0f;
 #pragma unroll
   for (int l = 0; l < 4; ++l) {
-    x[l] = __floats2bfloat162_rn(acc[2 * l], acc[2 * l + 1]);
+    x[l] = __floats2bfloat162_rn(acc[l].x, acc[l].y);
     const float2 f = __bfloat1622float2(x[l]);
     sum += f.x * f.x;
     sum += f.y * f.y;
