@@ -7,8 +7,8 @@ Check: `loop/d/check loop/out/d-l4-tp8.json` (~20 s on a free pool). Bench: `loo
 
 D 16 layers: 24.7 -> 12.9 launches/layer, 4.562 -> 3.52 ms/step weighted (all runs' work; main dcf6ec0 3.581,
 plus this branch's L2 prefetch in the all-reduces).
-Real 93-layer step at 128k: 23.88 -> 19.23 ms (24 rows), 30.87 -> 25.92 ms (48 rows); the L2 prefetch's share of
-that, same session: 19.60 -> 19.23 and 26.43 -> 25.92 (-1.9% each).
+Real 93-layer step at 128k: 23.88 -> 19.21 ms (24 rows), 30.87 -> 25.55 ms (48 rows). Same-session shares: the
+L2 prefetch 19.60 -> 19.23 and 26.43 -> 25.92 (-1.9% each); the MLA split plan 25.92 -> 25.55 at 48 rows.
 
 ## Roofline of the real D step (93 layers, 128k context, 2026-10-10 23:00 UTC)
 
@@ -89,6 +89,11 @@ the GEMMs hold 3.4 / 4.2 ms, the MoE all-reduce 1.8 / 2.0 ms (of which ~1.5 ms i
 experts, i.e. MoE GEMM time again), MLA attention 0.7 / 1.8 ms, glue 1.0 ms (a latency floor of launches
 that sit between GEMMs), the attention all-reduce 0.65 ms (fabric-bound in fact), KDA 0.4 ms.
 
+MLA attention per tile (from the profile): a 2-CTA cluster runs a 128-token tile in ~1.46 us while <= ~53
+clusters run, and the GPU tops out at ~36 tiles a us (1.29 PF of padded bf16 MMA, ~80% of peak; 96 heads use 75%
+of the 128-row tile). So 24 rows (3 splits, 72 clusters) sits at that limit, and 48 rows ran 1 split on 96 SMs:
+fixed by the plan (log). Past that the kernel needs an unpadded head layout (a new kernel).
+
 Worked from it: the all-reduces leave HBM idle for 10-30 us while the next cuBLAS GEMM streams its weight cold
 at 4-5 TB/s, so their idle blocks now pull that weight into L2 (log, 3.581 -> 3.522 ms/step).
 
@@ -141,6 +146,8 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 | the MoE batched GEMMs launch as programmatic dependents (`pdl: true` on fc1 / fc2: their cubins wait with griddepcontrol and trigger early) | 13.0 | 3.582 | unchanged (launch attribute only) |
 | (main dcf6ec0: 3.581) | 12.9 | 3.581 | |
 | the two all-reduces' blocks past B prefetch.global.L2 the next GEMM's weight (front 86 MB, lat_up 51 MB, capped 96 MB) after their pushes | 12.9 | 3.522 (same-session main 3.535-3.581) | bit-identical |
+
+| the MLA split plan (in `embed_rms_plan`) fills the 1-3 waves of least modelled time instead of one wave: 48 rows 1 -> 3 splits | 12.9 | 3.525 (same session 3.529; 48 rows / 128k 4.89 -> 4.83; 93 layers at 48 rows 25.92 -> 25.55) | bit-identical in d/check (plan unchanged at 4 rows); 3-split LSE merge at 48 rows |
 
 L2 prefetch trials (same-session A/B against the committed one-range per-line form, 3.535):
 - prefetch at kernel entry in every block, and in `land_add2_attnres_rms` (B blocks: ~100k lines an SM at 8
