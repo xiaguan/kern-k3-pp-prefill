@@ -719,13 +719,23 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
             "params": ["in buffer<i32>", "in buffer<i64>", "out buffer<i32>", "i32", "i32"],
             "impl": {"launches": [launch("k3_prefill", "kern_k3_fmha_lens_varlen", grid=[1, 1, 1], block=[32, 1, 1])]},
         }
-        ops["latent_gather"] = {
-            "params": ["in state", "in buffer<i32>", "i32", "i64", "in buffer<i32>", "i32", "i32", "out buffer<bf16>",
-                       "i32"],
-            "impl": {"launches": [launch("k3_mla_v2", "kern_k3_latent_gather_varlen",
-                                         grid=[{"ceil_div": [ctx_rows, 8]}, 1, 1], block=[576, 1, 1])]},
-        }
         ops["mla_fmha"] = varlen_abi.fmha_op(ml, chunk_max, max_ctx, module(trtllm_fmha_abi.MODULE), T, "seqs")
+        # k3_mla_glue.cu: the prep's head blocks and the context's gather blocks in one grid, and the
+        # gate reading its columns of the fused projection
+        mla_defs = {"MLA_FUSED": mla_fused_l} if mla_fused_l != 14400 else None
+        ops["mla_prep_gather"] = {
+            "params": ["in buffer<f32>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<i64>", "inout state", "i64",
+                       "out buffer<bf16>", "in buffer<i32>", "i32", "in buffer<i32>", "i32", "i32", "out buffer<bf16>",
+                       "i32", "i32"],
+            "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_prep_gather",
+                                         grid=[{"add": [T, {"ceil_div": [ctx_rows, 7]}]}, 1, 1], block=[512, 1, 1],
+                                         defines=mla_defs)]},
+        }
+        ops["mla_gate"] = {
+            "params": ["out buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "i32", "i32"],
+            "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_gate", grid=[T, -(-gate_l // 2048), 1],
+                                         block=[256, 1, 1], defines=mla_defs)]},
+        }
         if head:
             del ops["last_row"], ops["argmax_f32_one"]
             ops["last_rows"] = {
@@ -1061,7 +1071,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     if not kfused:
         work("wsm_partial", WSM, kpart, var=KV)
     work("gated", gate_l)
-    if mla:
+    if mla and not packed:
         work("mla_gate", gate_l)
     gated_kda = b("gated_kda") if tray else b("gated")
     # The span's first batch row, an input the KDA kernels skip past even
@@ -1328,27 +1338,39 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                 layer_off = 0 if per_layer else k * PAGE * LATENT_ROW  # elements
                 kv = kv_of(i)
                 gemm(L + "wfu", normed_all, w("wfu"), b("mla_fused_partial"), mla_fused_l, H)
-                step(L + "mla_prep", "mla_prep", b("mla_fused_partial"), w("gamma_q_a"), w("gamma_kv_a"), b("slot_mapping"),
-                     {"state": kv}, i64(layer_off), i64(page_stride), b("q_norm"), b("mla_gate"), B)
+                if packed:
+                    # q_norm and the latent row appended, the context's latent rows gathered (this chunk's
+                    # from the prep), expanded to this rank's heads' k | v by one GEMM, the FMHA, the gate
+                    step(L + "prep", "mla_prep_gather", b("mla_fused_partial"), w("gamma_q_a"), w("gamma_kv_a"),
+                         b("slot_mapping"), {"state": kv, "offset": layer_off * 2}, i64(page_stride), b("q_norm"),
+                         b("block_table"), i32(max_pages), b("fmha_lens"), i32(pack + 1), {"var": "seqs"},
+                         b("latent_g"), dim(ctx_rows), B)
+                else:
+                    step(L + "mla_prep", "mla_prep", b("mla_fused_partial"), w("gamma_q_a"), w("gamma_kv_a"),
+                         b("slot_mapping"), {"state": kv}, i64(layer_off), i64(page_stride), b("q_norm"), b("mla_gate"), B)
                 if chunk:
                     # q in bf16 straight from the GEMM; the sequence's latent rows gathered,
                     # expanded to this rank's heads' k | v by one GEMM, the FMHA over them, then the gate
-                    step(L + "q_b", "gemm_bf16", b("q_norm"), w("w_q_b"), b("q_bf16"), B, i32(q_b_l), i32(Q_LORA), i32(q_b_l))
-                    if packed:
-                        step(L + "gather", "latent_gather", {"state": kv, "offset": layer_off * 2}, b("block_table"),
-                             i32(max_pages), i64(page_stride), b("fmha_lens"), i32(pack + 1), {"var": "seqs"},
-                             b("latent_g"), dim(ctx_rows))
-                    else:
+                    q_b = lambda: step(L + "q_b", "gemm_bf16", b("q_norm"), w("w_q_b"), b("q_bf16"), B, i32(q_b_l),
+                                       i32(Q_LORA), i32(q_b_l))
+                    if not packed:
+                        q_b()
                         step(L + "gather", "latent_gather", {"state": kv, "offset": layer_off * 2}, b("block_table"),
                              i64(page_stride), b("fmha_lens"), b("latent_g"), dim(ctx_rows))
+                    # the expansion while the gathered rows are still in L2
                     step(L + "expand", "gemm_bf16", b("latent_g"), w("w_aug"), b("kv_exp"), dim(ctx_rows), i32(kv_exp_l),
                          i32(KV_A), i32(kv_exp_l))
+                    if packed:
+                        q_b()
                     lens = (lambda k: b("fmha_lens", k * (pack + 1) * 4)) if packed else (lambda k: b("fmha_lens", 8 * k))
                     step(L + "attn", "mla_fmha", b("q_bf16"), b("kv_exp"), b("kv_exp", trtllm_fmha_abi.HQK * 2),
                          b("o_bf16"), lens(0), lens(1), lens(2), b("fmha_scratch"),
                          b("fmha_scratch", trtllm_fmha_abi.PARTIAL_O_OFFSET))
-                    step(L + "gate", "mla_gate", b("gated"), b("o_bf16"), b("mla_gate"), i32(ml), i32(NOPE_DIM), i32(gate_l),
-                         i32(NOPE_DIM))
+                    if packed:
+                        step(L + "gate", "mla_gate", b("gated"), b("o_bf16"), b("mla_fused_partial"), i32(gate_l), B)
+                    else:
+                        step(L + "gate", "mla_gate", b("gated"), b("o_bf16"), b("mla_gate"), i32(ml), i32(NOPE_DIM),
+                             i32(gate_l), i32(NOPE_DIM))
                 else:
                     gemm(L + "q_b", b("q_norm"), w("w_q_b"), b("q_partial"), Q_B, Q_LORA)
                     step(L + "absorb", "mla_absorb", b("q_partial"), w("w_kv_b"), b("q_abs"), B)

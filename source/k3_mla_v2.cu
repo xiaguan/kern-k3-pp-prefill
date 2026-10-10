@@ -31,27 +31,3 @@ extern "C" __global__ void __launch_bounds__(8 * LANES) kern_k3_latent_gather(
   }
   *reinterpret_cast<uint4*>(out + (long long)t * LATENT_ROW + lane * 8) = v;
 }
-
-// `kern_k3_latent_gather_varlen`: the packed call's sequences' cached latent
-// rows, sequence j's at rows [cum_kv[j], cum_kv[j] + seq_lens[j]) of `out`
-// (the tables of `kern_k3_fmha_lens_varlen`: seq_lens at `lens`, cum_kv at
-// lens + 2 * ns), every other row of the first n zero.
-//   grid (ceil(n / 8), 1, 1)   block (576, 1, 1)
-extern "C" __global__ void __launch_bounds__(8 * LANES) kern_k3_latent_gather_varlen(
-    const __nv_bfloat16* __restrict__ slab, const int* __restrict__ block_table, int max_pages, long long page_stride,
-    const int* __restrict__ lens, int ns, int nseq, __nv_bfloat16* __restrict__ out, int n) {
-  const int t = blockIdx.x * 8 + threadIdx.x / LANES;
-  const int lane = threadIdx.x % LANES;
-  if (t >= n) return;
-  const int* cum = lens + 2 * ns;
-  int j = 0;
-  while (j + 1 < nseq && cum[j + 1] <= t) ++j;
-  const int local = t - cum[j];
-  uint4 v = make_uint4(0, 0, 0, 0);
-  if (local < lens[j]) {
-    const __nv_bfloat16* row =
-        slab + block_table[j * max_pages + local / PAGE] * page_stride + (long long)(local % PAGE) * LATENT_ROW;
-    v = *reinterpret_cast<const uint4*>(row + lane * 8);
-  }
-  *reinterpret_cast<uint4*>(out + (long long)t * LATENT_ROW + lane * 8) = v;
-}

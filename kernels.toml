@@ -81,7 +81,7 @@ source = "source/k3_mla_prep.cu"
 defines = { INNER = 1536, MLA_FUSED = 3648 }
 
 [kernels."k3_mla_v2"]
-sha256 = "63caf8c109f83a79d622ffca2f05174472e628df858cc3823d4e86d88c4c3608"
+sha256 = "436c9ebb766141276fd52d431f238f3f5d92ed1d9359d39372208c2c72503a16"
 source = "source/k3_mla_v2.cu"
 
 [kernels."k3_mla_vup_gate+HEADS=12"]
@@ -203,3 +203,7 @@ defines = { NRANKS = 8 }
 [kernels."k3_moe_route"]
 sha256 = "e1510bffb7d31f563ed073d2fdf709cb2926b5763aa3c25b497bc9eaa1845e27"
 source = "source/k3_moe_route.cu"
+
+[kernels."k3_mla_glue"]
+sha256 = "f011d99b926617b4c5f3cb585cf796bed4e2c0b74256236b74592c25ea1b881d"
+source = "source/k3_mla_glue.cu"
