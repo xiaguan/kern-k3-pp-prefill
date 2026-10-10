@@ -3,10 +3,93 @@
 Check: `loop/d/check loop/out/d-l4-tp8.json` (~20 s on a free pool). Bench: `loop/d/bench loop/out/d-l16-tp8.json`
 (~20 s). main 2026-10-10 start: 24.7 launches/layer, 4.562 ms/step.
 
-## Status (2026-10-10 22:20 UTC)
+## Status (2026-10-10 23:15 UTC)
 
-D 16 layers: 24.7 -> 12.9 launches/layer, 4.562 -> 3.58 ms/step weighted (all runs' work; main 64b7cf7+).
-Real 93-layer step at 128k: 23.88 -> 19.54 ms (24 rows), 30.87 -> 26.42 ms (48 rows).
+D 16 layers: 24.7 -> 12.9 launches/layer, 4.562 -> 3.52 ms/step weighted (all runs' work; main dcf6ec0 3.581,
+plus this branch's L2 prefetch in the all-reduces).
+Real 93-layer step at 128k: 23.88 -> 19.54 ms (24 rows), 30.87 -> 26.42 ms (48 rows) before the prefetch.
+
+## Roofline of the real D step (93 layers, 128k context, 2026-10-10 23:00 UTC)
+
+nsys of rank 0 on main dcf6ec0 (`work/dprof93.sh`, `work/roofline.py`): every kernel aligned to its manifest
+call and charged its critical-path time (its end minus the previous kernel's end, so a PDL overlap is not
+counted twice); the shorter of two replays (one 48-row replay carried a 1.1 ms member start skew in layer 0's
+first all-reduce: host side, excluded). Bytes and FLOPs are one member's.
+
+Bounds, measured on this pool where it matters:
+- HBM 8 TB/s. The best kernels here reach 6.2-7.0 TB/s (MoE fc1/fc2, lm_head).
+- Tensor: ~1.6 PF bf16 and ~2.8 PF fp8 reachable on one GB300 (earlier calibration); the mxfp8 x mxfp4 MoE
+  runs at the fp8 rate. bf16 weights reach the ridge at ~200 rows, so at 8-48 rows every GEMM is HBM-bound.
+  MLA decode is the exception: 96 heads x 1088 MACs per 1152-byte KV row is 181 FLOP/B, at the ridge.
+- NVLink: 16-byte pushes from every SM with Lamport polling (`work/h/nvl_push8.cu`: 8 GPUs, 2 trays, fabric
+  handles as kern maps them): ~2.5 us a hop, ~680 GB/s marginal egress a GPU (raw push + poll of 2.4 MB a GPU,
+  the 24-row attention sum: 8.4 us from the last start; 4.8 MB: 11.9 us). For comparison NCCL picks RING_LL
+  here and takes 37 / 58 us an all-reduce at 24 / 48 rows (16-layer manifest without `--peer-ar`).
+- glue: ~0 bytes; floor ~2 us a launch (0.7 us empty launch + one dependent row pass).
+
+MoE bytes: active experts x 17.5 MB (fc1 11.7 MB, fc2 5.9 MB, mxfp4 + scales). The bench feeds pseudo-random
+tokens with many repeats (181 / 275 distinct experts in the last layer at 24 / 48 rows: 22.6 / 34.4 a member,
+used below). Real text routes wider: over 48 rows x 56 steps x 92 layers of teacher-forced text
+(`work/route93.sh`, per-layer `topk_idx` dumped) 230 / 342 distinct experts, 28.8 / 42.7 a member, the busiest
+member 35.4 / 49.9 (1.23x / 1.17x the mean). At the bound that is 7.1 / 10.1 ms of MoE a step on real text
+(busiest member) against 4.6 / 6.9 ms for the bench's batch.
+
+**24 rows** (step 19.66 ms under nsys; bench p50 19.54):
+
+| class | calls | ms | % | bytes | bound | at bound ms | achieved | gap ms |
+|---|---|---|---|---|---|---|---|---|
+| MoE grouped GEMMs (fc1, fc2) | 184 | 5.62 | 28.6 | 36.5 GB | HBM | 4.56 | 0.81 | 1.06 |
+| dense GEMMs (cuBLAS, incl. 185 split-K reduces) | 489 | 5.53 | 28.1 | 25.1 GB | HBM | 3.14 | 0.57 | 2.39 |
+| all-reduce + combine + latent norm (`ar_finalize_rms`) | 92 | 2.53 | 12.9 | 332 MB NVL | fabric | 0.72 | 0.28 | 1.82 |
+| MLA attention (DSL split kernel, prebuilt) | 24 | 2.05 | 10.4 | 10.9 GB | HBM | 1.36 | 0.66 | 0.69 |
+| glue (moe_front, land_add2_attnres_rms, mla_prep, embed, head) | 211 | 1.43 | 7.3 | ~0 | launch | 0.42 | 0.30 | 1.01 |
+| all-reduce + mix + norm (`ar_attnres_rms`) | 94 | 1.22 | 6.2 | 226 MB NVL | fabric | 0.57 | 0.47 | 0.65 |
+| KDA core | 69 | 0.76 | 3.9 | 2.6 GB | HBM | 0.33 | 0.43 | 0.43 |
+| DCP exchange | 24 | 0.33 | 1.7 | 50 MB NVL | fabric | 0.13 | 0.40 | 0.20 |
+| MLA absorb | 24 | 0.19 | 1.0 | 0.6 GB | HBM | 0.08 | 0.40 | 0.11 |
+| **step** | 1211 | **19.66** | | | | **11.31** | 0.58 | 8.35 |
+
+**48 rows** (step 26.77 ms under nsys; bench p50 26.42):
+
+| class | calls | ms | % | bytes | bound | at bound ms | achieved | gap ms |
+|---|---|---|---|---|---|---|---|---|
+| MoE grouped GEMMs | 184 | 8.42 | 31.5 | 55.5 GB | HBM | 6.94 | 0.82 | 1.48 |
+| dense GEMMs | 489 | 5.87 | 21.9 | 25.1 GB | HBM | 3.14 | 0.54 | 2.72 |
+| MLA attention | 24 | 4.48 | 16.8 | 21.7 GB | HBM (tensor 2.46, 3.28 with 96 heads padded to the 128-row MMA) | 2.72 | 0.61 | 1.77 |
+| `ar_finalize_rms` | 92 | 3.22 | 12.0 | 665 MB NVL | fabric | 1.21 | 0.37 | 2.02 |
+| `ar_attnres_rms` | 94 | 1.55 | 5.8 | 453 MB NVL | fabric | 0.90 | 0.58 | 0.65 |
+| glue | 211 | 1.47 | 5.5 | ~0 | launch | 0.42 | 0.29 | 1.04 |
+| KDA core | 69 | 1.01 | 3.8 | 5.2 GB | HBM | 0.65 | 0.65 | 0.36 |
+| DCP exchange | 24 | 0.53 | 2.0 | 101 MB NVL | fabric | 0.21 | 0.39 | 0.33 |
+| MLA absorb | 24 | 0.22 | 0.8 | 0.6 GB | HBM | 0.08 | 0.35 | 0.14 |
+| **step** | 1211 | **26.77** | | | | **16.27** | 0.61 | 10.50 |
+
+Dense GEMMs one by one (achieved HBM rate, 24 / 48 rows): front 86 MB 4.43 / 3.98 TB/s, qkvg 92 MB 4.93 / 4.58,
+lat_up 51 MB 5.32 / 5.24, o_proj 22 MB 3.82 / 3.63, sh_down 11 MB 2.77 / 2.71, wfu 52 MB 4.09 / 3.70, q_b 57 MB
+5.14 / 4.92, lm_head 294 MB 6.27 / 5.95. The f32-output GEMMs (`cublas_bf16_tn_f32`: front, qkvg, wfu) run
+cuBLAS split-K with a separate `splitKreduce_kernel` (185 a step, ~2.9 us each) that `loop/count` does not see.
+The small ones (o_proj, sh_down) pay a fixed ~3 us of ramp. GEMMs are out of scope; this is the largest gap.
+
+Non-GEMM items over 1% of the step, per call (24 / 48 rows):
+
+| item | % of step | median us | bound us | what is in the gap |
+|---|---|---|---|---|
+| `ar_finalize_rms` | 12.9 / 12.0 | 27.2 / 33.8 | 7.8 / 13.1 + ~2 epilogue | p10 11.2 / 16.4 = at the bound; the median waits ~16 us for the member with the most active experts (EP imbalance: the MoE GEMMs of the busiest member) |
+| MLA attention | 10.4 / 16.8 | 85 / 187 | 57 / 113 (HBM), 137 at 48 rows if 96 heads pad to 128 | prebuilt DSL cubin at 5.3 / 4.85 TB/s; the 48-row case is near the padded tensor bound |
+| `ar_attnres_rms` | 6.2 / 5.8 | 13.0 / 16.6 | 6.0 / 9.6 + ~2.3 epilogue | raw push + poll alone takes 8.4 / 11.9 us here: within ~1-2 us of the fabric |
+| KDA core | 3.9 / 3.8 | 11.0 / 14.6 | 4.7 / 9.4 | 43% / 65% of HBM (d-attn: register cliff at 128) |
+| `moe_front` | 3.5 / 2.5 | 7.4 / 7.5 | ~2 | dependent chain logits -> top-k -> last-block tables (harness floor 6.4) |
+| `land_add2_attnres_rms` | 3.2 / 2.4 | 6.9 / 7.3 | ~2 | two dependent block reductions; 2.3 us at nb 0 to 8.4 at nb 8 (harness) |
+| DCP exchange | 1.7 / 2.0 | 14.0 / 22.2 | 5.6 / 6.2 | one-shot all-to-all + LSE merge + v-up (d-attn, closed) |
+| MLA absorb | 1.0 / 0.8 | 7.8 / 9.1 | 3.1 | 25 MB weight at 3.2 / 2.8 TB/s |
+
+What it says: a step at every bound would be 11.3 / 16.3 ms against 19.7 / 26.8. Of the 8.4 / 10.5 ms gap,
+the GEMMs hold 3.4 / 4.2 ms, the MoE all-reduce 1.8 / 2.0 ms (of which ~1.5 ms is the busiest member's
+experts, i.e. MoE GEMM time again), MLA attention 0.7 / 1.8 ms, glue 1.0 ms (a latency floor of launches
+that sit between GEMMs), the attention all-reduce 0.65 ms (fabric-bound in fact), KDA 0.4 ms.
+
+Worked from it: the all-reduces leave HBM idle for 10-30 us while the next cuBLAS GEMM streams its weight cold
+at 4-5 TB/s, so their idle blocks now pull that weight into L2 (log, 3.581 -> 3.522 ms/step).
 
 My half is at its launch floor: per layer `ar_attnres_rms`, `moe_front`, `ar_finalize_rms`, `land_add2_attnres_rms`
 between cuBLAS / TRT-LLM GEMMs, which bound every pair. Time: the all-reduces are fabric-bound (cross-member
@@ -55,6 +138,18 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 | (main 6bf21b5: 3.584) | 13.0 | 3.584 | |
 | the MLA split plan (`mla_split_plan`, one launch a step) computed by each `embed_rms` block for its row → `kern_k3_embed_rms_plan` | 12.9 | 3.586 | bit-identical (integer plan) |
 | the MoE batched GEMMs launch as programmatic dependents (`pdl: true` on fc1 / fc2: their cubins wait with griddepcontrol and trigger early) | 13.0 | 3.582 | unchanged (launch attribute only) |
+| (main dcf6ec0: 3.581) | 12.9 | 3.581 | |
+| the two all-reduces' blocks past B prefetch.global.L2 the next GEMM's weight (front 86 MB, lat_up 51 MB, capped 96 MB) after their pushes | 12.9 | 3.522 (same-session main 3.535-3.581) | bit-identical |
+
+L2 prefetch trials (same-session A/B against the committed one-range per-line form, 3.535):
+- prefetch at kernel entry in every block, and in `land_add2_attnres_rms` (B blocks: ~100k lines an SM at 8
+  rows): 3.834. An SM issues prefetches at ~1 a clock or slower; keep the count per SM small.
+- a second range (`ar_finalize` -> lat_up + the next layer's qkvg / wfu, 112 MB budget): 3.564, ~1% worse at
+  <= 24 rows. The extra issue keeps the idle blocks alive past a short all-reduce.
+- `cp.async.bulk.prefetch.L2` (64 KB an instruction): faulted when issued from `land_add2_attnres_rms` (cause not
+  isolated); in the all-reduces, chunks dealt consecutively by thread put ~650 on one SM: 13.9 ms/step (the
+  bulk unit drains slowly, the GEMMs after it crawl too); dealt over the blocks: 3.564 one range / 3.590 two.
+  No better than per-line.
 
 ## Findings
 
