@@ -1,29 +1,31 @@
 // The front of a prefill chunk's MoE in one launch: the router top-k, the
-// latent in mxfp8, and the routing tables of TRT-LLM gen's batched GEMMs,
-// where they were five launches (router_topk, moe_quant, FlashInfer's init /
-// histogram / offsets).
+// latent in mxfp8, the routing tables of TRT-LLM gen's batched GEMMs and the
+// shared expert's activation, where they were six launches (router_topk,
+// moe_quant, FlashInfer's init / histogram / offsets, situ).
 //
-//   kern_k3g_moe_route(S, bias, rs, x, ldx, q, sf, idx, wts, sync, cta_batch, cta_limit,
+//   kern_k3g_moe_route(S, bias, rs, x, ldx, gu, ldgu, q, sf, idx, wts, act, sync, cta_batch, cta_limit,
 //                      num_non_exiting, total_padded, route_map, exp2perm, tile, B)
 //     S f32 [B, EXPERTS] router logits; bias f32 [EXPERTS]; rs bf16 [1];
-//     x bf16 [B, ldx] the latent in its first LATENT columns;
+//     x bf16 [B, ldx] the latent; gu bf16 [B, ldgu] the shared expert's gate | up;
 //     q u8 [B, LATENT], sf u8 [B, LATENT / 32]: k3_moe_prefill.cu's kern_k3_moe_quant;
 //     idx i32 / wts f32 [B, 16]: k3_prefill_glue.cu's router top-k, bit for bit;
+//     act bf16 [B, SHARED]: the shared expert's activation, k3_prefill_glue.cu's kern_k3g_situ;
 //     sync u32 [2 + 2 * TABLE]: the grid barrier (arrivals, generation) and two routing tables
 //       (Table below), the generation's parity picking this call's; zeroed by
 //       kern_k3g_moe_route_init before a stage's first call, every call of a stage's B rows
 //       leaves the barrier and the next call's table zero;
 //     the tables FlashInfer's routing writes for a rank holding every expert, `tile` rows a CTA.
-//   grid (ceil(B / 16), 1, 1) up to 304 blocks, then 304   block (512, 1, 1): every block resident
+//   grid (64, 1, 1) up to 256 rows, then (304, 1, 1)   block (512, 1, 1): every block resident
 //   (two an SM) for the grid barrier
 //
 //   kern_k3g_moe_route_init(sync)
 //   grid (any, 1, 1)   block (1024, 1, 1)
 //
-// One warp a row (a grid-stride over rows when B passes 16 * gridDim). Phase 1:
-// the row's top-k, its picks marked in this call's table (each expert's count,
-// its count per 256-row chunk, its rows' bitmap: fire-and-forget atomics), the
-// row's latent quantised; the next call's table zeroed. A grid barrier: every
+// Phase 1: a warp a row's top-k (a grid-stride over rows when B passes 16 *
+// gridDim), its picks marked in this call's table (each expert's count, its
+// count per 256-row chunk, its rows' bitmap: fire-and-forget atomics); then
+// every warp a share of the rows' 256-column pieces of the latent to quantise
+// and of the shared activation; the next call's table zeroed. A grid barrier: every
 // block is resident, the generation counts the calls. Phase 2: every block
 // scans the counts into the experts' CTA offsets and writes its share of the
 // CTA tables; a pick's place among its expert's rows is the picks in the
@@ -39,6 +41,7 @@
 #endif
 #define TOPK 16
 #define LATENT 3584
+#define SHARED 6144
 #define WARPS 16
 #define THREADS (WARPS * 32)
 #define TK_PER (EXPERTS / 32)
@@ -160,34 +163,59 @@ __device__ __forceinline__ void topk_row(const float* __restrict__ row, const fl
   pick_w = lane < TOPK ? sigmoid(row[pick_e]) : 0.f;
 }
 
-// kern_k3_moe_quant over one row: a lane takes 8 elements a pass, four lanes a 32-element group.
-__device__ __forceinline__ void quant_row(const bf16_t* __restrict__ x, uint8_t* __restrict__ q,
-                                          uint8_t* __restrict__ sf, int lane) {
-#pragma unroll 7
-  for (int it = 0; it < LATENT / 256; ++it) {
-    const int c = it * 256 + lane * 8;
-    const uint4 u = *reinterpret_cast<const uint4*>(x + c);
-    const __nv_bfloat162* p = reinterpret_cast<const __nv_bfloat162*>(&u);
-    float2 v[4];
-    float amax = 0.f;
+__device__ __forceinline__ float tanh_approx(float x) {
+  float r;
+  asm("tanh.approx.f32 %0, %1;" : "=f"(r) : "f"(x));
+  return r;
+}
+
+// k3_prefill_glue.cu's kern_k3g_situ: act = situ(gate, up) on 8 columns.
+__device__ __forceinline__ float situ(float g, float u) {
+  const float a = 4.0f * tanh_approx(g * 0.25f);
+  const float s = __frcp_rn(1.0f + __expf(-g));
+  const float c = 25.0f * tanh_approx(u * 0.04f);
+  return (a * s) * c;
+}
+
+__device__ __forceinline__ void situ8(const bf16_t* __restrict__ gate, const bf16_t* __restrict__ up,
+                                      bf16_t* __restrict__ act) {
+  const uint4 g = *reinterpret_cast<const uint4*>(gate), u = *reinterpret_cast<const uint4*>(up);
+  const __nv_bfloat162* gp = reinterpret_cast<const __nv_bfloat162*>(&g);
+  const __nv_bfloat162* upp = reinterpret_cast<const __nv_bfloat162*>(&u);
+  uint4 o;
+  __nv_bfloat162* op = reinterpret_cast<__nv_bfloat162*>(&o);
 #pragma unroll
-    for (int l = 0; l < 4; ++l) {
-      v[l] = __bfloat1622float2(p[l]);
-      amax = fmaxf(amax, fmaxf(fabsf(v[l].x), fabsf(v[l].y)));
-    }
-    amax = fmaxf(amax, __shfl_xor_sync(0xffffffffu, amax, 1));
-    amax = fmaxf(amax, __shfl_xor_sync(0xffffffffu, amax, 2));
-    int e = amax > 0.f ? (int)ceilf(log2f(amax / 448.f)) : 0;
-    e = min(max(e, -127), 127);
-    const float s = exp2f((float)-e);
-    if ((lane & 3) == 0) sf[c / 32] = (uint8_t)(e + 127);
-    uint2 w;
-    unsigned short* h = reinterpret_cast<unsigned short*>(&w);
-#pragma unroll
-    for (int l = 0; l < 4; ++l)
-      h[l] = __nv_cvt_float2_to_fp8x2(make_float2(v[l].x * s, v[l].y * s), __NV_SATFINITE, __NV_E4M3);
-    *reinterpret_cast<uint2*>(q + c) = w;
+  for (int l = 0; l < 4; ++l) {
+    const float2 gf = __bfloat1622float2(gp[l]), uf = __bfloat1622float2(upp[l]);
+    op[l] = __float22bfloat162_rn(make_float2(situ(gf.x, uf.x), situ(gf.y, uf.y)));
   }
+  *reinterpret_cast<uint4*>(act) = o;
+}
+
+// kern_k3_moe_quant on 8 elements, four lanes a 32-element group.
+__device__ __forceinline__ void quant8(const bf16_t* __restrict__ x, uint8_t* __restrict__ q, uint8_t* __restrict__ sf,
+                                       int lane) {
+  const uint4 u = *reinterpret_cast<const uint4*>(x);
+  const __nv_bfloat162* p = reinterpret_cast<const __nv_bfloat162*>(&u);
+  float2 v[4];
+  float amax = 0.f;
+#pragma unroll
+  for (int l = 0; l < 4; ++l) {
+    v[l] = __bfloat1622float2(p[l]);
+    amax = fmaxf(amax, fmaxf(fabsf(v[l].x), fabsf(v[l].y)));
+  }
+  amax = fmaxf(amax, __shfl_xor_sync(0xffffffffu, amax, 1));
+  amax = fmaxf(amax, __shfl_xor_sync(0xffffffffu, amax, 2));
+  int e = amax > 0.f ? (int)ceilf(log2f(amax / 448.f)) : 0;
+  e = min(max(e, -127), 127);
+  const float s = exp2f((float)-e);
+  if ((lane & 3) == 0) *sf = (uint8_t)(e + 127);
+  uint2 w;
+  unsigned short* h = reinterpret_cast<unsigned short*>(&w);
+#pragma unroll
+  for (int l = 0; l < 4; ++l)
+    h[l] = __nv_cvt_float2_to_fp8x2(make_float2(v[l].x * s, v[l].y * s), __NV_SATFINITE, __NV_E4M3);
+  *reinterpret_cast<uint2*>(q) = w;
 }
 
 // The routing state, one table per parity of the generation: every expert's
@@ -210,8 +238,9 @@ __device__ __forceinline__ Table table(u32* sync, u32 parity) {
 
 extern "C" __global__ void __launch_bounds__(THREADS, 2) kern_k3g_moe_route(
     const float* __restrict__ S, const float* __restrict__ bias, const bf16_t* __restrict__ rs,
-    const bf16_t* __restrict__ x, int ldx, uint8_t* __restrict__ q, uint8_t* __restrict__ sf, int* __restrict__ idx,
-    float* __restrict__ wts, u32* __restrict__ sync, int* __restrict__ cta_batch, int* __restrict__ cta_limit,
+    const bf16_t* __restrict__ x, int ldx, const bf16_t* __restrict__ gu, int ldgu, uint8_t* __restrict__ q,
+    uint8_t* __restrict__ sf, int* __restrict__ idx, float* __restrict__ wts, bf16_t* __restrict__ act,
+    u32* __restrict__ sync, int* __restrict__ cta_batch, int* __restrict__ cta_limit,
     int* __restrict__ num_non_exiting, int* __restrict__ total_padded, int* __restrict__ route_map,
     int* __restrict__ exp2perm, int tile, int B) {
   __shared__ u32 gen_s;
@@ -256,7 +285,19 @@ extern "C" __global__ void __launch_bounds__(THREADS, 2) kern_k3g_moe_route(
       atomicAdd(cur.chunk + pick_e * CHUNKS + b / CHUNK, 1);
       atomicOr(cur.bits + pick_e * WORDS + b / 32, 1u << (b & 31));
     }
-    quant_row(x + (long long)b * ldx, q + (long long)b * LATENT, sf + (long long)b * (LATENT / 32), lane);
+  }
+  // the rows' latent and shared activation, 256 columns a warp a pass over every warp
+#pragma unroll 4
+  for (int i = r0; i < B * (LATENT / 256); i += rstride) {
+    const int b = i / (LATENT / 256), c = i % (LATENT / 256) * 256 + lane * 8;
+    quant8(x + (long long)b * ldx + c, q + (long long)b * LATENT + c, sf + (long long)b * (LATENT / 32) + c / 32,
+           lane);
+  }
+#pragma unroll 4
+  for (int i = r0; i < B * (SHARED / 256); i += rstride) {
+    const int b = i / (SHARED / 256), c = i % (SHARED / 256) * 256 + lane * 8;
+    const bf16_t* gate = gu + (long long)b * ldgu + c;
+    situ8(gate, gate + SHARED, act + (long long)b * SHARED + c);
   }
 
   // grid barrier

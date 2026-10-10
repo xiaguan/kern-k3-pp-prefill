@@ -35,9 +35,9 @@ GLUE_MAX_E = 64
 FC1, FC2 = "trtllm_bmm_mxe4m3_mxe2m1_mxe4m3", "trtllm_bmm_bf16_mxe2m1_mxe4m3"
 SHAPE = "k3-prefill-16k-ep4"
 ROUTE_BLOCK = 256
-# k3_moe_route.cu: a warp a row, 16 rows a block, two blocks an SM (GB300: 152) resident for its grid barrier;
-# its tables cover 8192 rows.
-ROUTE_WARPS, ROUTE_BLOCKS, ROUTE_ROWS = 16, 2 * 152, 8192
+# k3_moe_route.cu: 16 warps a block, two blocks an SM (GB300: 152) resident for its grid barrier, a quarter of
+# them up to 256 rows; its tables cover 8192 rows.
+ROUTE_WARPS, ROUTE_BLOCKS, ROUTE_BLOCKS_SMALL, ROUTE_ROWS = 16, 2 * 152, 64, 8192
 
 
 def ceil_div(a, b):
@@ -123,15 +123,15 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
             },
         }),
         **({"moe_route": {
-            "params": ["in buffer<f32>", "in buffer<f32>", "in buffer<bf16>", "in buffer<bf16>", "i32", "out buffer<u8>",
-                       "out buffer<u8>", "out buffer<i32>", "out buffer<f32>", "inout buffer<u32>",
+            "params": ["in buffer<f32>", "in buffer<f32>", "in buffer<bf16>", "in buffer<bf16>", "i32", "in buffer<bf16>",
+                       "i32", "out buffer<u8>",
+                       "out buffer<u8>", "out buffer<i32>", "out buffer<f32>", "out buffer<bf16>", "inout buffer<u32>",
                        *["out buffer<i32>"] * 6, "i32", "i32"],
             "impl": {"launches": [
                 {**module(ROUTE, **({"EXPERTS": experts} if experts != 896 else {})), "entry": "kern_k3g_moe_route",
                  "block": [32 * ROUTE_WARPS, 1, 1], **g}
-                for g in ({"grid": [{"ceil_div": [tokens, ROUTE_WARPS]}, 1, 1],
-                           "when": {"var": tokens, "max": ROUTE_WARPS * ROUTE_BLOCKS}},
-                          {"grid": [ROUTE_BLOCKS, 1, 1], "when": {"var": tokens, "min": ROUTE_WARPS * ROUTE_BLOCKS + 1}})]},
+                for g in ({"grid": [ROUTE_BLOCKS_SMALL, 1, 1], "when": {"var": tokens, "max": 256}},
+                          {"grid": [ROUTE_BLOCKS, 1, 1], "when": {"var": tokens, "min": 257}})]},
         }, "moe_route_init": {
             "params": ["out buffer<u32>"],
             "impl": {"launches": [{**module(ROUTE, **({"EXPERTS": experts} if experts != 896 else {})),
@@ -178,10 +178,11 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
              "args": [ids, b("blockoff"), T, rank, i32(local), b("route_map"), b("exp2perm")]},
         ]
 
-    def route_step(S, bias, rs, x, ldx, q, sf, ids, wts, label=""):
-        """The router top-k, the latent's mxfp8 and the routing tables in one call (k3_moe_route.cu)."""
+    def route_step(S, bias, rs, x, ldx, gu, ldgu, q, sf, ids, wts, act, label=""):
+        """The router top-k, the latent's mxfp8, the routing tables and the shared expert's activation (from
+        its gate | up rows `gu`) in one call (k3_moe_route.cu)."""
         return {"label": label + "route", "op": "moe_route",
-                "args": [S, bias, rs, x, i32(ldx), q, sf, ids, wts, b("route_sync"), b("cta_batch"), b("cta_limit"),
+                "args": [S, bias, rs, x, i32(ldx), gu, i32(ldgu), q, sf, ids, wts, act, b("route_sync"), b("cta_batch"), b("cta_limit"),
                          b("num_non_exiting"), b("total_padded"), b("route_map"), b("exp2perm"), i32(tile),
                          dim(tokens)]}
 
