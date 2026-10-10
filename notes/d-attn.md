@@ -294,7 +294,7 @@ Gaps between graph nodes are ~0.2 us: a launch costs its ramp, not a gap.
 
 # P: MLA attention (`mla_fmha`), from 21:04 UTC
 
-Bench `loop/p/bench loop/out/p-stage0.json` (WITHGPU_HOSTS=tray07), check
+Bench `loop/p/bench loop/out/p-stage0.json` (on the P pool), check
 `loop/p/check loop/out/p-l12.json`. The check's 2048-row chunks never take
 the split path below; `work/p/check.sh` is the same check with
 `PREFILL=3000 CHUNK=400` (chunks 3-6 split). `work/p/bench.sh` benches any
