@@ -89,6 +89,18 @@
   rotating line sets): 48 rows 16.2 us now vs 18.6 / 17.7 / 17.4 for the
   variants; 24 rows 8.8 vs 8.0 best. Not worth it.
 
+- **PDL on kda_core / mla_prep / absorb** (the kernels right behind a cuBLAS
+  GEMM; `griddepcontrol.wait` at entry, absorb's W_UK loads before it;
+  work/pdl.diff): bit-identical, but every shape within ±0.02 ms of the
+  build without it (4.144 vs 4.133, main moved in between). Dropped. The
+  DSL attention cubin has no ACQBULK/PREEXIT, so the exchange behind it
+  could only gain the launch latency.
+- **Launch floor of the half**: KDA `kda_core`; MLA `mla_prep`, `absorb`,
+  the DSL split kernel, `dcp_exchange` (+ `mla_split_plan` once a step).
+  Every pair left is split by a cuBLAS GEMM (wfu, q_b, o_proj) or the
+  prebuilt attention. The plan could ride in the embedding launch as an
+  extra block, but that is two unrelated loops in one grid: not done.
+
 ## Profile (nsys, rank 0, 48 rows @128k, before the exchange kernel)
 
 work/prof.sh runs the bench with nsys on the first rank (`--capture-range-end
