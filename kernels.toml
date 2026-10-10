@@ -129,7 +129,7 @@ sha256 = "161d55e650acf861b296879beb93752e3d9e0c6026e78ed0e719a6370e4365c9"
 source = "source/k3_span_gather.cu"
 
 [kernels."k3_span_gather+PARTIAL_BF16=1"]
-sha256 = "fcfcd18dcd98d9571f7fa8d6b664afcc25d15cb2cea2240d65be3fc534b2c558"
+sha256 = "e1913ed7a5ce1de8f87733011b2b0d11b0d0b9026b08f43c803be9baebdcf2ce"
 source = "source/k3_span_gather.cu"
 defines = { PARTIAL_BF16 = 1 }
 

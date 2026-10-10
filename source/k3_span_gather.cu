@@ -215,25 +215,6 @@ __device__ __forceinline__ bf16* k9_win(void* kda_base, const int* line_index, l
   return (bf16*)((char*)kda_base + (long long)line_index[j] * line_bytes + K9_REC_BYTES + (long long)s * K9_WIN_BYTES);
 }
 
-// K9's SiLU, the same value without the IEEE division's per-element
-// slow-path branch (its reconvergence serializes a thread's columns):
-// exp(-sb) by ex2.ftz (__expf's value wherever it is not subnormal, and then
-// 1 + it is 1 either way), the quotient by one reciprocal and two Newton
-// steps over a denominator scaled by 2^-64, correctly rounded, scaled back
-// exactly while it stays normal (down to sb = -88, or an f32-subnormal sb).
-// The negated residual keeps a zero's sign; an infinite denominator is -0.
-__device__ __forceinline__ float k9_silu_fast(float y) {
-  const float sb = __bfloat162float(__float2bfloat16(y));
-  float e, r;
-  asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(e) : "f"(sb * -1.4426950408889634f));
-  const float d = 1.0f + e, ds = d * 0x1p-64f;
-  asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(r) : "f"(ds));
-  r = fmaf(r, fmaf(-ds, r, 1.0f), r);
-  const float q = sb * r;
-  const float qs = fmaf(-r, fmaf(ds, q, -sb), q) * 0x1p-64f;
-  return d == INFINITY ? -0.0f : qs;
-}
-
 __device__ __forceinline__ void k9_unpack8(uint4 raw, float* x) {
   const unsigned w[4] = {raw.x, raw.y, raw.z, raw.w};
 #pragma unroll
@@ -255,20 +236,49 @@ __device__ __forceinline__ void k9_cp_async(unsigned smem, const void* gmem) {
   asm volatile("cp.async.cg.shared.global [%0], [%1], 16;\n cp.async.commit_group;" ::"r"(smem), "l"(gmem));
 }
 
-// One row of 8 columns: conv over the taps and x, SiLU, landed; x becomes the newest tap.
+// K9's SiLU of two columns, the same value without the IEEE division's per-element
+// slow-path branch (its reconvergence serializes a thread's columns):
+// exp(-sb) by ex2.ftz (__expf's value wherever it is not subnormal, and then
+// 1 + it is 1 either way), the quotient by one reciprocal and two Newton
+// steps over a denominator scaled by 2^-64, correctly rounded, scaled back
+// exactly while it stays normal (down to sb = -88, or an f32-subnormal sb).
+// The negated residual keeps a zero's sign; an infinite denominator is -0. The f32 operations
+// run two at a time (f32x2: each lane rounds as the scalar operation does).
+__device__ __forceinline__ unsigned k9_silu2(float2 y) {
+  const __nv_bfloat162 yb = __float22bfloat162_rn(y);
+  const float2 sb = __bfloat1622float2(yb);
+  const float2 a = __fmul2_rn(sb, make_float2(-1.4426950408889634f, -1.4426950408889634f));
+  float2 e, r;
+  asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(e.x) : "f"(a.x));
+  asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(e.y) : "f"(a.y));
+  const float2 d = __fadd2_rn(make_float2(1.0f, 1.0f), e), ds = __fmul2_rn(d, make_float2(0x1p-64f, 0x1p-64f));
+  asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(r.x) : "f"(ds.x));
+  asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(r.y) : "f"(ds.y));
+  const float2 nds = make_float2(-ds.x, -ds.y);
+  r = __ffma2_rn(r, __ffma2_rn(nds, r, make_float2(1.0f, 1.0f)), r);
+  const float2 q = __fmul2_rn(sb, r);
+  const float2 res = __ffma2_rn(make_float2(-r.x, -r.y), __ffma2_rn(ds, q, make_float2(-sb.x, -sb.y)), q);
+  const float2 qs = __fmul2_rn(res, make_float2(0x1p-64f, 0x1p-64f));
+  const __nv_bfloat162 o =
+      __floats2bfloat162_rn(d.x == INFINITY ? -0.0f : qs.x, d.y == INFINITY ? -0.0f : qs.y);
+  return *(const unsigned*)&o;
+}
+
+// One row of 8 columns: conv over the taps and x (K9's contraction, x w3 + (t2 w2 + (t0 w0 +
+// t1 w1))), SiLU, landed; x becomes the newest tap.
 __device__ __forceinline__ uint4 k9_conv_row(uint4 raw, const float (&wt)[4][K9_PVEC], float* t0, float* t1,
                                              float* t2) {
   float x[K9_PVEC];
   k9_unpack8(raw, x);
   uint4 o;
   unsigned* ow = (unsigned*)&o;
+  const auto f2 = [](const float* v, int k) { return make_float2(v[k], v[k + 1]); };
 #pragma unroll
   for (int k = 0; k < K9_PVEC; k += 2) {
-    const float y0 = t0[k] * wt[0][k] + t1[k] * wt[1][k] + t2[k] * wt[2][k] + x[k] * wt[3][k];
-    const float y1 =
-        t0[k + 1] * wt[0][k + 1] + t1[k + 1] * wt[1][k + 1] + t2[k + 1] * wt[2][k + 1] + x[k + 1] * wt[3][k + 1];
-    const __nv_bfloat162 pair = __floats2bfloat162_rn(k9_silu_fast(y0), k9_silu_fast(y1));
-    ow[k / 2] = *(const unsigned*)&pair;
+    const float2 y = __ffma2_rn(f2(x, k), f2(wt[3], k),
+                                __ffma2_rn(f2(t2, k), f2(wt[2], k),
+                                           __ffma2_rn(f2(t0, k), f2(wt[0], k), __fmul2_rn(f2(t1, k), f2(wt[1], k)))));
+    ow[k / 2] = k9_silu2(y);
   }
 #pragma unroll
   for (int k = 0; k < K9_PVEC; ++k) {
