@@ -16,14 +16,17 @@ Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check l
   real tables. Fix: recompute the tables per stage (as work/lensx) or a `fill` for the cut table.
 - **Proposal (touches the expand GEMM, so not done): absorbed MLA for short chunks.** The expand
   re-derives k | v for the whole context every chunk: 131k × 576 × 30720 × 2 = 4.6 TFLOP, 2.3 ms a
-  layer, 6.9 ms of the 10.9 ms 10-row item and of the 13.8 ms 354-row item (both over 131k). The
-  absorbed form (q_nope · W_uk into the latent, attention over the latent cache, · W_uv after: the
-  decode step's mla_absorb / mla_attn / mla_vup_gate) costs ~27 GFLOP for 10 rows. Routed by
-  `when` on `tokens` (expand + FMHA above a few hundred rows, absorbed below), it would take ~6 ms
-  off each short item: ~3.5 ms (7%) of the weighted 52.5 ms. Numerics differ (scores summed over
-  the 512 latent dims instead of 128 + 64), and loop/p/check's 2048-row chunks would not exercise
-  the short path.
-
+  layer, and the FMHA then streams that 8 GB expansion: 2.3 ms more for 10 rows (real tables).
+  The absorbed form (the decode step's mla_absorb → split plan → FlashInfer's MLA decode kernel →
+  mla_vup_gate, every row of the chunk its own causal length, a per-row page table) costs per
+  context token B × 128 (96 heads padded) × 1088 × 2 FLOP against 576 × 30720 × 2 + B × 96 × 320
+  × 2 for expand + FMHA: it wins below B ≈ 160 rows. For the 10-row items over 131k: ~0.4 ms a
+  layer instead of 4.6 (bench: −6 ms of 10.9 ms an item, −2.3% weighted; real: 17.8 → ~5 ms).
+  Not for the 354-row items (8.6 ms vs 6.4). Costs: a `when` split on `tokens` (loop/count counts
+  each alternative launch: +~20 launches a stage), per-stage row tables + split plan, a bf16-q
+  absorb and an f32-gate vup_gate variant; numerics differ (the decode kernel's bf16-rounded
+  softmax scale, scores over 576 latent dims), and loop/p/check's 2048-row chunks never take the
+  short path (a `kern test --chunk 64` run would).
 - **Proposal (a GEMM epilogue, so not done): sh_down accumulates onto lat_up's output.** With
   `cublaslt_bf16_tn_acc` (beta 1, D in place) the shared expert's down projection adds into
   `routed_partial`; the next layer's `land_add2_attnres_rms` then reads one partial (two = 0):
