@@ -379,6 +379,81 @@ __device__ __forceinline__ uint4 merge_split(const bf16_t* __restrict__ o, const
 // GATE_ROWS rows a thread, every load issued before the first use: the kernel's registers and shared
 // memory are the absorbed form's, two blocks an SM, so one row's loads alone leave HBM idle
 #define GATE_ROWS 8
+
+// 1 / d without the IEEE division's slow-path branch, equal to it for every d in [2^-126, 2^126)
+// (k3_moe_route.cu); outside, the division
+__device__ __forceinline__ float rcp_fast(float d) {
+  float q;
+  asm("{\n .reg .f32 r, e;\n rcp.approx.ftz.f32 r, %1;\n fma.rn.f32 e, %1, r, 0fBF800000;\n neg.f32 e, e;\n"
+      " fma.rn.f32 %0, r, e, r;\n}"
+      : "=f"(q)
+      : "f"(d));
+  return q;
+}
+
+// bf16(a * bf16(sigmoid(g))) for 8 columns; FAST: every denominator in rcp_fast's range
+template <bool FAST>
+__device__ __forceinline__ uint4 gate8(const uint4& gv, const uint4& av) {
+  const __nv_bfloat162* gp = reinterpret_cast<const __nv_bfloat162*>(&gv);
+  const __nv_bfloat162* ap = reinterpret_cast<const __nv_bfloat162*>(&av);
+  uint4 ov;
+  __nv_bfloat162* op = reinterpret_cast<__nv_bfloat162*>(&ov);
+#pragma unroll
+  for (int i = 0; i < 4; i++) {
+    const float2 x = __bfloat1622float2(gp[i]);
+    const float dx = 1.0f + expf(-x.x), dy = 1.0f + expf(-x.y);
+    const __nv_bfloat162 g =
+        FAST ? __floats2bfloat162_rn(rcp_fast(dx), rcp_fast(dy)) : __floats2bfloat162_rn(1.0f / dx, 1.0f / dy);
+    op[i] = __floats2bfloat162_rn(__bfloat162float(ap[i].x) * __bfloat162float(g.x),
+                                  __bfloat162float(ap[i].y) * __bfloat162float(g.y));
+  }
+  return ov;
+}
+
+// sigmoid's denominator 1 + e^-x is in rcp_fast's range for every x >= -87 (e^87 < 2^126), NaN not
+__device__ __forceinline__ bool gate_ok(const uint4& gv) {
+  const __nv_bfloat162* gp = reinterpret_cast<const __nv_bfloat162*>(&gv);
+  bool ok = true;
+#pragma unroll
+  for (int i = 0; i < 4; i++) {
+    const float2 x = __bfloat1622float2(gp[i]);
+    ok = ok && x.x >= -87.0f && x.y >= -87.0f;
+  }
+  return ok;
+}
+
+// rows b0 .. b0 + GATE_ROWS of columns j .. j + 8. A warp's whole tile without a split row and with
+// every x in rcp_fast's range runs as straight-line code: no division branch to keep its rows apart.
+__device__ __forceinline__ void gate_rows(bf16_t* __restrict__ out, const bf16_t* __restrict__ o,
+                                          const bf16_t* __restrict__ partial, const float2* __restrict__ stats,
+                                          const int* __restrict__ lens, int ns, int n, int B) {
+  const long long b0 = (long long)(blockIdx.x / (n / 2048)) * GATE_ROWS;
+  const int j = (blockIdx.x % (n / 2048) * blockDim.x + threadIdx.x) * 8;
+  uint4 gv[GATE_ROWS], av[GATE_ROWS];
+#pragma unroll
+  for (int r = 0; r < GATE_ROWS; ++r)
+    if (b0 + r < B) {
+      gv[r] = *reinterpret_cast<const uint4*>(partial + (b0 + r) * MLA_FUSED + HEADC + j);
+      av[r] = *reinterpret_cast<const uint4*>(o + (b0 + r) * n + j);
+    }
+  const int* __restrict__ rec = lens + 3 * ns;
+  bool ok = b0 + GATE_ROWS <= B && (rec[3] == 0 || b0 + GATE_ROWS <= rec[2] || b0 >= rec[2] + rec[3]);
+#pragma unroll
+  for (int r = 0; r < GATE_ROWS; ++r) ok = ok && gate_ok(gv[r]);
+  if (__all_sync(0xffffffffu, ok)) {
+#pragma unroll
+    for (int r = 0; r < GATE_ROWS; ++r) *reinterpret_cast<uint4*>(out + (b0 + r) * n + j) = gate8<true>(gv[r], av[r]);
+    return;
+  }
+#pragma unroll
+  for (int r = 0; r < GATE_ROWS; ++r) {
+    const long long b = b0 + r;
+    if (b >= B) break;
+    if (rec[3] > 0 && b >= rec[2] && b < rec[2] + rec[3]) av[r] = merge_split(o, stats, rec, b, j, n, B);
+    *reinterpret_cast<uint4*>(out + b * n + j) = gate8<false>(gv[r], av[r]);
+  }
+}
+
 extern "C" __global__ void __launch_bounds__(256) kern_k3g_mla_gate(
     bf16_t* __restrict__ out, const bf16_t* __restrict__ o, const bf16_t* __restrict__ partial,
     const float* __restrict__ acc_o, const float* __restrict__ acc_lse, const int* __restrict__ row_lens,
@@ -393,32 +468,5 @@ extern "C" __global__ void __launch_bounds__(256) kern_k3g_mla_gate(
     return;
   }
   if (blockIdx.x >= gate_blocks) return;
-  const long long b0 = (long long)(blockIdx.x / (n / 2048)) * GATE_ROWS;
-  const int j = (blockIdx.x % (n / 2048) * blockDim.x + threadIdx.x) * 8;
-  uint4 gv[GATE_ROWS], av[GATE_ROWS];
-#pragma unroll
-  for (int r = 0; r < GATE_ROWS; ++r)
-    if (b0 + r < B) {
-      gv[r] = *reinterpret_cast<const uint4*>(partial + (b0 + r) * MLA_FUSED + HEADC + j);
-      av[r] = *reinterpret_cast<const uint4*>(o + (b0 + r) * n + j);
-    }
-  const int* __restrict__ rec = lens + 3 * ns;
-#pragma unroll
-  for (int r = 0; r < GATE_ROWS; ++r) {
-    const long long b = b0 + r;
-    if (b >= B) break;
-    if (rec[3] > 0 && b >= rec[2] && b < rec[2] + rec[3]) av[r] = merge_split(o, stats, rec, b, j, n, B);
-    const __nv_bfloat162* gp = reinterpret_cast<const __nv_bfloat162*>(&gv[r]);
-    const __nv_bfloat162* ap = reinterpret_cast<const __nv_bfloat162*>(&av[r]);
-    uint4 ov;
-    __nv_bfloat162* op = reinterpret_cast<__nv_bfloat162*>(&ov);
-#pragma unroll
-    for (int i = 0; i < 4; i++) {
-      const float2 x = __bfloat1622float2(gp[i]);
-      const __nv_bfloat162 g = __floats2bfloat162_rn(1.0f / (1.0f + expf(-x.x)), 1.0f / (1.0f + expf(-x.y)));
-      op[i] = __floats2bfloat162_rn(__bfloat162float(ap[i].x) * __bfloat162float(g.x),
-                                    __bfloat162float(ap[i].y) * __bfloat162float(g.y));
-    }
-    *reinterpret_cast<uint4*>(out + b * n + j) = ov;
-  }
+  gate_rows(out, o, partial, stats, lens, ns, n, B);
 }
