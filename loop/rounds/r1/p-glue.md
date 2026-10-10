@@ -14,4 +14,4 @@ Directions:
 2. `moe_finalize_rms` + `situ` / shared-expert combine + the next layer's `land_add2_attnres_rms`.
 3. MLA: `mla_gate` into the FMHA output path or o_proj's input; `latent_gather` into `mla_prep` or the expand's input.
 
-Check: `loop/p/check loop/out/p-l12.json` (layers 0-11: three MLA layers). Bench: `loop/p/bench loop/out/p-stage1.json`. One GPU each, from your pool.
+Check: `loop/p/check loop/out/p-l12.json` (layers 0-11: three MLA layers). Bench: `loop/p/bench loop/out/p-stage0.json`. One GPU each, from your pool.

@@ -12,4 +12,4 @@ Directions:
 2. `span_gather` (6.5%) is memory traffic: fuse it into the producer or the consumer.
 3. `kda_out_gate` into the recurrence's epilogue.
 
-Check: `loop/p/check loop/out/p-l12.json`. Bench: `loop/p/bench loop/out/p-stage1.json`. One GPU each, from your pool.
+Check: `loop/p/check loop/out/p-l12.json`. Bench: `loop/p/bench loop/out/p-stage0.json`. One GPU each, from your pool.

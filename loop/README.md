@@ -18,7 +18,7 @@ D steps by batch rows. Weights are in [`score`](score).
 
 | | Sub-model (`gen`) | Bench | Check |
 |---|---|---|---|
-| P | stage 1 of PP8 (layers 12-23: 9 KDA, 3 MLA), cut from the packed 93-layer prefill | `p/bench`: `kern bench` over [`p/workload.toml`](p/workload.toml), 1 GPU | `p/check`: `kern test` of layers 0-11 (embedding to head) against `main`, 1 GPU |
+| P | stage 0 of PP8 (embedding, layers 0-11: 9 KDA, 3 MLA), cut from the packed 93-layer prefill; stage 0 because it builds the MLA attention tables a later stage would get zeroed | `p/bench`: `kern bench` over [`p/workload.toml`](p/workload.toml), 1 GPU | `p/check`: `kern test` of layers 0-11 (embedding to head) against `main`, 1 GPU |
 | D | 16 layers of the TP8 / EP8 / DCP8 step | `d/bench`: `k3_step --bench` on a real TP8 group over two hosts, 64k and 128k contexts, 8-48 rows | `d/check`: 4 layers teacher-forced over real text against the one-GPU oracle, judged against `main`'s band |
 
 D is measured on real TP8 rather than a single rank with stubbed
@@ -29,7 +29,7 @@ measured too.
 
 | | Launches | Weighted cost |
 |---|---|---|
-| P stage 1 | 325 (27.1/layer) | 56.82 ms/item |
+| P stage 0 | 316 (26.3/layer) | 132.00 ms/item |
 | D 16 layers | 395 (24.7/layer) | 4.562 ms/step |
 
 D check of `main` against its oracle: top-1 0.9176, relRMS median 1.77% /

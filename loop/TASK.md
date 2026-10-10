@@ -66,7 +66,7 @@ through `loop/withgpu`; never run GPU work outside it.
 | `loop/build` | compile kernels, repin changed ones | none | ~1 min |
 | `loop/gen [OUT]` | regenerate the bench/check manifests into `loop/out/`; prints launches per layer | none | 5 s |
 | `loop/count M...` | launches per program and per layer | none | 0 s |
-| `loop/p/bench loop/out/p-stage1.json OUT [--ablate]` | P stage (layers 12-23) over the recorded item shapes; weighted cost | 1 | ~3 min (+2 with `--ablate`) |
+| `loop/p/bench loop/out/p-stage0.json OUT [--ablate]` | P stage 0 (embedding, layers 0-11) over the recorded item shapes; weighted cost | 1 | ~3 min (+2 with `--ablate`) |
 | `loop/p/check loop/out/p-l12.json OUT` | `kern test` of 12 P layers against main: every span, logits, noise floor | 1 | ~1 min |
 | `loop/d/bench loop/out/d-l16-tp8.json OUT` | D step, 16 layers, real TP8 over two hosts, 64k/128k contexts, 8-48 rows; weighted cost | 8 | ~2 min |
 | `loop/d/check loop/out/d-l4-tp8.json OUT` | 4 TP8 layers teacher-forced over real text against the one-GPU oracle, judged against main's band | 8 | ~1.5 min |
@@ -75,7 +75,7 @@ Main's numbers (measured on this pool, 2026-10-10; do not re-measure):
 
 | | main |
 |---|---|
-| P stage 1, weighted (`loop/score`) | 56.82 ms/item; 8192 rows: 105.9 ms over an empty prefix, 116.2 ms over 196k |
+| P stage 0, weighted (`loop/score`) | 132.00 ms/item at the loop's start (3ad4ec9); 8192 rows: 148.4 ms over an empty prefix, 350.6 ms over 196k. MLA attention (`mla_fmha`) is ~40% of it |
 | P launches | 325 per stage, 27.1/layer |
 | D 16 layers, weighted | 4.562 ms/step; 48 rows over 128k: 6.08 ms |
 | D launches | 395 per step, 24.7/layer |

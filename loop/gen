@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # loop/gen [OUT]: the bench and check manifests from this tree's generator and
 # kernels.toml, verified, into OUT (default loop/out/):
-#   p-stage1.json   PP8 stage 1 (layers 12-23) of the packed full-K3 prefill, cut from the 93-layer manifest
+#   p-stage0.json   PP8 stage 0 (embedding, layers 0-11) of the packed full-K3 prefill, cut from the
+#                   93-layer manifest: the P bench. Stage 0 builds the MLA attention tables
+#                   (`fmha_lens`) the later stages read; a later stage benched alone gets them
+#                   zeroed and its attention attends to nothing.
+#   p-stage1.json   stage 1 (layers 12-23): kept for comparison, not for timing attention
 #   p-l12.json      layers 0-11 with embedding and head: the P numerics check (kern test)
 #   d-l16-tp8.json  16 layers of the TP8/EP8/DCP8 decode step: the D bench
 #   d-l4-tp8.json   4 layers of the same: the D numerics check
@@ -25,7 +29,7 @@ calls = json.load(open(sys.argv[1]))['programs']['prefill']['calls']
 print(','.join(str(next(i for i, c in enumerate(calls) if c['label'] == f'l{l}.res_in')) for l in range(12, 93, 12)))
 " "$out/p-93.json")
 rm -rf "$out/cut" && "$K3_KERN_BIN" cut "$out/p-93.json" --at "$at" --out "$out/cut" >/dev/null 2>&1
-mv "$out/cut/stage1.json" "$out/p-stage1.json" && rm -rf "$out/cut" "$out/p-93.json"
+mv "$out/cut/stage0.json" "$out/p-stage0.json" && mv "$out/cut/stage1.json" "$out/p-stage1.json" && rm -rf "$out/cut" "$out/p-93.json"
 gen --layers 12 $P --max-ctx 65536 > "$out/p-l12.json"
 gen --layers 16 --tp 8 --ranks 8 $D --peer-ar > "$out/d-l16-tp8.json"
 gen --layers 4 --tp 8 --ranks 8 $D --peer-ar > "$out/d-l4-tp8.json"
@@ -33,4 +37,4 @@ gen --layers 4 --tp 1 --ranks 1 $D > "$out/d-l4-tp1.json"
 for f in p-l12 d-l16-tp8 d-l4-tp8 d-l4-tp1; do
   "$K3_KERN_BIN" verify "$out/$f.json" >/dev/null 2>&1 || { "$K3_KERN_BIN" verify "$out/$f.json"; exit 1; }
 done
-"$LOOP_DIR/count" "$out"/{p-stage1,p-l12,d-l16-tp8,d-l4-tp8,d-l4-tp1}.json
+"$LOOP_DIR/count" "$out"/{p-stage0,p-stage1,p-l12,d-l16-tp8,d-l4-tp8,d-l4-tp1}.json
