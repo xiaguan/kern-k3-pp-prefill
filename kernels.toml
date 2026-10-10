@@ -50,7 +50,7 @@ source = "source/k3_kda_core.cu"
 defines = { HEADS = 12 }
 
 [kernels."k3_kda_rec"]
-sha256 = "16969a6cc3d627938d7019711d4170509f4c761ca5f2e98c186579eb0d79d20a"
+sha256 = "18e36144bfbb5297b8e04a0409d65ae29d582469e92823280269c4b196f0addf"
 source = "source/k3_kda_rec.cu"
 
 [kernels."k3_kda_out_gate"]
@@ -129,7 +129,7 @@ sha256 = "161d55e650acf861b296879beb93752e3d9e0c6026e78ed0e719a6370e4365c9"
 source = "source/k3_span_gather.cu"
 
 [kernels."k3_span_gather+PARTIAL_BF16=1"]
-sha256 = "0e207669110df68498ce68a3a650740379ec6238171c8c1e143b860c6e79fa4c"
+sha256 = "fcfcd18dcd98d9571f7fa8d6b664afcc25d15cb2cea2240d65be3fc534b2c558"
 source = "source/k3_span_gather.cu"
 defines = { PARTIAL_BF16 = 1 }
 

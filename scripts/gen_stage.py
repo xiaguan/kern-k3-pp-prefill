@@ -708,7 +708,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         ops["span_gather"] = {
             "params": ["in buffer<bf16>", "in buffer<f32>", "in state", "in buffer<i32>", "i64", "in buffer<bf16>",
                        "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>",
-                       "out buffer<bf16>", "in buffer<i64>", "i32", "i32", "out buffer<i32>"],
+                       "out buffer<bf16>", "in buffer<i64>", "i32", "i32", "out buffer<i32>", "out buffer<i32>"],
             "impl": {"launches": [
                 launch("k3_span_gather", "kern_k3_span_gather_packed", grid=[{"add": [conv_blocks, 1]}, 1, 1],
                        block=[128, 1, 1], defines=part_defs)]},
@@ -1080,6 +1080,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         buffers["span_beta"] = {"dtype": "bf16", "shape": [hl, run_max], "kind": "workspace"}
         for n in ["span_q", "span_k", "span_v"] + ([] if packed else ["span_out"]):
             work(n, inner_l, var=run_max)
+        if packed:
+            buffers["span_progress"] = {"dtype": "i32", "shape": [pack * hl], "kind": "workspace"}
         work("span_flow", HEAD_DIM, var=run_max)
         work("span_g", inner_l, var=run_max)
         for n in [] if packed else ["span_state_in", "span_state_out"]:
@@ -1227,14 +1229,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
             N = {"var": "seqs"}
             step(L + "span_gather", "span_gather", b("kda_partial"), w("cw"), {"state": kda}, line, i64(line_l),
                  b("wsm_partial"), b("span_q"), b("span_k"), b("span_v"), b("span_beta"), b("span_flow"),
-                 b("cu_seqlens"), N, S, b("span_tile_prefix"))
+                 b("cu_seqlens"), N, S, b("span_tile_prefix"), b("span_progress"))
             step(L + "span_g", "gemm_bf16", b("span_flow"), w("w_f_b"), b("span_g"), S, i32(inner_l), i32(HEAD_DIM),
                  i32(inner_l))
             step(L + "span_kda", "flash_kda", b("span_q"), b("span_k"), b("span_v"), b("span_g"), b("span_beta"),
                  w("dt_bias"), w("a_log"),
                  *(b(n) for n in ["span_ws_kd", "span_ws_qd", "span_ws_kr", "span_ws_gt", "span_ws_inv", "span_ws_mqk"]),
                  S, b("cu_seqlens"), b("span_tile_prefix"), N, {"state": kda}, line, i64(line_l), b("kda_partial"),
-                 w("gamma_o"), gated_kda, b("span_at"))
+                 w("gamma_o"), gated_kda, b("span_at"), b("span_progress"))
             return
         step(L + "span_gather", "span_gather", b("kda_partial"), w("cw"), {"state": kda}, line, i64(line_l),
              b("wsm_partial"), b("span_q"), b("span_k"), b("span_v"), b("span_beta"), b("span_flow"), b("span_at"), S)

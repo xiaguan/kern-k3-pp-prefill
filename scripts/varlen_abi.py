@@ -43,18 +43,22 @@ def kda_workspace(hl, rows_max, seqs_max):
 
 
 # source/k3_kda_rec.cu: sizeof(K12Smem), its block
-REC_SMEM = 215040
+REC_SMEM = 182272
 REC_ROWS_MAX = 8192
 REC_BLOCK = 512
+REC_GATE_CTAS = 56  # source/k3_kda_rec.cu K12_GATE_CTAS
 
 
 def kda_op(hl, rows_max, seqs_max, module, rec_module, rows, seqs, scale=kda.QSCALE):
     """Interface: q | k | v | g (bf16 [rows, hl*128]) | beta (bf16 [hl, rows]) | dt_bias (f32 [hl*128]) |
     a_log (f32 [hl]) | ws_kd | ws_qd | ws_kr | ws_gt | ws_inv | ws_mqk | rows | cu_seqlens (i64 [seqs + 1]) |
     tile_prefix (i32 [seqs + 1], filled) | seqs | the KDA state | its line table | line bytes | the q|k|v|gate
-    projections (bf16 [rows, 4*hl*128]) | gamma_o (f32 [128]) | gated (bf16 [rows, hl*128]) | span_at.
-    FlashKDA's kernel 1 fills the workspace; k3_kda_rec runs the recurrence from and to every sequence's
-    line, gates the output rows and advances the conv windows. `rows` / `seqs` are the call's vars."""
+    projections (bf16 [rows, 4*hl*128]) | gamma_o (f32 [128]) | gated (bf16 [rows, hl*128]) | span_at |
+    progress (i32 [seqs * hl], zero). The recurrence's ungated output goes to q's buffer, which kernel 1
+    has read. FlashKDA's kernel 1
+    fills the workspace; k3_kda_rec runs the recurrence from and to every sequence's line on one CTA per
+    (sequence, head), advances the conv windows, and its REC_GATE_CTAS more CTAs gate the output rows as
+    the recurrence publishes them. `rows` / `seqs` are the call's vars."""
     assert rows_max <= REC_ROWS_MAX, "k3_kda_rec keeps a sequence's betas in shared memory"
     n = tiles_max(rows_max, seqs_max) * hl
     T, N, cu, tp = {"param": 13}, {"param": 16}, {"param": 14}, {"param": 15}
@@ -83,23 +87,23 @@ def kda_op(hl, rows_max, seqs_max, module, rec_module, rows, seqs, scale=kda.QSC
     ws_tile = lambda param: tmap(param, [D, n * kda.CHUNK], [256], [64, kda.CHUNK], 128)
     ws_tile_sq = lambda param: tmap(param, [kda.CHUNK, n * kda.CHUNK], [32], [kda.CHUNK, kda.CHUNK], 0)
     rec = {
-        **rec_module, "entry": "kern_k3_kda_rec", "block": [REC_BLOCK, 1, 1], "grid": [seqs, hl, 1],
-        "shared_mem": REC_SMEM,
-        "params": ["bytes<128>"] * 7 + [
+        **rec_module, "entry": "kern_k3_kda_rec", "block": [REC_BLOCK, 1, 1],
+        "grid": [{"add": [{"mul": [seqs, hl]}, REC_GATE_CTAS]}, 1, 1], "shared_mem": REC_SMEM,
+        "params": ["bytes<128>"] * 6 + [
             "in buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "inout state", "in buffer<i32>", "i64",
-            "in buffer<bf16>", "in buffer<f32>", "out buffer<bf16>", "in buffer<i32>", "in buffer<i64>",
-            "in buffer<i32>", "bytes<4>", "i32"],
+            "in buffer<bf16>", "in buffer<f32>", "out buffer<bf16>", "out buffer<bf16>", "in buffer<i32>",
+            "in buffer<i64>", "in buffer<i32>", "inout buffer<i32>", "bytes<4>", "i32", "i32"],
         "args": [ws_tile(7), ws_tile(8), ws_tile(9), tmap(2, [hl * D, rows_max], [hl * D * 2], [64, kda.CHUNK], 128),
-                 tmap(20, [4 * hl * D, rows_max], [8 * hl * D], [D, kda.CHUNK], 0), ws_tile_sq(11), ws_tile_sq(12),
-                 {"param": 2}, {"param": 4}, {"param": 10}, {"param": 17}, {"param": 18}, {"param": 19},
-                 {"param": 20}, {"param": 21}, {"param": 22}, {"param": 23}, cu, tp, tiles, T],
+                 ws_tile_sq(11), ws_tile_sq(12),
+                 *({"param": k} for k in [2, 4, 10, 17, 18, 19, 20, 21, 0, 22, 23]), cu, tp, {"param": 24}, tiles,
+                 T, N],
     }
     return {
-        "params": ["in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>",
+        "params": ["inout buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>",
                    "in buffer<f32>", "in buffer<f32>", "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>",
                    "out buffer<f32>", "out buffer<bf16>", "out buffer<bf16>", "i32", "in buffer<i64>",
                    "in buffer<i32>", "i32", "inout state", "in buffer<i32>", "i64", "in buffer<bf16>",
-                   "in buffer<f32>", "out buffer<bf16>", "in buffer<i32>"],
+                   "in buffer<f32>", "out buffer<bf16>", "in buffer<i32>", "inout buffer<i32>"],
         "impl": {"launches": [prepare, rec]},
     }
 

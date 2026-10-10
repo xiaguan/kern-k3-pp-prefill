@@ -2,13 +2,11 @@
 // launch: FlashKDA's kernel 2 (source/flash-kda, `_flash_kda_fwd_recurrence`)
 // over its kernel 1's workspace, operation for operation, with the state read
 // from and written to each sequence's KDA line, then K11 (k3_kda_out_gate.cu)
-// on every output row and the conv windows advanced (K9's
-// `kern_k3_span_state_out_packed`).
+// on every output row, and the conv windows advanced (K9's last step).
 //
 //   extern "C" __global__ void kern_k3_kda_rec(
 //       CUtensorMap tm_kd, tm_qd, tm_kr,  // [HEADS * tiles * 16 rows][128] bf16, box 64 x 16, 128B swizzle
 //       CUtensorMap tm_v,                 // span_v [rows][INNER], box 64 x 16, 128B swizzle
-//       CUtensorMap tm_gate,              // the projections [rows][4 * INNER], box 128 x 16
 //       CUtensorMap tm_inv, tm_mqk,       // [HEADS * tiles * 16 rows][16] bf16, box 16 x 16
 //       const bf16* v,          // [rows, INNER]  conv'd v (span_v), a partial tile's rows
 //       const bf16* beta,       // [HEADS, span]  beta logits (span_beta)
@@ -16,25 +14,31 @@
 //       void* kda_base, const int* line_index, long long line_bytes,  // sequence j's line line_index[j]
 //       const bf16* partial,    // [rows, 4 * INNER]  q | k | v | gate projections
 //       const float* gamma_o,   // [128]
+//       bf16* raw,              // [rows, INNER]  the ungated output (q's buffer, which kernel 1 has read)
 //       bf16* gated,            // [rows, INNER]  rows span_at[0] + i
 //       const int* span_at,
 //       const long long* cu_seqlens, const int* tile_prefix,  // sequence j: rows cu[j]..cu[j+1], tiles from prefix[j]
+//       int* progress,          // [nseq][HEADS]  zero (the gather zeroes it; the gate CTAs leave it so)
 //       int tiles,              // the workspace's head stride (kernel 1's total_tiles)
-//       int span);              // rows of the call (beta's row stride)
+//       int span,               // rows of the call (beta's row stride)
+//       int nseq);
 //
-//   grid (nseq, HEADS)   block 512   dynamic smem sizeof(K12Smem) = 215040
+//   grid (nseq * HEADS + K12_GATE_CTAS)   block 512   dynamic smem sizeof(K12Smem) = 182272
 //
-// Warps 0-7 run the recurrence, warp w the 16 value columns 16w..16w+16 of
-// the head's state, held as bf16 in registers as the A operand of
-// mma.m16n8k16: FlashKDA's products transposed (S [dv][dk] times kd^T
-// instead of kd times S^T), which sums the same products in the same k order
-// per output element. Warps 8-15 finish the output rows (K11 to the bit)
-// from a four-stage tile ring and advance the windows; warp 8 also streams
-// each 16-row tile's inputs into an eight-stage ring (TMA, 128-byte swizzle
-// so ldmatrix is conflict-free), seven tiles ahead of the one it gates.
-// FlashKDA's roundings are kept:
-// the state bf16 between tiles (fma.ftz then RN), u and the output in bf16
-// (HADD2 / HMUL2), beta = bf16(sigmoid by tanh.approx).
+// CTA j * HEADS + h runs sequence j's head h. Warps 0-7 run the recurrence,
+// warp w the 16 value columns 16w..16w+16 of the head's state, held as bf16 in
+// registers as the A operand of mma.m16n8k16: FlashKDA's products transposed
+// (S [dv][dk] times kd^T instead of kd times S^T), which sums the same products
+// in the same k order per output element. Warp 8 streams each 16-row tile's
+// inputs into an eight-stage ring (TMA, 128-byte swizzle so ldmatrix is
+// conflict-free); warp 9 advances the windows, then copies every output tile
+// to `raw` and publishes them four at a time (`progress` = tiles done, st.release). The last
+// K12_GATE_CTAS CTAs, on the SMs one sequence's heads leave idle, gate the
+// rows (K11 to the bit) as they are published (ld.acquire); the recurrence
+// never waits for them, so any residency order makes progress. (Gate CTAs
+// first in the grid puts the recurrence on other SMs and costs 2 ms an item.) FlashKDA's roundings are kept: the state bf16 between
+// tiles (fma.ftz then RN), u and the output in bf16 (HADD2 / HMUL2), beta =
+// bf16(sigmoid by tanh.approx).
 #include <cuda_bf16.h>
 #include <stdint.h>
 
@@ -50,8 +54,8 @@
 #define K12_ROWS_MAX 8192 // a sequence's rows: its betas stay in shared memory
 #define K12_ROW 272   // a 128-column bf16 row, padded
 #define K12_MMA_WARPS 8
-#define K12_EPI_WARPS 8
-#define K12_THREADS ((K12_MMA_WARPS + K12_EPI_WARPS) * 32)
+#define K12_THREADS 512  // a recurrence CTA's 8 MMA warps, loader and store; a gate CTA's 16 gate warps
+#define K12_GATE_CTAS 56 // the GB300's 152 SMs less one sequence's 96 heads
 #define K12_RMS_EPS 1e-5f
 
 typedef __nv_bfloat16 bf16;
@@ -63,7 +67,6 @@ struct K12Stage {
   alignas(1024) unsigned char qd[4096];
   alignas(1024) unsigned char kr[4096];
   alignas(1024) unsigned char v[4096];
-  alignas(128) unsigned char gate[16 * 256];
   alignas(128) unsigned char inv[16 * 32];
   alignas(128) unsigned char mqk[16 * 32];
   alignas(128) float gt[128];
@@ -77,7 +80,7 @@ struct K12Smem {
 };
 
 // the launch's dynamic shared memory (scripts/varlen_abi.py REC_SMEM), 1024-aligned by the kernel
-static_assert(sizeof(K12Smem) == 215040, "K12Smem");
+static_assert(sizeof(K12Smem) == 182272, "K12Smem");
 
 // A CUtensorMap by value (the manifest's bytes<128> tensormap field).
 struct alignas(64) K12Tmap {
@@ -308,21 +311,19 @@ __device__ __forceinline__ void k12_recurrence(K12Smem& sm, const float* rec_in,
   }
 }
 
-// Tile c's inputs into its stage, by the whole warp: a whole tile by 2D TMA;
-// a sequence's last, partial one has its v rows stored by hand (zero past the
-// sequence) and its gate rows by row.
-__device__ __forceinline__ void k12_load(K12Smem& sm, int c, int lane, int len, long long bos, long long out0,
-                                       long long ws0, int h, const K12Tmap& tm_kd, const K12Tmap& tm_qd,
-                                       const K12Tmap& tm_kr, const K12Tmap& tm_v, const K12Tmap& tm_gate,
-                                       const K12Tmap& tm_inv, const K12Tmap& tm_mqk, const bf16* v,
-                                       const float* ws_gt, const bf16* partial) {
+// Tile c's inputs into its stage, by the whole warp: whole tiles by 2D TMA; a sequence's
+// last, partial tile has its v rows stored by hand (zero past the sequence).
+__device__ __forceinline__ void k12_load(K12Smem& sm, int c, int lane, int len, long long bos, long long ws0, int h,
+                                         const K12Tmap& tm_kd, const K12Tmap& tm_qd, const K12Tmap& tm_kr,
+                                         const K12Tmap& tm_v, const K12Tmap& tm_inv, const K12Tmap& tm_mqk,
+                                         const bf16* v, const float* ws_gt) {
   const int s = c % K12_STAGES;
   K12Stage& st = sm.in[s];
   const int valid = min(16, len - 16 * c);
-  const int ws = (int)(ws0 + c) * 16, row0 = (int)(bos + 16 * c), g0 = (int)(out0 + 16 * c);
+  const int ws = (int)(ws0 + c) * 16, row0 = (int)(bos + 16 * c);
   if (lane == 0) {
     k12_wait(&sm.empty[s], ((c / K12_STAGES) & 1) ^ 1);
-    k12_expect_tx(&sm.full[s], 3 * 4096 + 2 * 512 + 512 + (valid == 16 ? 2 * 4096 : valid * 256));
+    k12_expect_tx(&sm.full[s], 3 * 4096 + 2 * 512 + 512 + (valid == 16 ? 4096 : 0));
     for (int b = 0; b < 2; ++b) {
       k12_tma(st.kd + 2048 * b, tm_kd, 64 * b, ws, &sm.full[s]);
       k12_tma(st.qd + 2048 * b, tm_qd, 64 * b, ws, &sm.full[s]);
@@ -334,50 +335,170 @@ __device__ __forceinline__ void k12_load(K12Smem& sm, int c, int lane, int len, 
     if (valid == 16) {
       k12_tma(st.v, tm_v, h * 128, row0, &sm.full[s]);
       k12_tma(st.v + 2048, tm_v, h * 128 + 64, row0, &sm.full[s]);
-      k12_tma(st.gate, tm_gate, 3 * K12_INNER + h * 128, g0, &sm.full[s]);
     }
   }
   __syncwarp();
   if (valid < 16 && lane < 16) {
-    const int i = lane;
-    const uint4* src = (const uint4*)(v + (long long)(row0 + i) * K12_INNER + h * 128);
+    const uint4* src = (const uint4*)(v + (long long)(row0 + lane) * K12_INNER + h * 128);
 #pragma unroll
-    for (int k = 0; k < 16; ++k)
-      *(uint4*)(st.v + k12_sw(i, k)) = i < valid ? src[k] : make_uint4(0, 0, 0, 0);
-    if (i < valid)
-      k12_bulk(st.gate + i * 256, partial + (long long)(g0 + i) * K12_FUSED + 3 * K12_INNER + h * 128, 256,
-               &sm.full[s]);
+    for (int k = 0; k < 16; ++k) *(uint4*)(st.v + k12_sw(lane, k)) = lane < valid ? src[k] : make_uint4(0, 0, 0, 0);
   }
   __syncwarp();
   if (lane == 0) k12_arrive(&sm.full[s]);
 }
 
+
+// ld.acquire / st.release of a progress counter (gpu scope)
+__device__ __forceinline__ int k12_ld_acquire(const int* p) {
+  int v;
+  asm volatile("ld.acquire.gpu.global.b32 %0, [%1];" : "=r"(v) : "l"(p) : "memory");
+  return v;
+}
+__device__ __forceinline__ void k12_st_release(int* p, int v) {
+  asm volatile("st.release.gpu.global.b32 [%0], %1;" ::"l"(p), "r"(v) : "memory");
+}
+
+__device__ __forceinline__ void k12_cp_async(void* dst, const void* src) {
+  asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(k12_smem(dst)), "l"(src) : "memory");
+}
+
+// A gate CTA: warps 8g..8g+8 take every other one of this CTA's (sequence, head) items
+// (e, e + K12_GATE_CTAS, ...), four tiles at a time as the recurrence publishes them: warp w
+// stages rows 2(w % 8) + half of each tile (the ungated output and the gate's projection) in
+// its own shared memory by cp.async, then gates them 16 lanes a row. Lane k sums the squares
+// of K11's lane group (columns 32(k/4) + 4l + k%4, l < 8) in K11's butterfly order, then
+// finishes columns 8k..8k+8 with K11's operations; the last group of an item resets its counter.
+__device__ __forceinline__ void k12_gate(int e, int nseq, const long long* cu_seqlens, const bf16* raw,
+                                         const bf16* partial, const float* gamma_o, bf16* gated, long long at,
+                                         int* progress, unsigned char* smem) {
+  const int warp = threadIdx.x >> 5, lane = threadIdx.x & 31, gw = warp >> 3;
+  const int half = lane >> 4, k = lane & 15, i = 2 * (warp & 7) + half, grp = 64 * (k >> 2);
+  // this warp's rows: [tile 0..4][half 0..2] of 256 bytes, the output then the gate's projection
+  unsigned char* ro = smem + warp * 4096;
+  unsigned char* gp = ro + 2048;
+  float gam[8];
+  {
+    const float4 g0 = *(const float4*)(gamma_o + 8 * k), g1 = *(const float4*)(gamma_o + 8 * k + 4);
+    gam[0] = g0.x, gam[1] = g0.y, gam[2] = g0.z, gam[3] = g0.w, gam[4] = g1.x, gam[5] = g1.y, gam[6] = g1.z,
+    gam[7] = g1.w;
+  }
+  const int items = nseq * HEADS;
+  for (int c0 = 0;; c0 += 4) {
+    bool any = false;
+    for (int item = e + gw * K12_GATE_CTAS; item < items; item += 2 * K12_GATE_CTAS) {
+      const int sq = item / HEADS, h = item % HEADS;
+      const long long bos = cu_seqlens[sq];
+      const int len = (int)(cu_seqlens[sq + 1] - bos), ntiles = (len + 15) >> 4;
+      if (c0 >= ntiles) continue;
+      any = true;
+      const int cend = min(c0 + 4, ntiles);
+      int* flag = progress + item;
+      if (lane == 0)
+        while (k12_ld_acquire(flag) < cend) __nanosleep(256);
+      __syncwarp();
+      for (int c = c0; c < cend; ++c) {
+        const int r = 16 * c + i;
+        if (r < len) {
+          k12_cp_async(ro + ((c - c0) * 2 + half) * 256 + 16 * k, raw + (bos + r) * K12_INNER + h * 128 + 8 * k);
+          k12_cp_async(gp + ((c - c0) * 2 + half) * 256 + 16 * k,
+                       partial + (at + bos + r) * K12_FUSED + 3 * K12_INNER + h * 128 + 8 * k);
+        }
+      }
+      asm volatile("cp.async.wait_all;" ::: "memory");
+      __syncwarp();
+      for (int c = c0; c < cend; ++c) {
+        const int r = 16 * c + i;
+        const unsigned char* row = ro + ((c - c0) * 2 + half) * 256;
+        float y[8];
+#pragma unroll
+        for (int q = 0; q < 4; ++q) {
+          // columns 32G + 8q .. +8: l = 2q at +0..3, l = 2q + 1 at +4..7
+          const uint4 rq = *(const uint4*)(row + grp + 16 * q);
+          const unsigned w0 = (k & 2) ? rq.y : rq.x, w1 = (k & 2) ? rq.w : rq.z;
+          const float x0 = (k & 1) ? k12_hi(w0) : k12_lo(w0), x1 = (k & 1) ? k12_hi(w1) : k12_lo(w1);
+          y[2 * q] = x0 * x0;
+          y[2 * q + 1] = x1 * x1;
+        }
+        const float sj = ((y[0] + y[4]) + (y[2] + y[6])) + ((y[1] + y[5]) + (y[3] + y[7]));
+        const float t1 = sj + __shfl_xor_sync(0xffffffffu, sj, 2);
+        const float wsum = t1 + __shfl_xor_sync(0xffffffffu, t1, 1);
+        const int base = 16 * half;
+        const float tot = __shfl_sync(0xffffffffu, wsum, base) + __shfl_sync(0xffffffffu, wsum, base + 4) +
+                          __shfl_sync(0xffffffffu, wsum, base + 8) + __shfl_sync(0xffffffffu, wsum, base + 12);
+        const float rr = rsqrtf(tot * (1.0f / 128.0f) + K12_RMS_EPS);
+        const uint4 araw = *(const uint4*)(row + 16 * k);
+        const uint4 graw = *(const uint4*)(gp + ((c - c0) * 2 + half) * 256 + 16 * k);
+        const unsigned aw[4] = {araw.x, araw.y, araw.z, araw.w}, gwd[4] = {graw.x, graw.y, graw.z, graw.w};
+        float ov[8], den[8], sig[8];
+        bool far = false;
+#pragma unroll
+        for (int x = 0; x < 8; ++x) {
+          const float a = (x & 1) ? k12_hi(aw[x / 2]) : k12_lo(aw[x / 2]);
+          const float g = (x & 1) ? k12_hi(gwd[x / 2]) : k12_lo(gwd[x / 2]);
+          ov[x] = __bfloat162float(__float2bfloat16(a * rr * gam[x]));
+          // K11's sigmoid: __expf (its ex2 wherever the result is not subnormal, and then 1 + it is 1 either way)
+          float ex;
+          asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(ex) : "f"(-g * 1.4426950408889634f));
+          den[x] = 1.0f + ex;
+          sig[x] = k12_recip(den[x]);
+          far |= den[x] >= 0x1p126f;
+        }
+        if (__any_sync(0xffffffffu, far)) {
+#pragma unroll
+          for (int x = 0; x < 8; ++x)
+            if (den[x] >= 0x1p126f) sig[x] = 1.0f / den[x];
+        }
+        uint4 res;
+        unsigned* rw = (unsigned*)&res;
+#pragma unroll
+        for (int x = 0; x < 8; x += 2) {
+          const unsigned gt = k12_pack(sig[x], sig[x + 1]);
+          rw[x / 2] = k12_pack(ov[x] * k12_lo(gt), ov[x + 1] * k12_hi(gt));
+        }
+        if (r < len) *(uint4*)(gated + (at + bos + r) * K12_INNER + h * 128 + 8 * k) = res;
+      }
+      __syncwarp();
+      if (cend == ntiles) {
+        // every warp of the group past the counter's last wait before it goes back to zero
+        asm volatile("bar.sync %0, 256;" ::"r"(1 + gw) : "memory");
+        if ((warp & 7) == 0 && lane == 0) *flag = 0;
+      }
+    }
+    if (!__any_sync(0xffffffffu, any)) break;
+  }
+}
+
 extern "C" __global__ void __launch_bounds__(K12_THREADS, 1) kern_k3_kda_rec(
     const __grid_constant__ K12Tmap tm_kd, const __grid_constant__ K12Tmap tm_qd,
     const __grid_constant__ K12Tmap tm_kr, const __grid_constant__ K12Tmap tm_v,
-    const __grid_constant__ K12Tmap tm_gate, const __grid_constant__ K12Tmap tm_inv,
-    const __grid_constant__ K12Tmap tm_mqk, const bf16* __restrict__ v, const bf16* __restrict__ beta,
-    const float* __restrict__ ws_gt, void* __restrict__ kda_base,
+    const __grid_constant__ K12Tmap tm_inv, const __grid_constant__ K12Tmap tm_mqk, const bf16* __restrict__ v,
+    const bf16* __restrict__ beta, const float* __restrict__ ws_gt, void* __restrict__ kda_base,
     const int* __restrict__ line_index, long long line_bytes, const bf16* __restrict__ partial,
-    const float* __restrict__ gamma_o, bf16* __restrict__ gated, const int* __restrict__ span_at,
-    const long long* __restrict__ cu_seqlens, const int* __restrict__ tile_prefix, int tiles, int span) {
+    const float* __restrict__ gamma_o, bf16* __restrict__ raw, bf16* __restrict__ gated,
+    const int* __restrict__ span_at, const long long* __restrict__ cu_seqlens, const int* __restrict__ tile_prefix,
+    int* __restrict__ progress, int tiles, int span, int nseq) {
   extern __shared__ __align__(1024) unsigned char k12_raw[];
   K12Smem& sm = *(K12Smem*)k12_raw;
-  const int j = blockIdx.x, h = blockIdx.y;
   const int warp = threadIdx.x >> 5, lane = threadIdx.x & 31;
+  if ((int)blockIdx.x >= nseq * HEADS) {
+    k12_gate(blockIdx.x - nseq * HEADS, nseq, cu_seqlens, raw, partial, gamma_o, gated, span_at[0], progress,
+             k12_raw);
+    return;
+  }
+  const int j = blockIdx.x / HEADS, h = blockIdx.x % HEADS;
   const long long bos = cu_seqlens[j];
   const int len = (int)(cu_seqlens[j + 1] - bos);
   const int ntiles = (len + 15) >> 4;
-  const long long ws0 = (long long)h * tiles + tile_prefix[j], out0 = span_at[0] + bos;
+  const long long ws0 = (long long)h * tiles + tile_prefix[j];
   char* line = (char*)kda_base + (long long)line_index[j] * line_bytes;
   if (threadIdx.x == 0) {
     for (int s = 0; s < K12_STAGES; ++s) {
       k12_bar_init(&sm.full[s], 1);
-      k12_bar_init(&sm.empty[s], K12_MMA_WARPS + K12_EPI_WARPS);
+      k12_bar_init(&sm.empty[s], K12_MMA_WARPS);
     }
     for (int o = 0; o < K12_OSTAGES; ++o) {
       k12_bar_init(&sm.ofull[o], K12_MMA_WARPS);
-      k12_bar_init(&sm.oempty[o], K12_EPI_WARPS);
+      k12_bar_init(&sm.oempty[o], 1);
     }
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
   }
@@ -389,99 +510,46 @@ extern "C" __global__ void __launch_bounds__(K12_THREADS, 1) kern_k3_kda_rec(
   if (warp < K12_MMA_WARPS) {
     float* rec = (float*)(line + (long long)h * 128 * 128 * 4);
     k12_recurrence(sm, rec, rec, len);
-    return;
-  }
-
-  // Output gate warps. First the conv windows: the gather read them, nothing after it does.
-  const int ew = warp - K12_MMA_WARPS, et = threadIdx.x - K12_MMA_WARPS * 32;
-  // Epilogue warp 0 also loads, K12_STAGES - 1 tiles ahead of the one it gates.
-  const auto load = [&](int c) {
-    if (ew == 0 && c < ntiles)
-      k12_load(sm, c, lane, len, bos, out0, ws0, h, tm_kd, tm_qd, tm_kr, tm_v, tm_gate, tm_inv, tm_mqk, v, ws_gt,
-               partial);
-  };
-  for (int c = 0; c < K12_STAGES - 1; ++c) load(c);
-  if (len > 0 && et < 128) {
-    const int col = h * 128 + et;
+  } else if (warp == K12_MMA_WARPS) {
+    for (int c = 0; c < ntiles; ++c)
+      k12_load(sm, c, lane, len, bos, ws0, h, tm_kd, tm_qd, tm_kr, tm_v, tm_inv, tm_mqk, v, ws_gt);
+  } else if (warp == K12_MMA_WARPS + 1) {
+    // The conv windows first (the gather read them, nothing after it does), lane l columns 4l..4l+4
+    if (len > 0) {
 #pragma unroll
-    for (int s = 0; s < 3; ++s) {
-      bf16* win = (bf16*)(line + K12_REC_BYTES + s * K12_WIN_BYTES) + col;
-      bf16 nt[3];
+      for (int s = 0; s < 3; ++s) {
+        bf16* win = (bf16*)(line + K12_REC_BYTES + s * K12_WIN_BYTES) + h * 128 + 4 * lane;
+        uint2 nt[3];
 #pragma unroll
-      for (int k = 0; k < 3; ++k) {
-        const int i = len - 3 + k;
-        nt[k] = i >= 0 ? partial[(bos + i) * K12_FUSED + s * K12_INNER + col] : win[(i + 3) * K12_INNER];
+        for (int k = 0; k < 3; ++k) {
+          const int i = len - 3 + k;
+          nt[k] = i >= 0 ? *(const uint2*)(partial + (bos + i) * K12_FUSED + s * K12_INNER + h * 128 + 4 * lane)
+                         : *(const uint2*)(win + (i + 3) * K12_INNER);
+        }
+#pragma unroll
+        for (int k = 0; k < 3; ++k) *(uint2*)(win + k * K12_INNER) = nt[k];
       }
-#pragma unroll
-      for (int k = 0; k < 3; ++k) win[k * K12_INNER] = nt[k];
     }
-  }
-  // Warp ew gates rows 2ew + half, 16 lanes a row: lane k sums the squares of K11's lane group
-  // (columns 32(k/4) + 4l + k%4, l < 8) in K11's butterfly order, then finishes columns 8k..8k+8.
-  const int half = lane >> 4, k = lane & 15, i = 2 * ew + half, grp = 64 * (k >> 2);
-  float gam[8];
-  {
-    const float4 g0 = *(const float4*)(gamma_o + 8 * k), g1 = *(const float4*)(gamma_o + 8 * k + 4);
-    gam[0] = g0.x, gam[1] = g0.y, gam[2] = g0.z, gam[3] = g0.w, gam[4] = g1.x, gam[5] = g1.y, gam[6] = g1.z,
-    gam[7] = g1.w;
-  }
-  for (int c = 0; c < ntiles; ++c) {
-    load(c + K12_STAGES - 1);
-    const int s = c % K12_STAGES, o = c % K12_OSTAGES;
-    k12_wait(&sm.full[s], (c / K12_STAGES) & 1);
-    k12_wait(&sm.ofull[o], (c / K12_OSTAGES) & 1);
-    const unsigned char* row = sm.out[o] + i * K12_ROW;
-    float y[8];
+    // then every output tile to `raw`, published to the gate CTAs by the item's counter
+    int* flag = progress + j * HEADS + h;
+    for (int c = 0; c < ntiles; ++c) {
+      const int o = c % K12_OSTAGES, valid = min(16, len - 16 * c);
+      k12_wait(&sm.ofull[o], (c / K12_OSTAGES) & 1);
 #pragma unroll
-    for (int q = 0; q < 4; ++q) {
-      // columns 32G + 8q .. +8: l = 2q at +0..3, l = 2q + 1 at +4..7
-      const uint4 raw = *(const uint4*)(row + grp + 16 * q);
-      const unsigned w0 = (k & 2) ? raw.y : raw.x, w1 = (k & 2) ? raw.w : raw.z;
-      const float x0 = (k & 1) ? k12_hi(w0) : k12_lo(w0), x1 = (k & 1) ? k12_hi(w1) : k12_lo(w1);
-      y[2 * q] = x0 * x0;
-      y[2 * q + 1] = x1 * x1;
-    }
-    const float sj = ((y[0] + y[4]) + (y[2] + y[6])) + ((y[1] + y[5]) + (y[3] + y[7]));
-    const float t1 = sj + __shfl_xor_sync(0xffffffffu, sj, 2);
-    const float wsum = t1 + __shfl_xor_sync(0xffffffffu, t1, 1);
-    const int base = 16 * half;
-    const float tot = __shfl_sync(0xffffffffu, wsum, base) + __shfl_sync(0xffffffffu, wsum, base + 4) +
-                      __shfl_sync(0xffffffffu, wsum, base + 8) + __shfl_sync(0xffffffffu, wsum, base + 12);
-    const float rr = rsqrtf(tot * (1.0f / 128.0f) + K12_RMS_EPS);
-    const uint4 araw = *(const uint4*)(row + 16 * k);
-    const uint4 graw = *(const uint4*)(sm.in[s].gate + i * 256 + 16 * k);
-    const unsigned aw[4] = {araw.x, araw.y, araw.z, araw.w}, gw[4] = {graw.x, graw.y, graw.z, graw.w};
-    float ov[8], den[8], sig[8];
-    bool far = false;
-#pragma unroll
-    for (int e = 0; e < 8; ++e) {
-      const float a = (e & 1) ? k12_hi(aw[e / 2]) : k12_lo(aw[e / 2]);
-      const float g = (e & 1) ? k12_hi(gw[e / 2]) : k12_lo(gw[e / 2]);
-      ov[e] = __bfloat162float(__float2bfloat16(a * rr * gam[e]));
-      // K11's sigmoid: __expf (its ex2 wherever the result is not subnormal, and then 1 + it is 1 either way)
-      float ex;
-      asm("ex2.approx.ftz.f32 %0, %1;" : "=f"(ex) : "f"(-g * 1.4426950408889634f));
-      den[e] = 1.0f + ex;
-      sig[e] = k12_recip(den[e]);
-      far |= den[e] >= 0x1p126f;
-    }
-    if (__any_sync(0xffffffffu, far)) {
-#pragma unroll
-      for (int e = 0; e < 8; ++e)
-        if (den[e] >= 0x1p126f) sig[e] = 1.0f / den[e];
-    }
-    uint4 res;
-    unsigned* rw = (unsigned*)&res;
-#pragma unroll
-    for (int e = 0; e < 8; e += 2) {
-      const unsigned gt = k12_pack(sig[e], sig[e + 1]);
-      rw[e / 2] = k12_pack(ov[e] * k12_lo(gt), ov[e + 1] * k12_hi(gt));
-    }
-    if (16 * c + i < len) *(uint4*)(gated + (out0 + 16 * c + i) * K12_INNER + h * 128 + 8 * k) = res;
-    __syncwarp();
-    if (lane == 0) {
-      k12_arrive(&sm.oempty[o]);
-      k12_arrive(&sm.empty[s]);
+      for (int q = 0; q < 8; ++q) {
+        const int i = 2 * q + (lane >> 4), x = lane & 15;
+        if (i < valid)
+          *(uint4*)(raw + (bos + 16 * c + i) * K12_INNER + h * 128 + 8 * x) =
+              *(const uint4*)(sm.out[o] + i * K12_ROW + 16 * x);
+      }
+      __syncwarp();
+      if (lane == 0) k12_arrive(&sm.oempty[o]);
+      // every fourth tile (the release waits for the writes before it): the warp's row writes
+      // ordered before lane 0's cumulative st.release by bar.warp.sync
+      if ((c & 3) == 3 || c == ntiles - 1) {
+        __syncwarp();
+        if (lane == 0) k12_st_release(flag, c + 1);
+      }
     }
   }
 }
