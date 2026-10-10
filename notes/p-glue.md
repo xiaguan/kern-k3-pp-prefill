@@ -4,7 +4,11 @@ Target: P stage 0 since 19:54 (`loop/p/bench loop/out/p-stage0.json`), check `lo
 loop/out/p-l12.json`. Every timing claim goes through `loop/p/ab A B OUT [N]` (A, B, A, B in one
 lease; A-to-A spread 0.5-1.2% at 8192 rows); `work/swapmod.py MANIFEST main OUT` re-pins a manifest's cubins to main's.
 
-## Session 2026-10-10 23:00- (main 96fb15b)
+## Session 2026-10-10 23:00- (main 96fb15b, rebased f03a989)
+
+Stage 0 now: 200 launches (16.7/layer). Non-GEMM launches a layer: MoE `land_add_attnres_rms_bf16`,
+`moe_route`, `moe_finalize_rms`, next `land_add2_attnres_rms`; KDA `span_gather`, FlashKDA prepare,
+`k3_kda_rec`; MLA `mla_prep_gather`, (absorb / decode attention short | FMHA long), `mla_gate`.
 
 Stage 0 baseline this session (one bench): 124.12 ms/item. Glue per 8192-row item (in-program,
 bracketed): residuals 3.9 ms (K1b 171 + K1d 170 us a call), finalize 2.0, route 1.4, mla_gate 0.6,
@@ -21,6 +25,16 @@ Committed (both bit-identical, P check PASS at every span):
   A separate long-form entry (its own registers) is 94 vs 100 us: not worth a generator change.
 - `the p situ kernel takes the reciprocal without its slow-path branch`: same pattern in layer 0's
   situ, 280 -> 259 us at 8192 rows. Module shared with D.
+
+- `a p chunk's kda layer projects q | k | v | g and wsm in one gemm`: qkvg (N 49152) and wsm (N 256)
+  read the same normed rows; one GEMM with D's wkda weight layout, span_gather / k3_kda_rec read
+  their slices by stride (-DK9_LD / -DK12_LD, defaults unchanged: p-kda's builds byte-identical).
+  Stage 0 209 -> 200 launches (16.7/layer). A/B 2 pairs +0.11 / +0.28%, 3 pairs -0.04 / -0.01 /
+  -0.59%; the GEMMs' own in-program time -40..-423 us an item in 6 of 7 scenarios. P check PASS,
+  KL <= 3.92e-3, 1 near-tie flip (cuBLASLt picks another kernel for N 49408). It was the last pair
+  of GEMMs in a P layer sharing an input with matching output dtypes: router (f32 out) and front
+  (bf16) differ; a router in the front GEMM would need f32 for both (+260 MB write and read a call
+  at 8192 rows) or bf16 routing logits.
 
 Tried, not kept (harness, bit-identical unless said):
 - Residual K1b/K1d persistent (grid 3/SM) with the next row's operands and candidate 0 staged by
