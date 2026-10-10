@@ -1,57 +1,42 @@
 # p-glue: the MoE glue and the MLA glue of a P layer
 
-Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check loop/out/p-l12.json`.
+Target: P stage 0 since 19:54 (`loop/p/bench loop/out/p-stage0.json`), check `loop/p/check
+loop/out/p-l12.json`. Small gains need `work/ab.sh A B OUT` (A, B, A, B in one lease; A-to-A spread
+0.5-1.2% at 8192 rows); `work/swapmod.py MANIFEST main OUT` re-pins a manifest's cubins to main's.
 
-## For the orchestrator (measurement gap, proposal)
+## Where it stands (main 9850876, all of this run's commits merged)
 
-- **P stage 1's bench does not run the MLA attention.** `fmha_lens` (the FMHA's seq_lens_kv |
-  cum_q | cum_kv tables) is computed by stage 0's `fmha_lens` call; `kern cut` makes it an `input`
-  of stage 1 with no `fill`, so the bench hands stage 1 a table of zeros: `mla_fmha` attends to
-  nothing (≈20 us a call at every context) and the context gather copies no cached rows. Measured
-  (work/lensx: the same stage 1 recomputing `fmha_lens` from `seq_lens` / `cu_seqlens` at its
-  first layer, +1 launch): **97.79 ms/item weighted instead of 52.48**; mla_fmha per call 1.26 ms
-  (8192 rows, no prefix), 20.3 / 39.7 / 59.1 ms (8192 rows over 64k / 131k / 197k), 10.5 ms (4096
-  over 64k), 2.29 ms (10 rows over 131k), 4.11 ms (354 over 131k). The real P stage spends ~45% of
-  its time in the MLA FMHA. loop/p/check's p-l12 has stage 0's call, so numerics are checked on
-  real tables. Fix: recompute the tables per stage (as work/lensx) or a `fill` for the cut table.
-- **Stage 1's MoE routing is degenerate too:** its `hidden_in` / `blocks_in` arrive as zeros, so
-  every row routes to the same 16 experts (FC1 1.7 ms/layer at 8192 rows there vs 3.0 ms on stage
-  0's real routing; 0.1 ms vs 1.3 ms at 354 rows). Since 19:54 the bench target is stage 0.
-- Stage 0 (main 9b1cce0 + this branch, 225 launches, 127.7 ms/item): per call at 8192 rows over
-  131k: mla_fmha 45.8 ms (×3), fc1 2.8 ms, fc2 1.3 ms, flash_kda 1.0 ms, finalize 165 us,
-  res_mlp 147 us, res_in 155 us, route 115 us, mla_gate 130 us, prep_gather 97 us. At 10 rows over
-  131k (21.7 ms an item): mla_fmha 2.35 ms + expand ~2.3 ms per MLA layer = ~14 ms of the item.
-- `work/ab.sh A B OUT`: A, B, A, B in one lease over work/ab.toml (8192@0, 10@131k, 354@131k);
-  `work/swapmod.py MANIFEST main OUT` re-pins a manifest's modules to main's cubins (the A side of
-  a cubin-only change). The lease's own A-to-A spread is 0.5-1.2% at 8192 rows.
-- **Absorbed MLA for short chunks (9f15357 + e9d8b2c), offered separately (it skips the expand
-  GEMM for chunks of <= 128 rows).** Stage 0 A/B in one lease: 10 rows over 131k 21.8 -> 7.6 ms
-  (-65%), 8192 / 354 rows inside noise; ~ -1.9% weighted. Launches 225 -> 231 (every `when`
-  alternative counted; the decode attention's reduction is merged by the gate kernel, the prep and
-  the gate each carry both forms' blocks). Numerics: KL <= 2.1e-3 (check), <= 2.8e-3 with 120-row chunks (kern test against the
-  expanded form via work/pcheck.sh on --max-ctx 16384 manifests: at 64k, saving kv_exp for every
-  span runs kern test out of device memory past ~10 chunks). The decode kernel's bf16-rounded
-  softmax scale gave KL 8.8e-3; the short form uses the FMHA's f32 scale. Why not for 354 rows:
-  per context token B x 128 x 1088 x 2 FLOP (heads padded to 128, latent dims) against 576 x 30720
-  x 2 + B x 96 x 320 x 2 for expand + FMHA: the crossover is ~160 rows. Measured (A/B, threshold 512
-  vs 128): 200 rows over 131k −4.2% absorbed, 354 rows +9%: the real crossover is ~250 rows. The
-  threshold stays 128: the decode kernel's split workspace is rows × 16 splits × 256 KB (512 MB at
-  128 rows; 256 would be 1 GB of a stage's memory for items the bench does not weigh).
-  (Answer to 20:49: moving the threshold does not pay on the 354-row shape: 354 rows absorbed is +9%
-  (A/B, threshold 512); a threshold of 256 leaves the 354-row shape on the expanded form.)
-- The split merge in the gate kernel is the DSL reduction's own arithmetic (4ccb71c, read off its
-  SASS: lane = split, butterfly max / sum, MUFU ex2 / lg2, FMA accumulation in split order):
-  bit-identical end-to-end logits to the reduction-launch form; +0.2% on the 10-row item (~5 us a
-  gate call for the warp butterflies and a barrier).
-- **Proposal (a GEMM epilogue, so not done): sh_down accumulates onto lat_up's output.** With
-  `cublaslt_bf16_tn_acc` (beta 1, D in place) the shared expert's down projection adds into
-  `routed_partial`; the next layer's `land_add2_attnres_rms` then reads one partial (two = 0):
-  −234 MB a MoE layer at 8192 rows (~30 us, ~0.35% of the 8192-row item). Numerics: hidden =
-  bf16(prefix2 + bf16(bf16(latup) + shdown)) instead of bf16(prefix2 + bf16(latup) + bf16(shdown)).
-- **Robustness note:** `moe_route`'s grid barrier needs its 304 blocks (two an SM, the whole
-  register file) co-resident. A kernel running beside it on another stream (a PP transfer) only
-  delays it (its blocks wait for that kernel to drain), it cannot deadlock it unless that kernel
-  waits on this stream.
+- Stage 0: 209 launches (17.4/layer), ~125.5 ms/item. A MoE layer: `land_add_attnres_rms_bf16`
+  → router* → front* (lat_down | shared gate | up) → `moe_route` (top-k, mxfp8, routing tables,
+  situ) → fc1* → fc2* → `moe_finalize_rms` → back* (lat_up | sh_down by K) → next
+  `land_add2_attnres_rms`. An MLA layer: wfu* → `mla_prep_gather` → expand* (long) → q_b* →
+  absorb (short) → mla_fmha (long) / decode attention (short) → `mla_gate` → o_proj*.
+  Every glue kernel left sits between GEMMs, the prebuilt FMHA or the decode attention; the only
+  removable one is `moe_route_init` (1 a stage: a zeroed workspace; a carry is refused by kern cut).
+- Cost now is MLA attention and GEMMs: at 8192 rows over 131k mla_fmha is 45.8 ms a layer (68
+  TFLOP at ~1.5 PF: at peak), at 354 rows expand 2.6 + FMHA 4.5 ms a layer (192 CTAs, 1.26
+  waves, each head's 84 MB of expanded K/V streamed per 256-row Q tile), fc1 1.3 ms a layer
+  (streaming all 896 experts' weights). The 10-row item is 7.6 ms (GEMM weight streaming).
+- Next, if anyone: an absorbed MLA *prefill* kernel (rows × heads in M, the latent read once) for
+  129..~1000-row chunks: ~9.7 TFLOP at 354 rows over 131k against 21 ms of expand + FMHA today,
+  but only as a tcgen05 kernel (mma.sync peaks at 605 TFLOP/s here: work/mma).
+
+## For the orchestrator (measurement notes)
+
+- Stage 1's bench gets zero `fmha_lens` tables (cut input without a fill: the FMHA attends nothing)
+  and zero `hidden_in` (every row routes to the same 16 experts). With per-stage tables
+  (work/lensx) stage 1 costs 97.8 ms/item instead of 52.5.
+- Process lesson: after a cherry-pick, `loop/build` before committing (a cherry-picked
+  kernels.toml carried a stale k3_moe_route pin into 5faa214; the orchestrator repinned it).
+- Robustness: `moe_route`'s grid barrier needs its 304 blocks (two an SM, the whole register
+  file) co-resident; a kernel beside it on another stream only delays it unless that kernel waits
+  on this stream.
+- Absorbed MLA for short chunks (merged): 10 rows over 131k 21.8 -> 7.6 ms. Threshold 128: the
+  measured crossover is ~250 rows (200 rows −4.2%, 354 rows +9%); 256 would double the decode
+  kernel's split workspace (rows × 16 × 256 KB) for shapes the bench does not weigh. The split
+  merge in the gate kernel is the DSL reduction's own arithmetic (bit-identical logits).
+- Proposal not done (a GEMM epilogue): sh_down accumulating onto lat_up's output is moot now that
+  the back GEMM sums them by K.
 
 ## State
 
