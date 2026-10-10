@@ -176,7 +176,8 @@ L2 prefetch trials (same-session A/B against the committed one-range per-line fo
   harness and the bench (the state traffic is the loop's whole cost either way), and it costs 146-155
   registers (3 blocks an SM: two waves at 48 rows) or spills at 128. As a programmatic dependent (`pdl: true`,
   wait at entry) it starts ~1.1 us before cuBLAS's split-K reduce ends, but that alone is neutral (3.534 vs
-  3.530); staging the state into that window hits the same register wall. Left as is.
+  3.530); staging the state into that window hits the same register wall. The w_f_b tile (32 KB) staged by
+  cp.async at entry so the GEMV reads shared memory: worse (24 rows 15.1 -> 16.7 us in the harness). Left as is.
 - **moe_front** phases (harness, 24 rows, before ad22557): load + quant + situ + hand-off 2.9 us, two-level
   top-k 1.8, the last block's tables 1.6. After: 5.88 us.
 
