@@ -6,7 +6,7 @@
 // The decode kernels (k3_residual.cu, k3_router_argmax.cu) give a row a whole
 // 1024-thread block so that one row finishes fast; over a chunk that block is
 // one row per SM in flight, a chain of barriers waiting on one DRAM round trip
-// at a time. Here a row is a block of 7 warps (residual) or one warp (top-k),
+// at a time. Here a row is a block of 14 warps (residual) or one warp (top-k),
 // so an SM holds many rows. Every value is the decode kernels' to the bit: the
 // reductions keep their trees (below), the landings are the same.
 //
@@ -18,7 +18,7 @@
 //         K1c then K1a without a snapshot: hidden = bf16(prefix2 + p1 + (two ? p2 : 0)), written,
 //         then normed = rms(attnres(blocks, hidden, nb), gamma). The next layer's residual mix
 //         reads the hidden it just made from registers.
-//     grid (B, 1, 1)   block (224, 1, 1)   smem 0 dynamic
+//     grid (B, 1, 1)   block (448, 1, 1)   smem 0 dynamic
 //
 //   [K1c] kern_k3g_land_add2(p1, p2, prefix2, hidden, two, B)
 //         K1c alone, before a snapshot layer and at a stage's end.
@@ -45,8 +45,8 @@
 // vectors: each thread's 8 elements serially, the group by a 32-lane xor
 // butterfly, then the 28 group sums plus 4 zero slots by one more butterfly.
 // The decode kernel's group is a warp (warp w owns vectors 32w..32w+31); here
-// warp w owns groups w, w + 7, w + 14, w + 21, i.e. thread t vectors
-// t + 224k, and runs the same butterfly per group, so every sum is the same
+// warp w owns groups w, w + 14, i.e. thread t vectors t + 448k, and runs the
+// same butterfly per group, so every sum is the same
 // tree over the same values. K6's picks are exact comparisons, so its layout
 // (expert j * 32 + lane) is free; its weight sum is the same 16-lane butterfly.
 // The finalize's rms is kern_k3_rms's tree with thread h owning columns
@@ -61,9 +61,9 @@ typedef unsigned int u32;
 #define KH 7168
 #define KNB_MAX 8
 #define KEPS 1e-5f
-#define RWARPS 7
+#define RWARPS 14  // two rows of 448 threads an SM at 60 registers: half the 7-warp row's latency chain
 #define RTHREADS (RWARPS * 32)
-#define RGROUPS 4  // vectors per thread: 896 / 224
+#define RGROUPS 2  // vectors per thread: 896 / 448
 #define RSLOTS 32  // 28 groups + 4 zero slots, the decode kernel's 32 warps
 
 struct V8 {
@@ -270,7 +270,7 @@ __device__ __forceinline__ void attnres_rms_row(const bf16_t* __restrict__ blk_r
 }
 
 // ---------------------------------------------------------------- K1a
-extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_attnres_rms(
+extern "C" __global__ void __launch_bounds__(RTHREADS, 2) kern_k3g_attnres_rms(
     const bf16_t* __restrict__ prefix, bf16_t* __restrict__ blocks, const float* __restrict__ sw,
     const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int nb, int snapshot, int B) {
   __shared__ RowSmem s;
@@ -290,7 +290,7 @@ extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_attnres_rms(
 }
 
 // ---------------------------------------------------------------- K1b
-extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_land_add_attnres_rms(
+extern "C" __global__ void __launch_bounds__(RTHREADS, 2) kern_k3g_land_add_attnres_rms(
     const bf16_t* __restrict__ partial, const bf16_t* __restrict__ prefix, const bf16_t* __restrict__ blocks,
     const float* __restrict__ sw, const bf16_t* __restrict__ gamma, bf16_t* __restrict__ prefix2,
     bf16_t* __restrict__ normed, int nb, int snapshot, int B) {
@@ -344,16 +344,16 @@ __device__ __forceinline__ V8 add2(const bf16_t* __restrict__ p1, const bf16_t* 
   return o;
 }
 
-extern "C" __global__ void __launch_bounds__(RTHREADS) kern_k3g_land_add2(
+extern "C" __global__ void __launch_bounds__(224) kern_k3g_land_add2(
     const bf16_t* __restrict__ p1, const bf16_t* __restrict__ p2, const bf16_t* __restrict__ prefix2,
     bf16_t* __restrict__ hidden, int two, int B) {
   const int b = blockIdx.x;
   if (b >= B) return;
-  const size_t off = (size_t)b * KH + (blockIdx.y * RTHREADS + threadIdx.x) * 8;
+  const size_t off = (size_t)b * KH + (blockIdx.y * 224 + threadIdx.x) * 8;
   stv(hidden + off, add2(p1, p2, prefix2, two, off));
 }
 
-extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_land_add2_attnres_rms(
+extern "C" __global__ void __launch_bounds__(RTHREADS, 2) kern_k3g_land_add2_attnres_rms(
     const bf16_t* __restrict__ p1, const bf16_t* __restrict__ p2, const bf16_t* __restrict__ prefix2,
     bf16_t* __restrict__ hidden, int two, const bf16_t* __restrict__ blocks, const float* __restrict__ sw,
     const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int nb, int B) {

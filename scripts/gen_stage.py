@@ -479,7 +479,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     # threads: at 64 rows the glue's 7-warp row leaves most SMs idle.
     def residual(entry, glue_entry, defines=None):
         if chunk:
-            return launch("k3_prefill_glue", glue_entry, grid=[RV, 1, 1], block=[224, 1, 1], defines=glue_defs)
+            return launch("k3_prefill_glue", glue_entry, grid=[RV, 1, 1], block=[448, 1, 1], defines=glue_defs)
         return launch("k3_residual", entry, var=RV, defines=defines)
 
     # Ops on all `rows` of the tray batch (var R) and ops on their owner's
