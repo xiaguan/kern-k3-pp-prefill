@@ -234,6 +234,22 @@ deadline as well (a member's data never came: fail loudly, not garbage).
   prefetch at entry without pdl (noinline helper, 128 regs): 4.047 vs
   4.025, no gain either.
 
+- **DSL tensor maps with 256-byte L2 promotion** (was 128; a generator
+  field, not the kernel): 3.928 vs main 3.930 on the same pool/hour, every
+  shape within 0.01 ms. No effect.
+
+- **kda_core knob sweep** at 8-48 rows (one GPU; ROWS_PER_ITER 4/2,
+  KDA_STREAM 1/0, KDA_SWIZZLE 1/0, all math-neutral): the shipped 4/1/1 is
+  best at 48 rows (16.3 us); swizzle off is better at 8-36 (24 rows 8.96 →
+  8.53, 36 rows 13.42 → 12.99) and much worse at 48 (18.9). A runtime
+  branch on gridDim.x would save ~5 us a step at 24-36 rows (~0.1%, below
+  the bench's resolution): not done.
+
+- **kda_core prefetching o_proj's 22 MB weight into L2** (bulk prefetch,
+  each block its share, noinline helper, 128 regs): o_proj 7.0 → 5.8 us but
+  kda_core 11.1 → 12.6 us at 16 rows; D 3.942 vs main 3.930. The same HBM
+  bytes, moved from one kernel to the other. Dropped.
+
 ## Where the half stands (16 rows @128k, nsys, after the commits above)
 
 Per 16-layer step: DSL split kernel 254 us (prebuilt, ~4.7 TB/s, the only
