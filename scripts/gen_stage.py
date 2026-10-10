@@ -728,7 +728,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                        "out buffer<bf16>", "in buffer<i32>", "i32", "in buffer<i32>", "i32", "i32", "out buffer<bf16>",
                        "i32", "i32"],
             "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_prep_gather",
-                                         grid=[{"add": [T, {"ceil_div": [ctx_rows, 7]}]}, 1, 1], block=[512, 1, 1],
+                                         grid=[{"add": [T, {"ceil_div": [ctx_rows, 28]}]}, 1, 1], block=[512, 1, 1],
                                          defines=mla_defs)]},
         }
         ops["mla_gate"] = {

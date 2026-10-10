@@ -5,13 +5,13 @@
 //                            block_table, max_pages, lens, ns, nseq, latent_g, n, B)
 //     blocks [0, B): k3_mla_prep.cu's head for chunk row b (q_norm, the latent row kv_norm | rope
 //       appended to the slab), the latent row also written to its place in latent_g;
-//     blocks [B, B + ceil(n / 7)): rows [7 g, 7 g + 7) of latent_g, the sequences' cached latent
+//     blocks [B, B + ceil(n / 28)): rows [28 g, 28 g + 28) of latent_g, the sequences' cached latent
 //       rows back to back (sequence j's at [cum_kv[j], cum_kv[j] + seq_lens_kv[j])), every other row
 //       of the first n zero; the rows this chunk appends are the head blocks' own.
 //     partial f32 [B, MLA_FUSED] the fused projection (q_a | kv_a | rope | gate);
 //     slab, page_stride: the layer's latent pages; lens: kern_k3_fmha_lens_varlen's tables
 //     (seq_lens_kv | cum_q | cum_kv, ns words each) of the call's nseq sequences.
-//   grid (B + ceil(n / 7), 1, 1)   block (512, 1, 1)
+//   grid (B + ceil(n / 28), 1, 1)   block (512, 1, 1)
 //
 //   kern_k3g_mla_gate(out, o, partial, n, B)
 //     sigmoid_mul.cu's kern_sigmoid_mul_bf16 on the gate columns of the fused projection, landed to
@@ -36,7 +36,10 @@
 #define NT 512
 #define QW (QU / 32)  // 12 warps of q
 #define LANES (KV_A * 2 / 16)  // 72 sixteen-byte pieces a latent row
-#define GROWS (NT / LANES)      // 7 latent rows a gather block
+#define GROWS (NT / LANES)      // 7 latent rows a gather block pass
+#ifndef GITER
+#define GITER 4                 // passes: 28 rows a gather block
+#endif
 
 typedef __nv_bfloat16 bf16_t;
 
@@ -59,19 +62,30 @@ extern "C" __global__ void __launch_bounds__(NT) kern_k3g_mla_prep_gather(
   const int* __restrict__ cum_q = lens + ns;
   const int* __restrict__ cum_kv = lens + 2 * ns;
 
-  if (blockIdx.x >= B) {  // ---- gather: the context's cached latent rows
-    const int r = (blockIdx.x - B) * GROWS + t / LANES, lane = t % LANES;
-    if (t >= GROWS * LANES || r >= n) return;
-    int j = 0;
-    while (j + 1 < nseq && cum_kv[j + 1] <= r) ++j;
-    const int local = r - cum_kv[j];
-    const int cached = lens[j] - (cum_q[j + 1] - cum_q[j]);
-    if (local >= cached && local < lens[j]) return;  // this chunk's row: its head block writes it
-    uint4 v = make_uint4(0, 0, 0, 0);
-    if (local < cached)
-      v = *reinterpret_cast<const uint4*>(slab + block_table[j * max_pages + local / PAGE] * page_stride +
-                                          (long long)(local % PAGE) * KV_A + lane * 8);
-    *reinterpret_cast<uint4*>(latent_g + (long long)r * KV_A + lane * 8) = v;
+  if (blockIdx.x >= B) {  // ---- gather: the context's cached latent rows, GITER of them a thread in flight
+    if (t >= GROWS * LANES) return;
+    const int lane = t % LANES, r0 = (blockIdx.x - B) * GROWS * GITER + t / LANES;
+    uint4 v[GITER];
+    bool put[GITER];
+#pragma unroll
+    for (int k = 0; k < GITER; ++k) {
+      const int r = r0 + k * GROWS;
+      v[k] = make_uint4(0, 0, 0, 0);
+      put[k] = false;
+      if (r < n) {
+        int j = 0;
+        while (j + 1 < nseq && cum_kv[j + 1] <= r) ++j;
+        const int local = r - cum_kv[j];
+        const int cached = lens[j] - (cum_q[j + 1] - cum_q[j]);
+        put[k] = local < cached || local >= lens[j];  // this chunk's rows: its head blocks write them
+        if (local < cached)
+          v[k] = *reinterpret_cast<const uint4*>(slab + block_table[j * max_pages + local / PAGE] * page_stride +
+                                                 (long long)(local % PAGE) * KV_A + lane * 8);
+      }
+    }
+#pragma unroll
+    for (int k = 0; k < GITER; ++k)
+      if (put[k]) *reinterpret_cast<uint4*>(latent_g + (long long)(r0 + k * GROWS) * KV_A + lane * 8) = v[k];
     return;
   }
 
