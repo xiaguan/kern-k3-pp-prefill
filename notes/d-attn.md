@@ -18,6 +18,19 @@
 | launch_dependents at entry of kda_core / mla_prep / dcp_exchange | 13.2 | 4.101 ms/step |
 | rebased on main 049ff65+ (without embedding/argmax) | 13.2 | 4.099 ms/step |
 | MLA split slots 32 → 16 | 13.2 | 4.066 ms/step |
+| main ad97493 (all of the above merged, with d-mlp's handshake + top-k) | — | 4.026 ms/step |
+
+## Status (2026-10-10 ~21:30 UTC): lane closed at its launch floor
+
+Per layer the half launches: KDA `kda_core`; MLA `mla_prep`, `absorb`, the
+DSL split kernel, `dcp_exchange` (+ `mla_split_plan` once a step). Every
+neighbour pair is split by a cuBLAS GEMM or the prebuilt attention (see
+"Launch floor"). Time: the DSL attention is ~55% of the half and sits at
+~4.7 TB/s in a prebuilt cubin (no other build, no PDL); kda_core resists
+every prologue reshuffle (register cliff at 128); the exchange is within
+~2x of its NVLink floor at 48 rows. Open lever needing a runtime feature:
+tiered split slots (see "MLA split slots"). D's other non-GEMM ops are
+d-mlp's (MLP, all-reduces, embedding, argmax, head).
 
 ## Done
 
@@ -122,7 +135,11 @@
   min(32, ceil_div(128, tokens))) or not counting mutually exclusive
   `when` launches, to tier this properly.
 
-## Open: intermittent check failure (orchestrator, 20:00 UTC)
+## Resolved: intermittent check failure (orchestrator, 20:00 UTC)
+
+Fixed by d-mlp's first-call Lamport handshake (main d116f05); main
+ad97493 checked 3/3 bit-identical with the exchange on top.
+
 
 main + my 1a53ac8 56d8cf6 05d3ad6 (exchange loads-in-flight, absorb, clock64
 deadline) failed 1 of 3 d/checks with ~2-3 s of extra step time (one
@@ -198,6 +215,17 @@ deadline as well (a member's data never came: fail loudly, not garbage).
 - **kda_core prologue loads up front** (w_f_b tile by cp.async into 32 KB
   smem, the scalars in registers): 150 regs, slower at every size. Dropped.
 
+- **kda_core phase breakdown** (clock64 stamps, one GPU, 16 rows, cycles
+  per block): conv 2000, l2norm 400, gate (wsm loads + w_f_b GEMV) 2400,
+  delta rule 4000-5300, epilogue 1000: the prologue is half. Register-free
+  prefetches (w_f_b tile + wsm row to L1 at entry, the state to L2 once the
+  line is known) still moved ptxas to 156 regs and were slower at every
+  size (16 rows 7.6 → 8.5 us, 48 rows 16.3 → 21.4). Every prologue
+  reshuffle so far has cost registers past the 128 that keeps 4 blocks an
+  SM; the kernel is left as it is. Forcing 128 regs with
+  __launch_bounds__(128, 4): with the L2 state prefetch 32 B of spills and
+  slower everywhere; L1-only prefetch 16 rows 7.6 → 7.9, 48 rows 16.2 → 16.8.
+
 ## Where the half stands (16 rows @128k, nsys, after the commits above)
 
 Per 16-layer step: DSL split kernel 254 us (prebuilt, ~4.7 TB/s, the only
@@ -208,6 +236,11 @@ work/t/k3_dcp_dbg2.cu): 16 rows send 1.3 us per item, first peer data at
 NVLink is ~5 us by itself), merge items 288 > 256 blocks so 32 blocks take
 two. The GEMMs around (qkvg + splitK reduce 20 us, wfu 14, q_b 12, o_proj
 7) are cuBLAS's.
+
+- **Exchange grid 304** (2 blocks on every SM, so 48 rows' 288 merge items
+  run in one round; at 256 32 blocks take two, exchange 23 us at 48 rows):
+  48-row steps -0.02-0.03 ms, weighted 4.066 → 4.063 (noise). Not worth
+  giving up the residency slack: kept 256.
 
 ## Profile (nsys, rank 0, 48 rows @128k, before the exchange kernel)
 
