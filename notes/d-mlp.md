@@ -3,12 +3,14 @@
 Check: `loop/d/check loop/out/d-l4-tp8.json` (~20 s on a free pool). Bench: `loop/d/bench loop/out/d-l16-tp8.json`
 (~20 s). main 2026-10-10 start: 24.7 launches/layer, 4.562 ms/step.
 
-## Status (2026-10-10 23:15 UTC)
+## Status (2026-10-10 23:50 UTC)
 
-D 16 layers: 24.7 -> 12.9 launches/layer, 4.562 -> 3.52 ms/step weighted (all runs' work; main dcf6ec0 3.581,
-plus this branch's L2 prefetch in the all-reduces).
-Real 93-layer step at 128k: 23.88 -> 19.21 ms (24 rows), 30.87 -> 25.55 ms (48 rows). Same-session shares: the
-L2 prefetch 19.60 -> 19.23 and 26.43 -> 25.92 (-1.9% each); the MLA split plan 25.92 -> 25.55 at 48 rows.
+D 16 layers: 24.7 -> 12.9 launches/layer, 4.562 -> 3.52 ms/step weighted (all runs' work; main dcf6ec0 3.53-3.58
+in this session's A/Bs, plus this branch: L2 prefetch in the all-reduces, the MLA split plan, moe_front's
+hand-off and tables). d/check 3/3 bit-identical on the branch.
+Real 93-layer step at 128k: 23.88 -> 19.09 ms (24 rows), 30.87 -> 25.43 ms (48 rows); main dcf6ec0 in the same
+session 19.60 / 26.43, so this branch -2.6% / -3.8% (prefetch -1.9% / -1.9%, split plan -1.4% at 48 rows, the
+rest moe_front).
 
 ## Roofline of the real D step (93 layers, 128k context, 2026-10-10 23:00 UTC)
 
