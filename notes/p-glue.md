@@ -2,6 +2,26 @@
 
 Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check loop/out/p-l12.json`.
 
+## For the orchestrator (measurement gap, proposal)
+
+- **P stage 1's bench does not run the MLA attention.** `fmha_lens` (the FMHA's seq_lens_kv |
+  cum_q | cum_kv tables) is computed by stage 0's `fmha_lens` call; `kern cut` makes it an `input`
+  of stage 1 with no `fill`, so the bench hands stage 1 a table of zeros: `mla_fmha` attends to
+  nothing (≈20 us a call at every context, 0.06% of the cost) and the context gather copies no
+  cached rows (it writes zeros). The expand GEMM is sized by the `ctx` var and does run. A real
+  8192-row chunk over a 131k prefix would spend ~66 TFLOP a layer in the FMHA (~30 ms); the P
+  score does not see it. (loop/p/check's p-l12 has stage 0's `fmha_lens` call, so numerics are
+  checked on real tables.) Fix proposal: a `fill` for the cut table (or computing it per stage).
+- **Proposal (touches the expand GEMM, so not done): absorbed MLA for short chunks.** The expand
+  re-derives k | v for the whole context every chunk: 131k × 576 × 30720 × 2 = 4.6 TFLOP, 2.3 ms a
+  layer, 6.9 ms of the 10.9 ms 10-row item and of the 13.8 ms 354-row item (both over 131k). The
+  absorbed form (q_nope · W_uk into the latent, attention over the latent cache, · W_uv after: the
+  decode step's mla_absorb / mla_attn / mla_vup_gate) costs ~27 GFLOP for 10 rows. Routed by
+  `when` on `tokens` (expand + FMHA above a few hundred rows, absorbed below), it would take ~6 ms
+  off each short item: ~3.5 ms (7%) of the weighted 52.5 ms. Numerics differ (scores summed over
+  the 512 latent dims instead of 128 + 64), and loop/p/check's 2048-row chunks would not exercise
+  the short path.
+
 ## State
 
 | commit | launches/layer (stage1) | cost ms/item | note |
