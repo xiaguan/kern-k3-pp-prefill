@@ -4,6 +4,7 @@
 #   loop/agents up NAME POOL HOURS ROUNDFILE   start (or restart) agent NAME
 #   loop/agents tell NAME MESSAGE              append a message to its ROUND.md
 #   loop/agents down [NAME]                    stop one agent, or all
+#   loop/agents sync                           move the clone's main to this checkout's
 #   loop/agents status                         branches, last commits, windows
 #
 # Agents work in worktrees of a private clone ($K3_LOOP_DATA/../repo), one
@@ -49,8 +50,8 @@ window() {
 up() {
   local name=$1 pool=$2 hours=$3 roundfile=$4 dir=$runs/$1
   container_up
-  [[ -d $clone ]] || git clone -q "$REPO" "$clone"
-  git -C "$clone" fetch -q "$REPO" main:main 2>/dev/null || git -C "$clone" fetch -q "$REPO" main
+  [[ -d $clone ]] || { git clone -q "$REPO" "$clone" && git -C "$clone" checkout -q --detach; }
+  git -C "$clone" fetch -q "$REPO" main:main
   git -C "$clone" config user.name "$(git -C "$REPO" config user.name)" && git -C "$clone" config user.email "$(git -C "$REPO" config user.email)"
   [[ -d $dir ]] || git -C "$clone" worktree add -q -b "agent/$name" "$dir" main
   cp "$LOOP_DIR/local.env" "$dir/loop/local.env"
@@ -100,6 +101,7 @@ cmd=${1:-status}; shift || true
 case $cmd in
   up) up "$@" ;;
   tell) tell "$@" ;;
+  sync) git -C "$clone" fetch -q "$REPO" main:main ;;
   down) down "$@" ;;
   status) status ;;
   *) sed -n '2,15s/^# \{0,1\}//p' "$0" >&2; exit 2 ;;
