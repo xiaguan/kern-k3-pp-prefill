@@ -12,8 +12,8 @@
 //     slab, page_stride: the layer's latent pages; lens: kern_k3_fmha_lens_varlen's tables
 //     (seq_lens_kv | cum_q | cum_kv, ns words each) of the call's nseq + 2 FMHA sequences and its
 //     split record. A split sequence's rows go to its pieces: keys c + 1 .. in its own span, keys
-//     c .. 1 and 0 .. Lq - 1 in the two spans past the last sequence's, its q_norm rows also to
-//     rows B + Lq - 1 - i (reversed) and B + Lq + i.
+//     c .. 1 and 0 .. Lq - 1 in the two spans past the last sequence's (its q rows are copied after
+//     q_b by k3_mla_absorb.cu's -DQBF16 launch).
 //   grid (B + ceil(n / 28), 1, 1)   block (512, 1, 1)
 //
 //   kern_k3g_mla_prep_rows(partial, gamma_q_a, gamma_kv_a, slot_mapping, slab, page_stride, q_norm,
@@ -70,7 +70,7 @@ __device__ __forceinline__ float landf(float x) { return __bfloat162float(__floa
 __device__ __forceinline__ void prep_head(const bf16_t* __restrict__ partial, const bf16_t* __restrict__ gamma_q_a,
                                           const bf16_t* __restrict__ gamma_kv_a, const long long* __restrict__ slot_mapping,
                                           bf16_t* __restrict__ slab, long long page_stride, bf16_t* __restrict__ q_norm,
-                                          bf16_t* __restrict__ grow, int b, int t, int qr1 = -1, int qr2 = -1) {
+                                          bf16_t* __restrict__ grow, int b, int t) {
   __shared__ float red[NT / 32];
   const bf16_t* __restrict__ P = partial + (long long)b * MLA_FUSED;
   const bool isq = (t < QU);
@@ -109,10 +109,6 @@ __device__ __forceinline__ void prep_head(const bf16_t* __restrict__ partial, co
   const uint2 o = make_uint2(mul2(pack2(x0 * sc, x1 * sc), g.x), mul2(pack2(x2 * sc, x3 * sc), g.y));
   if (isq) {
     *reinterpret_cast<uint2*>(q_norm + (long long)b * Q_LORA + col) = o;
-    if (qr1 >= 0) {
-      *reinterpret_cast<uint2*>(q_norm + (long long)qr1 * Q_LORA + col) = o;
-      *reinterpret_cast<uint2*>(q_norm + (long long)qr2 * Q_LORA + col) = o;
-    }
     if (t < ROPE / 4) {
       if (grow) *reinterpret_cast<uint2*>(grow + KV_LORA + 4 * t) = rope4;
       if (append) *reinterpret_cast<uint2*>(row + KV_LORA + 4 * t) = rope4;
@@ -149,7 +145,7 @@ extern "C" __global__ void __launch_bounds__(NT) kern_k3g_mla_prep_gather(
     const int b = blockIdx.x, j = seq_of(b), i = b - sq0;
     if (j == split)  // its chunk rows are keys sp + i of piece N, which starts at key c + 1
       prep_head(partial, gamma_q_a, gamma_kv_a, slot_mapping, slab, page_stride, q_norm,
-                latent_g + (long long)(cum_kv[j] + sp + i - sc - 1) * KV_A, b, t, B + slq - 1 - i, B + slq + i);
+                latent_g + (long long)(cum_kv[j] + sp + i - sc - 1) * KV_A, b, t);
     else
       prep_head(partial, gamma_q_a, gamma_kv_a, slot_mapping, slab, page_stride, q_norm,
                 absorbed ? nullptr : latent_g + (long long)(cum_kv[j] + pos_of(b, j)) * KV_A, b, t);

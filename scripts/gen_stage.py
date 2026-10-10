@@ -178,8 +178,8 @@ MLA_MAIN_SMEM = 232448
 # A short packed chunk's absorbed attention splits a row's KV at most this many ways.
 MLA_SHORT_SPLITS = 16
 # A packed call of at most SPLIT_ROWS rows on the FMHA splits its heaviest sequence's attention in three
-# causal pieces (k3_prefill.cu kern_k3_fmha_lens_varlen); their q rows take up to 2 SPLIT_ROWS = SPLIT_EXTRA
-# more rows of q_norm / q_bf16 / o_bf16, the keys two pieces share fewer than SPLIT_ROWS more of latent_g / kv_exp.
+# causal pieces (k3_fmha_plan.cuh); their q rows take up to 2 SPLIT_ROWS = SPLIT_EXTRA more rows of q_bf16 /
+# o_bf16, the keys two pieces share fewer than SPLIT_ROWS more of latent_g / kv_exp.
 SPLIT_ROWS, SPLIT_EXTRA = 512, 1024
 MLA_REDUCE_SMEM = 1024    # 256-split reducer scratch
 
@@ -802,10 +802,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             }
             for l in ops["mla_fmha"]["impl"]["launches"]:
                 l.setdefault("when", long_["when"])
+            # ... and, for an FMHA call of at most SPLIT_ROWS rows, the split sequence's q rows copied to its
+            # pieces' rows (k3_fmha_plan.cuh)
             ops["mla_absorb_short"] = {
-                "params": ["in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32"],
+                "params": ["inout buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32", "in buffer<i32>", "i32",
+                           "i32"],
                 "impl": {"launches": [launch("k3_mla_absorb", "kern_k3_mla_absorb", grid=[{"ceil_div": [T, 32]}, HEADS, 8],
-                                             block=[128, 1, 1], defines={"QBF16": 1}, **short)]},
+                                             block=[128, 1, 1], defines={"QBF16": 1},
+                                             when={"var": T, "max": SPLIT_ROWS})]},
             }
             # the FMHA's softmax scale (f32 192^-0.5), not the decode step's bf16-rounded one
             # the splits merged by the gate kernel, not the DSL's reduction launch
@@ -1506,8 +1510,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                 if chunk:
                     # q in bf16 straight from the GEMM; the sequence's latent rows gathered,
                     # expanded to this rank's heads' k | v by one GEMM, the FMHA over them, then the gate
-                    q_b = lambda: step(L + "q_b", "gemm_bf16", b("q_norm"), w("w_q_b"), b("q_bf16"),
-                                       dim({"add": [T, SPLIT_EXTRA]}) if packed else B, i32(q_b_l),
+                    q_b = lambda: step(L + "q_b", "gemm_bf16", b("q_norm"), w("w_q_b"), b("q_bf16"), B, i32(q_b_l),
                                        i32(Q_LORA), i32(q_b_l))
                     if not packed:
                         q_b()
@@ -1522,7 +1525,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                     if packed and mla_short:
                         # a short chunk: q folded into the latent space, the attention over the latent pages
                         # row by row (each row its own causal length), out through W_UV and the gate
-                        step(L + "absorb", "mla_absorb_short", b("q_bf16"), w("w_kv_b"), b("mla_q_abs"), B)
+                        step(L + "absorb", "mla_absorb_short", b("q_bf16"), w("w_kv_b"), b("mla_q_abs"), B,
+                             b("fmha_lens"), i32(pack + 3), i32(mla_short))
                         step(L + "attn_short", "mla_attn_short", b("mla_q_abs"), b("mla_q_abs", KV_LORA * 2),
                              {"state": kv, "offset": layer_off * 2}, {"state": kv, "offset": layer_off * 2 + KV_LORA * 2},
                              b("mla_row_table"), b("mla_row_lens"), b("mla_row_bsk"), b("mla_o_lat"), b("mla_s_lse"),

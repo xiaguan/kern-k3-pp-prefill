@@ -1,10 +1,12 @@
 // p_split_layout.cu: the packed prefill's split layout on the real cubins. kern_k3_fmha_lens_varlen's
-// tables and kern_k3g_mla_prep_gather's latent_g / q_norm for single- and multi-sequence calls (the
-// split sequence first, in the middle, last; unsplit calls), every latent_g row checked against the
-// slab row of the (sequence, key) its FMHA piece should hold, the q copies against their rows.
+// tables, kern_k3g_mla_prep_gather's latent_g and k3_mla_absorb's (-DQBF16) q copies for single- and
+// multi-sequence calls (the split sequence first, in the middle, last; unsplit calls), every latent_g
+// row checked against the slab row of the (sequence, key) its FMHA piece should hold, the q copies
+// against their rows.
 //
 //   nvcc -O2 -std=c++17 -arch=sm_103a p_split_layout.cu -o p_split_layout -lcuda
-//   ./p_split_layout build/k3_prefill.cubin build/k3_mla_glue.cubin     prints PASS / FAIL
+//   ./p_split_layout build/k3_prefill.cubin build/k3_mla_glue.cubin 'build/k3_mla_absorb+QBF16=1.cubin'
+//   prints PASS / FAIL
 #include <cuda.h>
 #include <cuda_bf16.h>
 #include <cstdio>
@@ -20,7 +22,8 @@
 constexpr int KV_A = 576, PAGE = 64, MLA_FUSED = 14400, Q_LORA = 1536, PACK = 16, NS = PACK + 3, SHORT = 128, EXTRA = 512;
 typedef unsigned short u16;
 
-static CUfunction lens_fn, prep_fn;
+static CUfunction lens_fn, prep_fn, absorb_fn;
+constexpr int QW = 96 * 192;
 static int failures = 0;
 
 static CUdeviceptr dalloc(size_t bytes) { CUdeviceptr p; CK(cuMemAlloc(&p, bytes)); CK(cuMemsetD8(p, 0, bytes)); return p; }
@@ -57,6 +60,10 @@ static void run(const char* name, std::vector<int> lq, std::vector<int> ctx) {
   CUdeviceptr d_part = dalloc(partial.size() * 2), d_gq = dalloc(Q_LORA * 2), d_gkv = dalloc(Q_LORA * 2);
   CUdeviceptr d_qn = dalloc((size_t)(T + 1024) * Q_LORA * 2), d_lat = dalloc((size_t)rows * KV_A * 2);
   CUdeviceptr d_rt = dalloc(4 * SHORT * max_pages), d_rl = dalloc(4 * SHORT), d_bsk = dalloc(4 * SHORT);
+  std::vector<u16> q((size_t)(T + 1024) * QW);
+  for (size_t e = 0; e < (size_t)T * QW; ++e) q[e] = (u16)(0x3c00 + ((e * 2246822519u) >> 19) % 0x300);
+  CUdeviceptr d_q = dalloc(q.size() * 2), d_w = dalloc((size_t)96 * 256 * 512 * 2), d_qabs = dalloc((size_t)T * 96 * 576 * 2);
+  up(d_q, q.data(), q.size() * 2);
   up(d_seq, ctx.data(), 4 * n); up(d_cu, cu.data(), 8 * (n + 1)); up(d_slab, slab.data(), slab_elems * 2);
   up(d_table, table.data(), 4 * table.size()); up(d_slot, slot.data(), 8 * T); up(d_part, partial.data(), partial.size() * 2);
   up(d_gq, gamma.data(), Q_LORA * 2); up(d_gkv, gamma.data(), Q_LORA * 2);
@@ -69,13 +76,17 @@ static void run(const char* name, std::vector<int> lq, std::vector<int> ctx) {
   void* pa[] = {&d_part, &d_gq, &d_gkv, &d_slot, &d_slab, (void*)&page_stride, &d_qn, &d_table, &max_pages, &d_lens, &ns,
                 &nn, &d_lat, &nrows, &d_rt, &d_rl, &d_bsk, &split_max, &sm, &B};
   CK(cuLaunchKernel(prep_fn, 2 * T + 1 + (rows + 27) / 28, 1, 1, 512, 1, 1, 0, 0, pa, nullptr));
+  if (T <= 512) {
+    void* aa[] = {&d_q, &d_w, &d_qabs, &B, &d_lens, &ns, &sm};
+    CK(cuLaunchKernel(absorb_fn, (T + 31) / 32, 96, 8, 128, 1, 1, 0, 0, aa, nullptr));
+  }
   CK(cuCtxSynchronize());
 
   std::vector<int> L(3 * NS + 8);
   down(L.data(), d_lens, 4 * L.size());
   down(slab.data(), d_slab, slab_elems * 2);  // now holds the chunk rows the heads appended
   std::vector<u16> lat((size_t)rows * KV_A), qn((size_t)(T + 1024) * Q_LORA);
-  down(lat.data(), d_lat, lat.size() * 2); down(qn.data(), d_qn, qn.size() * 2);
+  down(lat.data(), d_lat, lat.size() * 2); down(qn.data(), d_qn, qn.size() * 2); down(q.data(), d_q, q.size() * 2);
   const int* kl = L.data(); const int* cq = kl + NS; const int* ck = kl + 2 * NS; const int* rec = kl + 3 * NS;
   const int s = rec[3] > 0 ? rec[0] : -1, c = rec[1], lqs = rec[3];
   int bad = 0;
@@ -100,9 +111,9 @@ static void run(const char* name, std::vector<int> lq, std::vector<int> ctx) {
   if (s >= 0) {
     if (cq[n] != T || cq[n + 1] != T + lqs || cq[n + 2] != T + 2 * lqs || rec[2] != cu[s] || lqs != lq[s]) fail("split q spans");
     for (int i = 0; i < lqs; ++i) {
-      const u16* row = qn.data() + (size_t)(cu[s] + i) * Q_LORA;
-      if (memcmp(qn.data() + (size_t)(T + lqs - 1 - i) * Q_LORA, row, Q_LORA * 2)) fail("reversed q copy " + std::to_string(i));
-      if (memcmp(qn.data() + (size_t)(T + lqs + i) * Q_LORA, row, Q_LORA * 2)) fail("q copy " + std::to_string(i));
+      const u16* row = q.data() + (size_t)(cu[s] + i) * QW;
+      if (memcmp(q.data() + (size_t)(T + lqs - 1 - i) * QW, row, QW * 2)) fail("reversed q copy " + std::to_string(i));
+      if (memcmp(q.data() + (size_t)(T + lqs + i) * QW, row, QW * 2)) fail("q copy " + std::to_string(i));
     }
     // every key of the split sequence exactly once over its pieces for each row: N + R + A = [0, P + i]
     const int P = ctx[s] - lq[s];
@@ -110,12 +121,13 @@ static void run(const char* name, std::vector<int> lq, std::vector<int> ctx) {
   } else if (cq[n] != T || cq[n + 2] != T || kl[n] || kl[n + 1]) fail("unsplit extra sequences not empty");
   printf("%-34s T %4d seqs %d split %2d c %6d: %s\n", name, T, n, s, c, bad ? "FAIL" : "ok");
   failures += bad > 0;
-  for (CUdeviceptr p : {d_seq, d_cu, d_lens, d_slab, d_table, d_slot, d_part, d_gq, d_gkv, d_qn, d_lat, d_rt, d_rl, d_bsk}) cuMemFree(p);
+  for (CUdeviceptr p : {d_q, d_w, d_qabs, d_seq, d_cu, d_lens, d_slab, d_table, d_slot, d_part, d_gq, d_gkv, d_qn, d_lat, d_rt, d_rl, d_bsk}) cuMemFree(p);
 }
 
 int main(int argc, char** argv) {
   CK(cuInit(0)); CUdevice d; CK(cuDeviceGet(&d, 0)); CUcontext ctx; CK(cuDevicePrimaryCtxRetain(&ctx, d)); CK(cuCtxSetCurrent(ctx));
-  CUmodule m1, m2; CK(cuModuleLoad(&m1, argv[1])); CK(cuModuleLoad(&m2, argv[2]));
+  CUmodule m1, m2, m3; CK(cuModuleLoad(&m1, argv[1])); CK(cuModuleLoad(&m2, argv[2])); CK(cuModuleLoad(&m3, argv[3]));
+  CK(cuModuleGetFunction(&absorb_fn, m3, "kern_k3_mla_absorb"));
   CK(cuModuleGetFunction(&lens_fn, m1, "kern_k3_fmha_lens_varlen")); CK(cuModuleGetFunction(&prep_fn, m2, "kern_k3g_mla_prep_gather"));
   run("one sequence", {354}, {131072 + 354});
   run("split in the middle", {100, 150, 104}, {5000, 20000, 3104});
