@@ -6,7 +6,21 @@ at the end. That lane closed at 22:31 UTC; the last task (cuBLASLt pinning
 headroom on P, measure only, last section) is done. At 23:04 UTC the
 orchestrator gave this run the error budget: `notes/error-budget.md` (the
 sources of numerical difference in main, P and D, each measured), tools and
-the D isolation variants' patch in `harness/error-budget/`.
+the D isolation variants' patch in `harness/error-budget/` (merged in main
+877e735).
+
+23:30 UTC session, back on D while waiting for a task:
+- D's MLA decode (the DSL split kernel, 10-17% of the 93-layer step) has no
+  replacement within reach: TRT-LLM's trtllm-gen MLA gen cubins (bf16,
+  HQk576 HV512, Sm100f, split-KV "MultiCtasKvGmemSep") are listed under
+  $K3_REF/trtllm/.../fmha/cubin but every one is a git-LFS pointer;
+  re-generating the CuTe-DSL kernel for 96 heads (kern's
+  tools/build_mla_dsl.py) needs the cutlass DSL Python package, not
+  installed; the repo has no tcgen05 kernel to start a hand-written one
+  from (a swapped-AB decode, KV positions as M, would avoid the 96 -> 128
+  head padding: days of work, not a session).
+- kda_core: TMA staging / L2 prefetch of the state, measured cold, dropped
+  (see "Tried and dropped").
 
 ## State
 
@@ -257,6 +271,30 @@ deadline as well (a member's data never came: fail loudly, not garbage).
   each block its share, noinline helper, 128 regs): o_proj 7.0 → 5.8 us but
   kda_core 11.1 → 12.6 us at 16 rows; D 3.942 vs main 3.930. The same HBM
   bytes, moved from one kernel to the other. Dropped.
+
+- **kda_core state staged by TMA / pulled into L2 at entry** (23:30 UTC
+  session; one GPU, work/t2/kdat2.cu = kdat.cu with filled inputs, an
+  out/state hash per variant, `SETS=40` rotating state sets so the state is
+  cold at every B as in the real step; with the old 4 sets 8-24 rows sit in
+  L2 and read ~2 us fast). Every variant bit-identical. Cold state, us at
+  8 / 16 / 24 / 36 / 48 rows:
+
+  | variant | regs | 8 | 16 | 24 | 36 | 48 |
+  |---|---|---|---|---|---|---|
+  | main | 128 | 8.37 | 9.86 | 11.26 | 14.20 | 17.76 |
+  | whole 64 KB slice by one cp.async.bulk into smem at entry, delta loop from smem, ROWS_PER_ITER 2 | 86 | 7.26 | 9.13 | 10.57 | 13.93 | 22.39 |
+  | the same, ROWS_PER_ITER 4 | 130 | 7.02 | 9.33 | 10.79 | 14.32 | 22.14 |
+  | cp.async.bulk.prefetch.L2 of the slice at entry (noinline helper) | 128 | 9.11 | 11.21 | 13.05 | 15.91 | 18.51 |
+
+  Staging overlaps the read with the prologue (-0.3..-1.1 us), but 68 KB of
+  smem a block allows 3 blocks an SM: 48 rows' 576 blocks take 1.26 waves
+  (+4.6 us). Traffic-weighted -0.2 us a call; with a `when` to 36 rows -0.6
+  us x 12 calls = 0.2% of the step for an extra counted launch a layer. Half
+  the slice staged (32 KB, rest prefetched to L2) is slower than main at
+  every B. The L2 prefetch is slower everywhere cold. Dropped.
+  Found on the way: sh_qs / sh_kn / sh_dec / sh_flow are read as float4 but
+  declared 4-byte aligned; any new static smem placed before them faults
+  (misaligned address). Add `__align__(16)` when touching the kernel.
 
 ## Where the half stands (16 rows @128k, nsys, after the commits above)
 
