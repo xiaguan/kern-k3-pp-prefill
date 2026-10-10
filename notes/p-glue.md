@@ -38,6 +38,11 @@ Tried, not kept (harness, bit-identical unless said):
   vs 97.5 us. Prefetching into shared memory cannot cover it (~128 KB an SM against ~1 MB an SM of
   DRAM time idle during the top-k).
 - Finalize: at the gather's floor (above), not retried.
+- mla_prep_gather's head two rows a block (256 threads a row, each thread two of k3_mla_prep.cu's
+  4-column lanes with their own butterflies: bit-identical, check PASS): stage-0 A/B in-program, three
+  calls an item, 8192@0 145 / 145 -> 143 / 145 us, 354 rows 160 / 160 -> 174 / 176 us (half the
+  head blocks). The head (~48 us a call at 8192 rows) is not short of rows in flight; the gather part
+  runs ~7 TB/s at 196k. Not kept.
 - Harness lesson: the first gate harness fed hashed bit patterns as bf16 (huge / NaN gates): every
   element took the division's slow path and the kernel read 256 us. Use normal data.
 
