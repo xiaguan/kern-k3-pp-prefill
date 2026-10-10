@@ -177,6 +177,10 @@ MLA_M_TILE = 128          # the MMA's row tile: 96 heads pad to one
 MLA_MAIN_SMEM = 232448
 # A short packed chunk's absorbed attention splits a row's KV at most this many ways.
 MLA_SHORT_SPLITS = 16
+# A packed call of at most SPLIT_ROWS rows on the FMHA splits its heaviest sequence's attention in three
+# causal pieces (k3_prefill.cu kern_k3_fmha_lens_varlen); their q rows and the keys two pieces share
+# take SPLIT_EXTRA more rows of q_norm / q_bf16 / o_bf16 and latent_g / kv_exp.
+SPLIT_ROWS, SPLIT_EXTRA = 512, 1024
 MLA_REDUCE_SMEM = 1024    # 256-split reducer scratch
 
 T = "tokens"
@@ -526,7 +530,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         # A packed lone chunk's: also its stage's setup, the MoE routing state zeroed and the FMHA's tables.
         **({"embed_rms_setup": {
             "params": ["in buffer<i64>", "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "in buffer<bf16>",
-                       "out buffer<bf16>", "in buffer<i32>", "in buffer<i64>", "out buffer<i32>", "i32", "i32",
+                       "out buffer<bf16>", "in buffer<i32>", "in buffer<i64>", "out buffer<i32>", "i32", "i32", "i32",
                        "out buffer<u32>", "i32", "i32"],
             "impl": {"launches": [residual(None, "kern_k3g_embed_rms")]},
         }, "attnres_rms_setup": {
@@ -760,10 +764,11 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         ops["flash_kda"] = varlen_abi.kda_op(hl, run_max, pack, module(varlen_abi.KDA_MODULE),
                                              module("k3_kda_rec", **(kda_defs or {})), SV, "seqs")
         ops["fmha_lens"] = {
-            "params": ["in buffer<i32>", "in buffer<i64>", "out buffer<i32>", "i32", "i32"],
+            "params": ["in buffer<i32>", "in buffer<i64>", "out buffer<i32>", "i32", "i32", "i32"],
             "impl": {"launches": [launch("k3_prefill", "kern_k3_fmha_lens_varlen", grid=[1, 1, 1], block=[32, 1, 1])]},
         }
-        ops["mla_fmha"] = varlen_abi.fmha_op(ml, chunk_max, max_ctx, module(trtllm_fmha_abi.MODULE), T, "seqs")
+        ops["mla_fmha"] = varlen_abi.fmha_split_op(ml, chunk_max, max_ctx, module(trtllm_fmha_abi.MODULE), T, "seqs",
+                                                   mla_short, SPLIT_ROWS, SPLIT_EXTRA)
         # k3_mla_glue.cu: the prep's head blocks and the context's gather blocks in one grid, and the
         # gate reading its columns of the fused projection
         mla_defs = {"MLA_FUSED": mla_fused_l} if mla_fused_l != 14400 else None
@@ -778,12 +783,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                        "out buffer<bf16>", "in buffer<i32>", "i32", "in buffer<i32>", "i32", "i32", "out buffer<bf16>",
                        "i32", "out buffer<i32>", "out buffer<i32>", "out buffer<i32>", "i32", "i32", "i32"],
             "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_prep_gather",
-                                         grid=[{"add": [{"add": [{"mul": [T, 2]}, 1]}, {"ceil_div": [ctx_rows, 28]}]},
+                                         grid=[{"add": [{"add": [{"mul": [T, 2]}, 1]},
+                                                        {"ceil_div": [{"add": [ctx_rows, SPLIT_EXTRA]}, 28]}]},
                                                1, 1], block=[512, 1, 1], defines=mla_defs)]},
         }
         ops["mla_gate"] = {
             "params": ["out buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "in buffer<f32>", "in buffer<f32>",
-                       "in buffer<i32>", "in buffer<i32>", "i32", "in buffer<bf16>", "i32", "i32", "i32"],
+                       "in buffer<i32>", "in buffer<i32>", "i32", "in buffer<bf16>", "in buffer<f32>",
+                       "in buffer<i32>", "i32", "i32", "i32", "i32"],
             "impl": {"launches": [launch("k3_mla_glue", "kern_k3g_mla_gate",
                                          grid=[{"add": [{"mul": [T, gate_l // 2048]}, -(-mla_short // 32) * HEADS * 4]},
                                                1, 1], block=[256, 1, 1], defines=mla_defs)]},
@@ -794,7 +801,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                 "impl": {"launches": [{"entry": "extern:cublaslt_bf16_tn", **long_}]},
             }
             for l in ops["mla_fmha"]["impl"]["launches"]:
-                l.update(long_)
+                l.setdefault("when", long_["when"])
             ops["mla_absorb_short"] = {
                 "params": ["in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32"],
                 "impl": {"launches": [launch("k3_mla_absorb", "kern_k3_mla_absorb", grid=[{"ceil_div": [T, 32]}, HEADS, 8],
@@ -1168,7 +1175,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                        else flash_kda_abi.workspace_buffers(hl, run_max))
     if mla:
         work("mla_fused_partial", mla_fused_l, "f32")
-        work("q_norm", Q_LORA)
+        work("q_norm", Q_LORA, var=chunk_max + SPLIT_EXTRA if packed else T)
     if decode and mla:
         work("q_partial", Q_B, "f32")
         work("q_abs", HEADS * LATENT_ROW)
@@ -1189,13 +1196,16 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         for name in ("mla_row_lens", "mla_row_bsk"):
             buffers[name] = {"dtype": "i32", "shape": [mla_short], "kind": "workspace"}
     if chunk:
-        work("q_bf16", q_b_l)
-        work("o_bf16", gate_l)
+        extra = SPLIT_EXTRA if packed else 0
+        work("q_bf16", q_b_l, var=chunk_max + extra if packed else T)
+        work("o_bf16", gate_l, var=chunk_max + extra if packed else T)
         # the sequence's latent rows contiguous and their k | v expansion, the whole context
-        work("latent_g", KV_A, var=max_ctx)
-        work("kv_exp", kv_exp_l, var=max_ctx)
-        # seq_lens_kv | cum_q | cum_kv, `pack + 1` words each when packed
-        buffers["fmha_lens"] = {"dtype": "i32", "shape": [3 * (pack + 1) if packed else 8], "kind": "workspace"}
+        work("latent_g", KV_A, var=max_ctx + extra)
+        work("kv_exp", kv_exp_l, var=max_ctx + extra)
+        # seq_lens_kv | cum_q | cum_kv, `pack + 3` words each when packed, then the split record
+        buffers["fmha_lens"] = {"dtype": "i32", "shape": [3 * (pack + 3) + 8 if packed else 8], "kind": "workspace"}
+        if packed:
+            work("fmha_stats", 2 * ml, "f32", var=chunk_max + extra)
         buffers["fmha_scratch"] = {"dtype": "u8", "shape": [trtllm_fmha_abi.SCRATCH_BYTES], "kind": "workspace"}
     if front:
         work("front_partial", front, "f32", var=OV)
@@ -1390,7 +1400,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         if packed:
             if not (lone and embed):  # a lone chunk's stage 0 makes them in its embedding's launch
                 step("fmha_lens", "fmha_lens", b("seq_lens"), b("cu_seqlens"), b("fmha_lens"), {"var": "seqs"},
-                     i32(pack + 1))
+                     i32(pack + 3), i32(mla_short))
         elif chunk:
             step("fmha_lens", "fmha_lens", b("seq_lens"), b("fmha_lens"), B)
         elif mla and not (dcp and embed):  # a DCP step plans in its embedding's launch
@@ -1460,7 +1470,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             elif lone and packed and embed and i == first:
                 step(L + "res_in", "embed_rms_setup", b("token_ids"), b("embed"), b("hidden"), b("blocks"),
                      w("gamma_in"), b("normed"), b("seq_lens"), b("cu_seqlens"), b("fmha_lens"), {"var": "seqs"},
-                     i32(pack + 1), b("moe.route_sync"), i32(bp["route_sync_words"]), RB)
+                     i32(pack + 3), i32(mla_short), b("moe.route_sync"), i32(bp["route_sync_words"]), RB)
             elif lone and packed and snapshot:
                 close()
                 step(L + "res_in", "attnres_rms_setup", b("hidden"), b("blocks"), w("sw_attn"), w("gamma_in"),
@@ -1486,8 +1496,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                     # from the prep), expanded to this rank's heads' k | v by one GEMM, the FMHA, the gate
                     step(L + "prep", "mla_prep_gather", b("mla_fused_partial"), w("gamma_q_a"), w("gamma_kv_a"),
                          b("slot_mapping"), {"state": kv, "offset": layer_off * 2}, i64(page_stride), b("q_norm"),
-                         b("block_table"), i32(max_pages), b("fmha_lens"), i32(pack + 1), {"var": "seqs"},
-                         b("latent_g"), dim(ctx_rows), b("mla_row_table"), b("mla_row_lens"), b("mla_row_bsk"),
+                         b("block_table"), i32(max_pages), b("fmha_lens"), i32(pack + 3), {"var": "seqs"},
+                         b("latent_g"), dim({"add": [ctx_rows, SPLIT_EXTRA]}), b("mla_row_table"), b("mla_row_lens"), b("mla_row_bsk"),
                          i32(MLA_SHORT_SPLITS), i32(mla_short), B)
                 else:
                     step(L + "mla_prep", "mla_prep", b("mla_fused_partial"), w("gamma_q_a"), w("gamma_kv_a"),
@@ -1495,7 +1505,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                 if chunk:
                     # q in bf16 straight from the GEMM; the sequence's latent rows gathered,
                     # expanded to this rank's heads' k | v by one GEMM, the FMHA over them, then the gate
-                    q_b = lambda: step(L + "q_b", "gemm_bf16", b("q_norm"), w("w_q_b"), b("q_bf16"), B, i32(q_b_l),
+                    q_b = lambda: step(L + "q_b", "gemm_bf16", b("q_norm"), w("w_q_b"), b("q_bf16"),
+                                       dim({"add": [T, SPLIT_EXTRA]}) if packed else B, i32(q_b_l),
                                        i32(Q_LORA), i32(q_b_l))
                     if not packed:
                         q_b()
@@ -1503,7 +1514,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                              i64(page_stride), b("fmha_lens"), b("latent_g"), dim(ctx_rows))
                     # the expansion while the gathered rows are still in L2
                     step(L + "expand", "gemm_bf16_long" if packed and mla_short else "gemm_bf16", b("latent_g"), w("w_aug"),
-                         b("kv_exp"), dim(ctx_rows), i32(kv_exp_l), i32(KV_A), i32(kv_exp_l))
+                         b("kv_exp"), dim({"add": [ctx_rows, SPLIT_EXTRA]} if packed else ctx_rows), i32(kv_exp_l),
+                         i32(KV_A), i32(kv_exp_l))
                     if packed:
                         q_b()
                     if packed and mla_short:
@@ -1514,14 +1526,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                              {"state": kv, "offset": layer_off * 2}, {"state": kv, "offset": layer_off * 2 + KV_LORA * 2},
                              b("mla_row_table"), b("mla_row_lens"), b("mla_row_bsk"), b("mla_o_lat"), b("mla_s_lse"),
                              b("mla_s_acc_o"), b("mla_s_acc_lse"), B, i32(max_pages))
-                    lens = (lambda k: b("fmha_lens", k * (pack + 1) * 4)) if packed else (lambda k: b("fmha_lens", 8 * k))
+                    lens = (lambda k: b("fmha_lens", k * (pack + 3) * 4)) if packed else (lambda k: b("fmha_lens", 8 * k))
                     step(L + "attn", "mla_fmha", b("q_bf16"), b("kv_exp"), b("kv_exp", trtllm_fmha_abi.HQK * 2),
                          b("o_bf16"), lens(0), lens(1), lens(2), b("fmha_scratch"),
-                         b("fmha_scratch", trtllm_fmha_abi.PARTIAL_O_OFFSET))
+                         b("fmha_scratch", trtllm_fmha_abi.PARTIAL_O_OFFSET), *([b("fmha_stats")] if packed else []))
                     if packed:
                         step(L + "gate", "mla_gate", b("gated"), b("o_bf16"), b("mla_fused_partial"), b("mla_s_acc_o"),
                              b("mla_s_acc_lse"), b("mla_row_lens"), b("mla_row_bsk"), i32(MLA_SHORT_SPLITS), w("w_kv_b"),
-                             i32(gate_l), i32(mla_short), B)
+                             b("fmha_stats"), b("fmha_lens"), i32(pack + 3), i32(gate_l), i32(mla_short), B)
                     else:
                         step(L + "gate", "mla_gate", b("gated"), b("o_bf16"), b("mla_gate"), i32(ml), i32(NOPE_DIM),
                              i32(gate_l), i32(NOPE_DIM))

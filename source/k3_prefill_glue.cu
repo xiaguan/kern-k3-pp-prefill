@@ -20,8 +20,8 @@
 //         reads the hidden it just made from registers.
 //     grid (B, 1, 1)   block (448, 1, 1)   smem 0 dynamic
 //
-//   kern_k3g_embed_rms(ids, table, hidden, blocks, gamma, normed, seq_lens, cu_q, lens, nseq, ns, sync,
-//                      sync_words, B)
+//   kern_k3g_embed_rms(ids, table, hidden, blocks, gamma, normed, seq_lens, cu_q, lens, nseq, ns, short_max,
+//                      sync, sync_words, B)
 //         layer 0's K1a with the embedding gather: the row from the table, hidden and snapshot 0;
 //         and the stage's setup (zero_share below): the MoE routing state zeroed, the FMHA's tables.
 //   kern_k3g_attnres_rms_setup(prefix, blocks, sw, gamma, normed, nb, snapshot, sync, sync_words, B)
@@ -60,6 +60,8 @@
 // 8h..8h+8: its squares serially, a warp butterfly, then the 32 warp slots
 // (the ones past the row zero) by another.
 #include <cuda_bf16.h>
+
+#include "k3_fmha_plan.cuh"
 
 typedef __nv_bfloat16 bf16_t;
 typedef __nv_bfloat162 bf162_t;
@@ -283,7 +285,7 @@ extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_attnres_rms(
 // snapshot 0 are the embedding row, normed its rms by gamma.
 // A stage's setup rides along in its first launch: the MoE routing state (k3_moe_route.cu's barrier and
 // tables) zeroed, each block its share of the `words`, and for the packed prefill's stage 0 the FMHA's
-// length tables (k3_prefill.cu's kern_k3_fmha_lens_varlen) by block 0.
+// length tables (k3_fmha_plan.cuh) by block 0.
 __device__ __forceinline__ void zero_share(unsigned* __restrict__ p, int words, int B, int t) {
   const int per = (words + B - 1) / B, lo = blockIdx.x * per, hi = min(lo + per, words);
   for (int i = lo + t; i < hi; i += blockDim.x) p[i] = 0u;
@@ -293,24 +295,14 @@ extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_embed_rms(
     const long long* __restrict__ ids, const bf16_t* __restrict__ table, bf16_t* __restrict__ hidden,
     bf16_t* __restrict__ blocks, const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed,
     const int* __restrict__ seq_lens, const long long* __restrict__ cu_q, int* __restrict__ lens, int nseq, int ns,
-    unsigned* __restrict__ sync, int sync_words, int B) {
+    int short_max, unsigned* __restrict__ sync, int sync_words, int B) {
   __shared__ RowSmem s;
   const int b = blockIdx.x;
   if (b >= B) return;
   const int t = threadIdx.x;
   zero_pads(s, t);
   zero_share(sync, sync_words, B, t);
-  if (b == 0 && t == 0) {
-    int kv = 0;
-    for (int j = 0; j < nseq; ++j) {
-      lens[j] = seq_lens[j];
-      lens[ns + j] = (int)cu_q[j];
-      lens[2 * ns + j] = kv;
-      kv += seq_lens[j];
-    }
-    lens[ns + nseq] = (int)cu_q[nseq];
-    lens[2 * ns + nseq] = kv;
-  }
+  if (b == 0 && t == 0) fmha_plan(seq_lens, cu_q, lens, nseq, ns, short_max);
 
   const bf16_t* __restrict__ row = table + ids[b] * KH;
   V8 pv[RGROUPS];

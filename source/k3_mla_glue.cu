@@ -10,7 +10,10 @@
 //       of the first n zero; the rows this chunk appends are the head blocks' own.
 //     partial f32 [B, MLA_FUSED] the fused projection (q_a | kv_a | rope | gate);
 //     slab, page_stride: the layer's latent pages; lens: kern_k3_fmha_lens_varlen's tables
-//     (seq_lens_kv | cum_q | cum_kv, ns words each) of the call's nseq sequences.
+//     (seq_lens_kv | cum_q | cum_kv, ns words each) of the call's nseq + 2 FMHA sequences and its
+//     split record. A split sequence's rows go to its pieces: keys c + 1 .. in its own span, keys
+//     c .. 1 and 0 .. Lq - 1 in the two spans past the last sequence's, its q_norm rows also to
+//     rows B + Lq - 1 - i (reversed) and B + Lq + i.
 //   grid (B + ceil(n / 28), 1, 1)   block (512, 1, 1)
 //
 //   kern_k3g_mla_prep_rows(partial, gamma_q_a, gamma_kv_a, slot_mapping, slab, page_stride, q_norm,
@@ -21,13 +24,15 @@
 //     chunk's rows up to b); block 2B k3_mla_split_plan.cu's KV split plan over those lengths.
 //   grid (2 B + 1, 1, 1)   block (512, 1, 1)
 //
-//   kern_k3g_mla_gate(out, o, partial, n, B)
+//   kern_k3g_mla_gate(out, o, partial, ..., stats, lens, ns, n, short_max, B)
 //     sigmoid_mul.cu's kern_sigmoid_mul_bf16 on the gate columns of the fused projection, landed to
 //     bf16 here (k3_mla_prep.cu landed them into a buffer of their own):
-//     out = bf16(o * bf16(sigmoid(bf16(partial[b, HEADC + j])))), o / out [B, n].
+//     out = bf16(o * bf16(sigmoid(bf16(partial[b, HEADC + j])))), o / out [B, n]. A split sequence's
+//     row first merges its three pieces' o through the FMHA's (max, sum) stats.
 //   grid (B, ceil(n / 2048), 1)   block (256, 1, 1)
 //
-// Every value is the three kernels' bit for bit: the same landings, sums and roundings.
+// Every value is the three kernels' bit for bit (the same landings, sums and roundings), but a split
+// row's o: an f32 merge of three bf16 pieces.
 #include <cuda_bf16.h>
 
 #define Q_LORA 1536
@@ -66,7 +71,7 @@ __device__ __forceinline__ float landf(float x) { return __bfloat162float(__floa
 __device__ __forceinline__ void prep_head(const float* __restrict__ partial, const bf16_t* __restrict__ gamma_q_a,
                                           const bf16_t* __restrict__ gamma_kv_a, const long long* __restrict__ slot_mapping,
                                           bf16_t* __restrict__ slab, long long page_stride, bf16_t* __restrict__ q_norm,
-                                          bf16_t* __restrict__ grow, int b, int t) {
+                                          bf16_t* __restrict__ grow, int b, int t, int qr1 = -1, int qr2 = -1) {
   __shared__ float red[NT / 32];
   const float* __restrict__ P = partial + (long long)b * MLA_FUSED;
   const bool isq = (t < QU);
@@ -105,6 +110,10 @@ __device__ __forceinline__ void prep_head(const float* __restrict__ partial, con
   const uint2 o = make_uint2(mul2(pack2(x0 * sc, x1 * sc), g.x), mul2(pack2(x2 * sc, x3 * sc), g.y));
   if (isq) {
     *reinterpret_cast<uint2*>(q_norm + (long long)b * Q_LORA + col) = o;
+    if (qr1 >= 0) {
+      *reinterpret_cast<uint2*>(q_norm + (long long)qr1 * Q_LORA + col) = o;
+      *reinterpret_cast<uint2*>(q_norm + (long long)qr2 * Q_LORA + col) = o;
+    }
     if (t < ROPE / 4) {
       if (grow) *reinterpret_cast<uint2*>(grow + KV_LORA + 4 * t) = rope4;
       if (append) *reinterpret_cast<uint2*>(row + KV_LORA + 4 * t) = rope4;
@@ -126,6 +135,8 @@ extern "C" __global__ void __launch_bounds__(NT) kern_k3g_mla_prep_gather(
   const int t = threadIdx.x;
   const int* __restrict__ cum_q = lens + ns;
   const int* __restrict__ cum_kv = lens + 2 * ns;
+  const int* __restrict__ rec = lens + 3 * ns;
+  const int slq = rec[3], split = slq > 0 ? rec[0] : -1, sc = rec[1], sq0 = rec[2], sp = rec[4];
   const bool absorbed = B <= short_max;
   const auto seq_of = [&](int b) {
     int j = 0;
@@ -136,9 +147,13 @@ extern "C" __global__ void __launch_bounds__(NT) kern_k3g_mla_prep_gather(
   const auto pos_of = [&](int b, int j) { return lens[j] - (cum_q[j + 1] - cum_q[j]) + (b - cum_q[j]); };
 
   if (blockIdx.x < B) {  // ---- head: q_norm, kv_norm, rope, the latent row (also to latent_g for the expansion)
-    const int b = blockIdx.x, j = seq_of(b);
-    prep_head(partial, gamma_q_a, gamma_kv_a, slot_mapping, slab, page_stride, q_norm,
-              absorbed ? nullptr : latent_g + (long long)(cum_kv[j] + pos_of(b, j)) * KV_A, b, t);
+    const int b = blockIdx.x, j = seq_of(b), i = b - sq0;
+    if (j == split)  // its chunk rows are keys sp + i of piece N, which starts at key c + 1
+      prep_head(partial, gamma_q_a, gamma_kv_a, slot_mapping, slab, page_stride, q_norm,
+                latent_g + (long long)(cum_kv[j] + sp + i - sc - 1) * KV_A, b, t, B + slq - 1 - i, B + slq + i);
+    else
+      prep_head(partial, gamma_q_a, gamma_kv_a, slot_mapping, slab, page_stride, q_norm,
+                absorbed ? nullptr : latent_g + (long long)(cum_kv[j] + pos_of(b, j)) * KV_A, b, t);
     return;
   }
   if (blockIdx.x < 2 * B + 1) {  // ---- a short chunk's rows for the absorbed attention
@@ -184,14 +199,17 @@ extern "C" __global__ void __launch_bounds__(NT) kern_k3g_mla_prep_gather(
     v[k] = make_uint4(0, 0, 0, 0);
     put[k] = false;
     if (r < n) {
-      int j = 0;
-      while (j + 1 < nseq && cum_kv[j + 1] <= r) ++j;
-      const int local = r - cum_kv[j];
-      const int cached = lens[j] - (cum_q[j + 1] - cum_q[j]);
-      put[k] = local < cached || local >= lens[j];  // this chunk's rows: its head blocks write them
-      if (local < cached)
-        v[k] = *reinterpret_cast<const uint4*>(slab + block_table[j * max_pages + local / PAGE] * page_stride +
-                                               (long long)(local % PAGE) * KV_A + lane * 8);
+      int z = 0;
+      while (z + 1 < nseq + 2 && cum_kv[z + 1] <= r) ++z;
+      const int local = r - cum_kv[z];
+      // the piece's sequence and key: its own span, or the split's N (from key c + 1), R (c down), A (0 up)
+      const int j = z < nseq ? z : split;
+      const int key = z == split ? local + sc + 1 : z == nseq ? sc - local : local;
+      const int cached = z == split || z >= nseq ? sp : lens[z] - (cum_q[z + 1] - cum_q[z]);
+      put[k] = local >= lens[z] || key < cached;  // this chunk's rows: its head blocks write them
+      if (local < lens[z] && key < cached)
+        v[k] = *reinterpret_cast<const uint4*>(slab + block_table[j * max_pages + key / PAGE] * page_stride +
+                                               (long long)(key % PAGE) * KV_A + lane * 8);
     }
   }
 #pragma unroll
@@ -338,7 +356,8 @@ __device__ __forceinline__ void vup_gate_block(const float* __restrict__ acc_o, 
 extern "C" __global__ void __launch_bounds__(256) kern_k3g_mla_gate(
     bf16_t* __restrict__ out, const bf16_t* __restrict__ o, const float* __restrict__ partial,
     const float* __restrict__ acc_o, const float* __restrict__ acc_lse, const int* __restrict__ row_lens,
-    const int* __restrict__ bsk, int split_max, const bf16_t* __restrict__ w_kv_b, int n, int short_max, int B) {
+    const int* __restrict__ bsk, int split_max, const bf16_t* __restrict__ w_kv_b, const float2* __restrict__ stats,
+    const int* __restrict__ lens, int ns, int n, int short_max, int B) {
   const int gate_blocks = B * (n / 2048);
   if (B <= short_max) {  // a short chunk: o_lat through W_UV, then the gate (blocks past the gate's)
     if (blockIdx.x < gate_blocks) return;
@@ -353,7 +372,32 @@ extern "C" __global__ void __launch_bounds__(256) kern_k3g_mla_gate(
   const float4* gp = reinterpret_cast<const float4*>(partial + b * MLA_FUSED + HEADC + j);
   const float4 g0 = gp[0], g1 = gp[1];
   const float gx[8] = {g0.x, g0.y, g0.z, g0.w, g1.x, g1.y, g1.z, g1.w};
-  const uint4 av = *reinterpret_cast<const uint4*>(o + b * n + j);
+  uint4 av = *reinterpret_cast<const uint4*>(o + b * n + j);
+  const int* __restrict__ rec = lens + 3 * ns;
+  if (rec[3] > 0 && b >= rec[2] && b < rec[2] + rec[3]) {  // a split row: N | R | A merged
+    const int i = (int)b - rec[2], lq = rec[3], h = j / NOPE;
+    const long long rows[3] = {b, B + lq - 1 - i, B + lq + i};
+    float2 st[3];
+    float m = -__int_as_float(0x7f800000);
+#pragma unroll
+    for (int k = 0; k < 3; ++k) st[k] = stats[rows[k] * (n / NOPE) + h], m = fmaxf(m, st[k].x);
+    float acc[8] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f}, den = 0.f;
+#pragma unroll
+    for (int k = 0; k < 3; ++k) {
+      const float w = st[k].y * expf(st[k].x - m);
+      const uint4 pv = *reinterpret_cast<const uint4*>(o + rows[k] * n + j);
+      const __nv_bfloat162* pp = reinterpret_cast<const __nv_bfloat162*>(&pv);
+      den += w;
+#pragma unroll
+      for (int e = 0; e < 4; ++e) {
+        const float2 f = __bfloat1622float2(pp[e]);
+        acc[2 * e] = fmaf(w, f.x, acc[2 * e]), acc[2 * e + 1] = fmaf(w, f.y, acc[2 * e + 1]);
+      }
+    }
+    const float inv = 1.f / den;
+    av = make_uint4(pack2(acc[0] * inv, acc[1] * inv), pack2(acc[2] * inv, acc[3] * inv),
+                    pack2(acc[4] * inv, acc[5] * inv), pack2(acc[6] * inv, acc[7] * inv));
+  }
   const __nv_bfloat162* ap = reinterpret_cast<const __nv_bfloat162*>(&av);
   uint4 ov;
   __nv_bfloat162* op = reinterpret_cast<__nv_bfloat162*>(&ov);

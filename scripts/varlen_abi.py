@@ -15,6 +15,8 @@ filled (upstream's `_flash_kda_build_tile_prefix`, folded into the packed
 gather). Kernel 2 is replaced by source/k3_kda_rec.cu (one CTA per
 (sequence, head)), which reads its workspace.
 """
+import json
+
 import flash_kda_abi as kda
 import trtllm_fmha_abi as fmha
 
@@ -118,4 +120,26 @@ def fmha_op(heads, q_max, kv_max, module, q, seqs):
     at = {f["at"]: k for k, f in enumerate(fields)}
     fields[at[1132]] = {"at": 1132, "var": seqs}
     launch["grid"] = [launch["grid"][0], launch["grid"][1], seqs]
+    return op
+
+
+def fmha_split_op(heads, q_max, kv_max, module, q, seqs, short_max, split_rows, extra):
+    """fmha_op, plus a launch for calls of short_max < q <= split_rows rows over seqs + 2 FMHA
+    sequences (k3_prefill.cu kern_k3_fmha_lens_varlen: one sequence split in three causal pieces,
+    two past the last) writing the softmax stats (float2 max | sum per row and head) the gate merges
+    the pieces by. Q and O hold `extra` more rows for the pieces' rows. Extra param: stats (f32)."""
+    op = fmha_op(heads, q_max + extra, kv_max + extra, module, q, seqs)
+    plain = op["impl"]["launches"][0]
+    split = json.loads(json.dumps(plain))
+    z = {"add": [seqs, 2]}
+    fields = split["args"][0]["pack"]["fields"]
+    at = {f["at"]: k for k, f in enumerate(fields)}
+    fields[at[1132]] = {"at": 1132, "expr": z}
+    fields[at[1276]] = {"at": 1276, "expr": {"add": [q, extra]}}  # mSumOfSeqLensQ
+    fields.append({"at": 1112, "param": 9})  # ptrSoftmaxStats
+    split["grid"] = [split["grid"][0], split["grid"][1], z]
+    split["when"] = {"var": q, "min": short_max + 1, "max": split_rows}
+    plain["when"] = {"var": q, "min": split_rows + 1}
+    op["params"].append("out buffer<f32>")
+    op["impl"]["launches"] = [split, plain]
     return op

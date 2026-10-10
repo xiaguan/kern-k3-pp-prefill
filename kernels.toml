@@ -94,15 +94,15 @@ sha256 = "6b4d144e735a4b08d29bf8d6e302107a4d1396a6967b0b6d342fe263ff6c8bca"
 source = "source/k3_moe_prefill.cu"
 
 [kernels."k3_prefill"]
-sha256 = "c3c33eaf60000c313ba839258a54b2748e0483439e3f3068fc3dfa84a60adf2c"
+sha256 = "7673000effd0d10f37dfdecc66e5a962ee699497d517a837fdd0fb06b177ce4d"
 source = "source/k3_prefill.cu"
 
 [kernels."k3_prefill_glue"]
-sha256 = "e3c0d222253d2fbc5eaa94f1c61aa66390005b220a251b6b8959ec263dfd4256"
+sha256 = "35e3b4552fa71d62924043094962f6e135b8baad13a3984e5bcff09d0a2d2783"
 source = "source/k3_prefill_glue.cu"
 
 [kernels."k3_prefill_glue+EXPERTS=896"]
-sha256 = "52df935f06ff26e02f69fc22d65abf058d0f8d732443ee589683fe9cf2ffc57f"
+sha256 = "45c5b64e7ca4974d2c2bd02021ade68af702f37be095a897137bf92991a03fdb"
 source = "source/k3_prefill_glue.cu"
 defines = { EXPERTS = 896 }
 
@@ -203,7 +203,7 @@ sha256 = "2f1ccf7e2e3f9921e7fbefb78ef4931200504d46bb51eda6c09d8f6af84a2a55"
 source = "source/k3_moe_route.cu"
 
 [kernels."k3_mla_glue"]
-sha256 = "96c39a1b6456eb26bf78526278956db28dfa82dea1ff9564de9d645bba7f33ba"
+sha256 = "2e7110884d296290eedd03336d78e52b22b78eef9b52d33ac22af73bd849d14e"
 source = "source/k3_mla_glue.cu"
 
 [kernels."k3_mla_absorb+QBF16=1"]
