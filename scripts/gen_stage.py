@@ -1335,8 +1335,18 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         # falls, takes it on its own.
         closing = None
 
+        def summed_closing():
+            """A closing whose partial is still this member's (the dense MLP's down projection, left to the
+            next mix's all-reduce) summed by itself."""
+            nonlocal closing
+            if closing and closing[0] == "ar":
+                _, label, partial = closing
+                mlp = summed(label.replace("hidden", "reduce_mlp"), partial, b("mlp_all"), {"mul": [T, H]})
+                closing = (label, mlp, mlp, 0)
+
         def close():
             nonlocal closing
+            summed_closing()
             if closing:
                 label, p1, p2, two = closing
                 step(label, "land_add2", p1, p2, b("prefix2"), b("hidden"), i32(two), RB)
@@ -1345,6 +1355,13 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         def mix_in(label, sw, gamma, nb, snapshot=0):
             """The closing add fused into the next mix; a DCP step's takes a snapshot layer's too."""
             nonlocal closing
+            if closing[0] == "ar" and not snapshot:
+                # the sum, the closing add (K1b's, no snapshot) and the mix in one launch
+                step(label, "ar_attnres_rms", closing[2], *lamport(), b("prefix2"), b("blocks"), sw, gamma, b("hidden"),
+                     b("normed"), i32(nb), i32(0), RB, i64(ar_stage), i64(TP_TIMEOUT_NS))
+                closing = None
+                return
+            summed_closing()
             _, p1, p2, two = closing
             if dcp:
                 step(label, "land_add2_attnres_rms_snap", p1, p2, b("prefix2"), b("hidden"), i32(two), b("blocks"), sw,
@@ -1501,10 +1518,13 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
                 proj(L + "wgu", b("normed"), w("wgu"), b("dense_partial"), 2 * dn_l, H, m=RB)
                 land_situ(L + "situ", b("dense_partial"), b("dense_act"), dn_l, RB)
                 proj(L + "w_dn", b("dense_act"), w("w_dn"), b("routed_partial"), H, dn_l, m=RB)
-                mlp = (reduced(L + "reduce_mlp", b("routed_partial"), b("mlp_all")) if tray else
-                       summed(L + "reduce_mlp", b("routed_partial"), b("mlp_all"), {"mul": [T, H]}) if dcp else
-                       b("routed_partial"))
-                closing = (L + "hidden", mlp, mlp, 0)
+                if fused_ar:
+                    closing = ("ar", L + "hidden", b("routed_partial"))
+                else:
+                    mlp = (reduced(L + "reduce_mlp", b("routed_partial"), b("mlp_all")) if tray else
+                           summed(L + "reduce_mlp", b("routed_partial"), b("mlp_all"), {"mul": [T, H]}) if dcp else
+                           b("routed_partial"))
+                    closing = (L + "hidden", mlp, mlp, 0)
             else:
                 if front:
                     gemm(L + "front", b("normed"), w("w_front"), b("front_partial"), front, H, m=OB)
