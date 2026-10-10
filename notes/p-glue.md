@@ -24,10 +24,11 @@ Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check l
 - `work/ab.sh A B OUT`: A, B, A, B in one lease over work/ab.toml (8192@0, 10@131k, 354@131k);
   `work/swapmod.py MANIFEST main OUT` re-pins a manifest's modules to main's cubins (the A side of
   a cubin-only change). The lease's own A-to-A spread is 0.5-1.2% at 8192 rows.
-- **Absorbed MLA for short chunks: done in 91ba726, offered separately (it skips the expand GEMM
-  for chunks of <= 128 rows).** Stage 0 A/B in one lease: 10 rows over 131k 21.8 -> 7.6 ms (-65%),
-  8192 / 354 rows inside noise; ~ -1.9% weighted. Launches 225 -> 234 (every `when` alternative
-  counted). Numerics: KL <= 2.1e-3 (check), <= 2.8e-3 with 120-row chunks (kern test against the
+- **Absorbed MLA for short chunks (9f15357 + e9d8b2c), offered separately (it skips the expand
+  GEMM for chunks of <= 128 rows).** Stage 0 A/B in one lease: 10 rows over 131k 21.8 -> 7.6 ms
+  (-65%), 8192 / 354 rows inside noise; ~ -1.9% weighted. Launches 225 -> 231 (every `when`
+  alternative counted; the decode attention's reduction is merged by the gate kernel, the prep and
+  the gate each carry both forms' blocks). Numerics: KL <= 2.1e-3 (check), <= 2.8e-3 with 120-row chunks (kern test against the
   expanded form via work/pcheck.sh on --max-ctx 16384 manifests: at 64k, saving kv_exp for every
   span runs kern test out of device memory past ~10 chunks). The decode kernel's bf16-rounded
   softmax scale gave KL 8.8e-3; the short form uses the FMHA's f32 scale. Why not for 354 rows:
@@ -63,6 +64,7 @@ Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check l
 | route: pieces to warps without a top-k row | 19.2 | 52.48 | short chunks: top-k beside quant/situ |
 | route: batched piece loads | 19.2 | 52.42 | stage 0 A/B: inside noise |
 | gather: 4 rows a thread | 18.8 (stage 0) | stage 0 A/B −0.2..−0.3% | with the batched route |
+| absorbed MLA ≤ 128 rows | 19.2 (stage 0, 231) | stage 0 A/B: 10 rows −65% | offered separately (skips expand) |
 
 A MoE layer is now: `land_add_attnres_rms_bf16` → router* → lat_down* → wsh* → `moe_route` →
 fc1* → fc2* → `moe_finalize_rms` → lat_up* → sh_down* → next `land_add2_attnres_rms`.
