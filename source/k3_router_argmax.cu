@@ -263,3 +263,52 @@ extern "C" __global__ void __launch_bounds__(64, 1) kern_k3_argmax_f32_final(
         (best == 0ull) ? 0ll
                        : (long long)(ARGMAX_IDX_TOP - (int)(u32)(best & 0xffffffffull));
 }
+
+// ------------------------------------------------------------- argmax, one launch
+//   extern "C" __global__ void kern_k3_argmax_f32_fused(
+//       const f32* logits, i64* out, int* done, u64* pkey, int n);
+//   grid (B, ARGMAX_PARTS)  block ARGMAX_THREADS  smem 256 B static
+// Stage 1 and 2 above in one grid: block (b, p) takes the p-th of ARGMAX_PARTS contiguous
+// chunks of row b (every thread busy: 10 float4 at n = 163840), writes its (value, index)
+// key, and the row's last block to count itself in `done[b]` (a zeroed carry it re-zeroes)
+// takes the max of the row's keys. Keys order "larger value, then smaller index", so any
+// partition gives the stage-1/2 result.
+#define ARGMAX_PARTS 16
+#define ARGMAX_THREADS 256
+
+extern "C" __global__ void __launch_bounds__(ARGMAX_THREADS) kern_k3_argmax_f32_fused(
+    const float* __restrict__ logits, long long* __restrict__ out, int* __restrict__ done,
+    u64* __restrict__ pkey, int n) {
+  __shared__ u64 sm[32];
+  __shared__ int s_last;
+  const int b = blockIdx.x, p = blockIdx.y;
+  const int chunk = (n + ARGMAX_PARTS - 1) / ARGMAX_PARTS;
+  const int lo = p * chunk, hi = min(lo + chunk, n);
+  const float* __restrict__ row = logits + (long long)b * n;
+  u64 best = 0ull;
+  if (((n | chunk) & 3) == 0) {
+    const float4* v4 = (const float4*)(row + lo);
+    const int nv = (hi - lo) >> 2;
+    for (int u = threadIdx.x; u < nv; u += ARGMAX_THREADS) best = max(best, amax_key4(v4[u], lo + (u << 2)));
+  } else {
+    for (int j = lo + threadIdx.x; j < hi; j += ARGMAX_THREADS) best = max(best, amax_key(row[j], j));
+  }
+  best = block_max_u64<ARGMAX_THREADS>(best, sm);
+  if (threadIdx.x == 0) {
+    pkey[b * ARGMAX_PARTS + p] = best;
+    __threadfence();
+    s_last = atomicAdd(done + b, 1) == ARGMAX_PARTS - 1;
+  }
+  __syncthreads();
+  if (!s_last) return;
+  if (threadIdx.x < 32) {
+    __threadfence();
+    u64 k = threadIdx.x < ARGMAX_PARTS ? __ldcg(pkey + b * ARGMAX_PARTS + threadIdx.x) : 0ull;
+#pragma unroll
+    for (int off = 16; off > 0; off >>= 1) k = max(k, __shfl_xor_sync(0xffffffffu, k, off));
+    if (threadIdx.x == 0) {
+      out[b] = k == 0ull ? 0ll : (long long)(ARGMAX_IDX_TOP - (int)(u32)(k & 0xffffffffull));
+      done[b] = 0;
+    }
+  }
+}

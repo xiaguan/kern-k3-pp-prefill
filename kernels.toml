@@ -116,11 +116,11 @@ source = "source/k3_residual.cu"
 defines = { LAND_BF16 = 1 }
 
 [kernels."k3_router_argmax"]
-sha256 = "e3b8395c90e502b7afd4e844a57d060c682c7ab060a361befb9cbf4e61034b5a"
+sha256 = "f64dc087c64d4464b10e639c945284742e6af88b3a9682fbf38125b9bedc98f2"
 source = "source/k3_router_argmax.cu"
 
 [kernels."k3_router_argmax+EXPERTS=896"]
-sha256 = "3f47d404b663c232aca9889047e618d24c9a03789f354ee949e4afa02247d121"
+sha256 = "d7f650788bec1a15b13004a9ef0d1bb8dc109866b3189d0b0658ff1bd9dfad29"
 source = "source/k3_router_argmax.cu"
 defines = { EXPERTS = 896 }
 

@@ -568,17 +568,15 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             "params": ["in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32", "i32", "i32"],
             "impl": {"launches": [{"entry": "extern:cublaslt_bf16_tn"}]},
         }} if dcp else {}),
+        # the head's argmax in one launch, the row's last block taking the max of its parts
         "argmax_f32": {
-            "params": ["in buffer<f32>", "out buffer<i64>", "i32"],
+            "params": ["in buffer<f32>", "out buffer<i64>", "inout buffer<i32>", "i32"],
             "impl": {
-                "scratch": {"pmax": {"dtype": "f32", "shape": [R, 64]}, "pidx": {"dtype": "i32", "shape": [R, 64]}},
+                "scratch": {"pkey": {"dtype": "i64", "shape": [R, 16]}},
                 "launches": [
-                    launch("k3_router_argmax", "kern_k3_argmax_f32_partial", var=R,
-                           params=["in buffer<f32>", "out buffer<f32>", "out buffer<i32>", "i32"],
-                           args=[{"param": 0}, {"scratch": "pmax"}, {"scratch": "pidx"}, {"param": 2}]),
-                    launch("k3_router_argmax", "kern_k3_argmax_f32_final", var=R,
-                           params=["in buffer<f32>", "in buffer<i32>", "out buffer<i64>", "i32"],
-                           args=[{"scratch": "pmax"}, {"scratch": "pidx"}, {"param": 1}, {"i32": 64}]),
+                    launch("k3_router_argmax", "kern_k3_argmax_f32_fused", grid=[R, 16, 1], block=[256, 1, 1], var=R,
+                           params=["in buffer<f32>", "out buffer<i64>", "inout buffer<i32>", "out buffer<i64>", "i32"],
+                           args=[{"param": 0}, {"param": 1}, {"param": 2}, {"scratch": "pkey"}, {"param": 3}]),
                 ],
             },
         },
@@ -1190,6 +1188,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
     # a chunk's are its last row's, live for the one sequence.
     if head:
         work("logits", V, "f32", var=tp * seqs_max if tray else "seqs")
+        if decode:
+            buffers["argmax_done"] = {"dtype": "i32", "shape": [rows_max], "kind": "carry"}
 
     # ---- program
     prog = []
@@ -1633,7 +1633,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             step("out.argmax", "argmax_f32_one", b("logits"), b("next_token"), i32(V))
         else:
             gemm("out.lm_head", b("normed"), b("w_lm"), b("logits"), V, H, m=RB)
-            step("out.argmax", "argmax_f32", b("logits"), b("next_token"), i32(V))
+            step("out.argmax", "argmax_f32", b("logits"), b("next_token"), b("argmax_done"), i32(V))
         return prog
 
     for i in layers:
