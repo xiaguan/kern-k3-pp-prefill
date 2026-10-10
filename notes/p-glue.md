@@ -4,6 +4,43 @@ Target: P stage 0 since 19:54 (`loop/p/bench loop/out/p-stage0.json`), check `lo
 loop/out/p-l12.json`. Every timing claim goes through `loop/p/ab A B OUT [N]` (A, B, A, B in one
 lease; A-to-A spread 0.5-1.2% at 8192 rows); `work/swapmod.py MANIFEST main OUT` re-pins a manifest's cubins to main's.
 
+## Session 2026-10-10 23:00- (main 96fb15b)
+
+Stage 0 baseline this session (one bench): 124.12 ms/item. Glue per 8192-row item (in-program,
+bracketed): residuals 3.9 ms (K1b 171 + K1d 170 us a call), finalize 2.0, route 1.4, mla_gate 0.6,
+situ 0.35. Harness floors at 8192 rows, nb 1, two 0: K1b / K1d 128 us (bytes 587 MB: 73 us),
+finalize 157 us (a pure gather of its rows 149), route 98 us (420 MB: 52 us), gate 140 us (603 MB:
+75 us), situ 280 us (1.66 GB: 207 us).
+
+Committed (both bit-identical, P check PASS at every span):
+- `the p mla gate runs a whole tile branch-free`: the gate spent ~48 instructions an element, each
+  sigmoid's IEEE division in its own BSSY/BSYNC slow-path region, so a thread's 8 rows x 8 columns
+  ran serially (ncu: stalls "wait" + "branch resolving", DRAM 28%). A warp's tile without a split
+  row and with every x >= -87 runs straight-line with rcp_fast. Harness 139.7 -> 94.1 us at 8192;
+  stage-0 A/B in-program gate 579 -> 382..396 us per 8192-row item (item-level pairs within drift).
+  A separate long-form entry (its own registers) is 94 vs 100 us: not worth a generator change.
+- `the p situ kernel takes the reciprocal without its slow-path branch`: same pattern in layer 0's
+  situ, 280 -> 259 us at 8192 rows. Module shared with D.
+
+Tried, not kept (harness, bit-identical unless said):
+- Residual K1b/K1d persistent (grid 3/SM) with the next row's operands and candidate 0 staged by
+  cp.async in shared memory (each thread copies its own slots: wait_group, no barrier): slower
+  everywhere, 128 -> 145 us at 8192, +1-2 us even with one row a block. ncu of the committed K1d
+  (nb 1): 10.9k warp-instr a row, issue 56%, DRAM 54%, 61% occupancy, 154 spill ld/st a row; the
+  dynamic block scheduler already overlaps rows better than a one-row prefetch.
+- Residual with nb a template constant (nb == 1 dispatched): nb 1 -3..-5% at 8192, -7% at 354, but
+  the dynamic path in the same kernel +5% (registers are per kernel). As per-nb module variants it
+  would be ~0.1 ms a stage-0 item: not worth the ops-per-nb generator change.
+- Route phases (harness, 8192 rows): whole 97.5 us; without situ 51.3, without quant 84.5, without
+  the post-barrier tables 86.7, top-k + tables alone 33.5, top-k alone 23.1. Each piece sits near its
+  own floor (situ alone ~46 us vs 38 us of bytes); the loss is that top-k (compute, DRAM idle) and
+  the streaming do not overlap. Staggering the order by warp parity (odd warps stream first): 99.2
+  vs 97.5 us. Prefetching into shared memory cannot cover it (~128 KB an SM against ~1 MB an SM of
+  DRAM time idle during the top-k).
+- Finalize: at the gather's floor (above), not retried.
+- Harness lesson: the first gate harness fed hashed bit patterns as bf16 (huge / NaN gates): every
+  element took the division's slow path and the kernel read 256 us. Use normal data.
+
 ## Where it stands (main aa144e0, all of this run's commits merged)
 
 - Stage 0: 206 launches (17.2/layer), ~125 ms/item. A MoE layer: `land_add_attnres_rms_bf16`
