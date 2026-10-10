@@ -24,19 +24,15 @@ Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check l
 - `work/ab.sh A B OUT`: A, B, A, B in one lease over work/ab.toml (8192@0, 10@131k, 354@131k);
   `work/swapmod.py MANIFEST main OUT` re-pins a manifest's modules to main's cubins (the A side of
   a cubin-only change). The lease's own A-to-A spread is 0.5-1.2% at 8192 rows.
-- **Proposal (touches the expand GEMM, so not done): absorbed MLA for short chunks.** The expand
-  re-derives k | v for the whole context every chunk: 131k × 576 × 30720 × 2 = 4.6 TFLOP, 2.3 ms a
-  layer, and the FMHA then streams that 8 GB expansion: 2.3 ms more for 10 rows (real tables).
-  The absorbed form (the decode step's mla_absorb → split plan → FlashInfer's MLA decode kernel →
-  mla_vup_gate, every row of the chunk its own causal length, a per-row page table) costs per
-  context token B × 128 (96 heads padded) × 1088 × 2 FLOP against 576 × 30720 × 2 + B × 96 × 320
-  × 2 for expand + FMHA: it wins below B ≈ 160 rows. For the 10-row items over 131k: ~0.4 ms a
-  layer instead of 4.6 (bench: −6 ms of 10.9 ms an item, −2.3% weighted; real: 17.8 → ~5 ms).
-  Not for the 354-row items (8.6 ms vs 6.4). Costs: a `when` split on `tokens` (loop/count counts
-  each alternative launch: +~20 launches a stage), per-stage row tables + split plan, a bf16-q
-  absorb and an f32-gate vup_gate variant; numerics differ (the decode kernel's bf16-rounded
-  softmax scale, scores over 576 latent dims), and loop/p/check's 2048-row chunks never take the
-  short path (a `kern test --chunk 64` run would).
+- **Absorbed MLA for short chunks: done in 91ba726, offered separately (it skips the expand GEMM
+  for chunks of <= 128 rows).** Stage 0 A/B in one lease: 10 rows over 131k 21.8 -> 7.6 ms (-65%),
+  8192 / 354 rows inside noise; ~ -1.9% weighted. Launches 225 -> 234 (every `when` alternative
+  counted). Numerics: KL <= 2.1e-3 (check), <= 2.8e-3 with 120-row chunks (kern test against the
+  expanded form via work/pcheck.sh on --max-ctx 16384 manifests: at 64k, saving kv_exp for every
+  span runs kern test out of device memory past ~10 chunks). The decode kernel's bf16-rounded
+  softmax scale gave KL 8.8e-3; the short form uses the FMHA's f32 scale. Why not for 354 rows:
+  per context token B x 128 x 1088 x 2 FLOP (heads padded to 128, latent dims) against 576 x 30720
+  x 2 + B x 96 x 320 x 2 for expand + FMHA: the crossover is ~160 rows.
 - **Proposal (a GEMM epilogue, so not done): sh_down accumulates onto lat_up's output.** With
   `cublaslt_bf16_tn_acc` (beta 1, D in place) the shared expert's down projection adds into
   `routed_partial`; the next layer's `land_add2_attnres_rms` then reads one partial (two = 0):
