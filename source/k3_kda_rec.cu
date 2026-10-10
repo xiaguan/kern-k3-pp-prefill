@@ -27,8 +27,8 @@
 //   grid (nseq * HEADS + K12_GATE_CTAS)   block 512   dynamic smem sizeof(K12Smem) = 182272
 //
 // CTA j * HEADS + h runs sequence j's head h. Warps 0-7 run the recurrence,
-// warp w the 16 value columns 16w..16w+16 of the head's state, held as bf16 in
-// registers as the A operand of mma.m16n8k16: FlashKDA's products transposed
+// warp w the 16 value columns 16w..16w+16 of the head's state, held as f32 in
+// registers and rounded to bf16 as the A operand of mma.m16n8k16: FlashKDA's products transposed
 // (S [dv][dk] times kd^T instead of kd times S^T), which sums the same products
 // in the same k order per output element. Warps 8 and 10 stream each 16-row
 // tile's inputs into an eight-stage ring (TMA, 128-byte swizzle so ldmatrix is
@@ -37,9 +37,10 @@
 // K12_GATE_CTAS CTAs, on the SMs one sequence's heads leave idle, gate the
 // rows (K11 to the bit) as they are published (ld.acquire); the recurrence
 // never waits for them, so any residency order makes progress. (Gate CTAs
-// first in the grid puts the recurrence on other SMs and costs 2 ms an item.) FlashKDA's roundings are kept: the state bf16 between
-// tiles (fma.ftz then RN), u and the output in bf16 (HADD2 / HMUL2), beta =
-// bf16(sigmoid by tanh.approx).
+// first in the grid puts the recurrence on other SMs and costs 2 ms an item.)
+// FlashKDA's roundings are kept, but for the state's: it stays f32 between
+// tiles (FlashKDA rounds it to bf16 after each). u and the output in bf16
+// (HADD2 / HMUL2), beta = bf16(sigmoid by tanh.approx).
 #include <cuda_bf16.h>
 #include <stdint.h>
 
@@ -209,13 +210,12 @@ __device__ __forceinline__ float k12_recip(float x) {
 
 // The state, every value column of this warp: a[kb] the A fragment of dk 16kb..16kb+16.
 struct K12State {
-  unsigned a[8][4];
+  float2 a[8][4];
 };
 
 __device__ __forceinline__ void k12_recurrence(K12Smem& sm, const float* rec_in, float* rec_out, int len) {
   const int lane = threadIdx.x & 31, w = threadIdx.x >> 5, g = lane >> 2, t = lane & 3;
   const int m = lane >> 3, r = lane & 7;
-  // FlashKDA's fp32 -> bf16 state load: RN
   K12State S;
   {
     const float* row0 = rec_in + (size_t)(16 * w + g) * 128 + 2 * t;
@@ -223,10 +223,10 @@ __device__ __forceinline__ void k12_recurrence(K12Smem& sm, const float* rec_in,
     for (int kb = 0; kb < 8; ++kb) {
       const float2 a0 = *(const float2*)(row0 + 16 * kb), a1 = *(const float2*)(row0 + 8 * 128 + 16 * kb);
       const float2 a2 = *(const float2*)(row0 + 16 * kb + 8), a3 = *(const float2*)(row0 + 8 * 128 + 16 * kb + 8);
-      S.a[kb][0] = k12_pack(a0.x, a0.y);
-      S.a[kb][1] = k12_pack(a1.x, a1.y);
-      S.a[kb][2] = k12_pack(a2.x, a2.y);
-      S.a[kb][3] = k12_pack(a3.x, a3.y);
+      S.a[kb][0] = a0;
+      S.a[kb][1] = a1;
+      S.a[kb][2] = a2;
+      S.a[kb][3] = a3;
     }
   }
   // per-lane ldmatrix rows: 8(m/2)+r for kd / qd / v / inv / mqk / out, 8(m%2)+r for kr (transposed)
@@ -247,10 +247,12 @@ __device__ __forceinline__ void k12_recurrence(K12Smem& sm, const float* rec_in,
       const unsigned off = k12_sw(row_a, 2 * kb + (m & 1));
       k12_ldsm(bk, kd + off);
       k12_ldsm(bq, qd + off);
-      k12_mma(u[0], S.a[kb], bk[0], bk[1]);
-      k12_mma(u[1], S.a[kb], bk[2], bk[3]);
-      k12_mma(q[0], S.a[kb], bq[0], bq[1]);
-      k12_mma(q[1], S.a[kb], bq[2], bq[3]);
+      const unsigned sa[4] = {k12_pack(S.a[kb][0].x, S.a[kb][0].y), k12_pack(S.a[kb][1].x, S.a[kb][1].y),
+                              k12_pack(S.a[kb][2].x, S.a[kb][2].y), k12_pack(S.a[kb][3].x, S.a[kb][3].y)};
+      k12_mma(u[0], sa, bk[0], bk[1]);
+      k12_mma(u[1], sa, bk[2], bk[3]);
+      k12_mma(q[0], sa, bq[0], bq[1]);
+      k12_mma(q[1], sa, bq[2], bq[3]);
     }
     // Phase 2: u = (v - bf16(u)) * beta in bf16; the pairs run over two rows i at one dv
     unsigned vv[4];
@@ -290,7 +292,7 @@ __device__ __forceinline__ void k12_recurrence(K12Smem& sm, const float* rec_in,
       out[2] = k12_u(__hadd2(k12_b2(k12_pack(x[1][0], x[1][1])), k12_b2(k12_pack(q[1][0], q[1][1]))));
       out[3] = k12_u(__hadd2(k12_b2(k12_pack(x[1][2], x[1][3])), k12_b2(k12_pack(q[1][2], q[1][3]))));
     }
-    // Phase 6: S = bf16(fma.ftz(S, g_total[dk], U^T kr))
+    // Phase 6: S = S g_total[dk] + U^T kr
     {
       const unsigned kr = k12_smem(st.kr);
 #pragma unroll
@@ -301,11 +303,11 @@ __device__ __forceinline__ void k12_recurrence(K12Smem& sm, const float* rec_in,
         k12_mma(x0, U, bk[0], bk[1]);
         k12_mma(x1, U, bk[2], bk[3]);
         const float2 g0 = *(const float2*)&st.gt[16 * kb + 2 * t], g1 = *(const float2*)&st.gt[16 * kb + 8 + 2 * t];
-        unsigned* a = S.a[kb];
-        a[0] = k12_pack(k12_fma_ftz(k12_lo(a[0]), g0.x, x0[0]), k12_fma_ftz(k12_hi(a[0]), g0.y, x0[1]));
-        a[1] = k12_pack(k12_fma_ftz(k12_lo(a[1]), g0.x, x0[2]), k12_fma_ftz(k12_hi(a[1]), g0.y, x0[3]));
-        a[2] = k12_pack(k12_fma_ftz(k12_lo(a[2]), g1.x, x1[0]), k12_fma_ftz(k12_hi(a[2]), g1.y, x1[1]));
-        a[3] = k12_pack(k12_fma_ftz(k12_lo(a[3]), g1.x, x1[2]), k12_fma_ftz(k12_hi(a[3]), g1.y, x1[3]));
+        float2* a = S.a[kb];
+        a[0] = __ffma2_rn(a[0], g0, make_float2(x0[0], x0[1]));
+        a[1] = __ffma2_rn(a[1], g0, make_float2(x0[2], x0[3]));
+        a[2] = __ffma2_rn(a[2], g1, make_float2(x1[0], x1[1]));
+        a[3] = __ffma2_rn(a[3], g1, make_float2(x1[2], x1[3]));
       }
     }
     __syncwarp();
@@ -316,15 +318,14 @@ __device__ __forceinline__ void k12_recurrence(K12Smem& sm, const float* rec_in,
     __syncwarp();
     if (lane == 0) k12_arrive(&sm.ofull[o]);
   }
-  // FlashKDA's bf16 -> fp32 state store
   float* row0 = rec_out + (size_t)(16 * w + g) * 128 + 2 * t;
 #pragma unroll
   for (int kb = 0; kb < 8; ++kb) {
-    const unsigned* a = S.a[kb];
-    *(float2*)(row0 + 16 * kb) = make_float2(k12_lo(a[0]), k12_hi(a[0]));
-    *(float2*)(row0 + 8 * 128 + 16 * kb) = make_float2(k12_lo(a[1]), k12_hi(a[1]));
-    *(float2*)(row0 + 16 * kb + 8) = make_float2(k12_lo(a[2]), k12_hi(a[2]));
-    *(float2*)(row0 + 8 * 128 + 16 * kb + 8) = make_float2(k12_lo(a[3]), k12_hi(a[3]));
+    const float2* a = S.a[kb];
+    *(float2*)(row0 + 16 * kb) = a[0];
+    *(float2*)(row0 + 8 * 128 + 16 * kb) = a[1];
+    *(float2*)(row0 + 16 * kb + 8) = a[2];
+    *(float2*)(row0 + 8 * 128 + 16 * kb + 8) = a[3];
   }
 }
 

@@ -50,7 +50,7 @@ source = "source/k3_kda_core.cu"
 defines = { HEADS = 12 }
 
 [kernels."k3_kda_rec"]
-sha256 = "9b00506a37ae7f5c6ddc137fa0932eae4d79e9ff728292e451777a5d5e247c5e"
+sha256 = "a3b3bad0266eff41a0ba95cdc5bc6bd2acee1def946a0fdf5509b439a4fdc8cd"
 source = "source/k3_kda_rec.cu"
 
 [kernels."k3_kda_out_gate"]
