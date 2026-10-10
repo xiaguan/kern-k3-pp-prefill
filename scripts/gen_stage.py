@@ -697,28 +697,24 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
         }} if not bmm or coll or dcp else {}),
     }
     if packed:
-        # The packed call's per-sequence ops (docs in source/k3_span_gather.cu):
-        # every sequence's KDA line by its column of the line table, its rows by
-        # `cu_seqlens`. The gather also stages the states and FlashKDA's tile
-        # prefix; the state's way back advances the conv windows.
-        del ops["span_state_load"]
+        # The packed call's KDA: the gather (source/k3_span_gather.cu: conv, beta /
+        # flow, FlashKDA's tile prefix), then FlashKDA's kernel 1 and
+        # source/k3_kda_rec.cu, which runs the recurrence from and to every
+        # sequence's line (its column of the line table, its rows by
+        # `cu_seqlens`), gates the output rows and advances the conv windows.
+        for n in ["span_state_load", "span_state_store", "kda_out_gate"]:
+            del ops[n]
         conv_blocks = {"mul": [{"ceil_div": [SV, 48]}, 3 * (inner_l // 1024) + 1]}
         ops["span_gather"] = {
             "params": ["in buffer<bf16>", "in buffer<f32>", "in state", "in buffer<i32>", "i64", "in buffer<bf16>",
                        "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>",
-                       "out buffer<bf16>", "in buffer<i64>", "i32", "i32", "out buffer<f32>", "out buffer<i32>"],
+                       "out buffer<bf16>", "in buffer<i64>", "i32", "i32", "out buffer<i32>"],
             "impl": {"launches": [
-                launch("k3_span_gather", "kern_k3_span_gather_packed",
-                       grid=[{"add": [conv_blocks, {"mul": ["seqs", hl * 4]}]}, 1, 1], block=[128, 1, 1],
-                       defines=part_defs)]},
+                launch("k3_span_gather", "kern_k3_span_gather_packed", grid=[{"add": [conv_blocks, 1]}, 1, 1],
+                       block=[128, 1, 1], defines=part_defs)]},
         }
-        ops["span_state_store"] = {
-            "params": ["inout state", "in buffer<i32>", "i64", "in buffer<f32>", "in buffer<bf16>", "in buffer<i64>"],
-            "impl": {"launches": [launch("k3_span_gather", "kern_k3_span_state_out_packed",
-                                         grid=[{"mul": ["seqs", hl * 4 + 3 * (inner_l // 1024)]}, 1, 1],
-                                         block=[128, 1, 1], defines=part_defs)]},
-        }
-        ops["flash_kda"] = varlen_abi.kda_op(hl, run_max, pack, module(varlen_abi.KDA_MODULE), SV, "seqs")
+        ops["flash_kda"] = varlen_abi.kda_op(hl, run_max, pack, module(varlen_abi.KDA_MODULE),
+                                             module("k3_kda_rec", **(kda_defs or {})), SV, "seqs")
         ops["fmha_lens"] = {
             "params": ["in buffer<i32>", "in buffer<i64>", "out buffer<i32>", "i32", "i32"],
             "impl": {"launches": [launch("k3_prefill", "kern_k3_fmha_lens_varlen", grid=[1, 1, 1], block=[32, 1, 1])]},
@@ -1073,11 +1069,11 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     buffers["span_at"] = {"dtype": "i32", "shape": [1], "kind": "input", "fill": "span_at"}
     if run_max:
         buffers["span_beta"] = {"dtype": "bf16", "shape": [hl, run_max], "kind": "workspace"}
-        for n in ["span_q", "span_k", "span_v", "span_out"]:
+        for n in ["span_q", "span_k", "span_v"] + ([] if packed else ["span_out"]):
             work(n, inner_l, var=run_max)
         work("span_flow", HEAD_DIM, var=run_max)
         work("span_g", inner_l, var=run_max)
-        for n in ["span_state_in", "span_state_out"]:
+        for n in [] if packed else ["span_state_in", "span_state_out"]:
             buffers[n] = {"dtype": "f32", "shape": [hl, HEAD_DIM, HEAD_DIM], "kind": "workspace"}
         buffers.update(varlen_abi.kda_workspace(hl, run_max, pack) if packed
                        else flash_kda_abi.workspace_buffers(hl, run_max))
@@ -1222,15 +1218,14 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
             N = {"var": "seqs"}
             step(L + "span_gather", "span_gather", b("kda_partial"), w("cw"), {"state": kda}, line, i64(line_l),
                  b("wsm_partial"), b("span_q"), b("span_k"), b("span_v"), b("span_beta"), b("span_flow"),
-                 b("cu_seqlens"), N, S, b("span_state_in"), b("span_tile_prefix"))
+                 b("cu_seqlens"), N, S, b("span_tile_prefix"))
             step(L + "span_g", "gemm_bf16", b("span_flow"), w("w_f_b"), b("span_g"), S, i32(inner_l), i32(HEAD_DIM),
                  i32(inner_l))
             step(L + "span_kda", "flash_kda", b("span_q"), b("span_k"), b("span_v"), b("span_g"), b("span_beta"),
-                 w("dt_bias"), w("a_log"), b("span_state_in"), b("span_state_out"), b("span_out"),
+                 w("dt_bias"), w("a_log"),
                  *(b(n) for n in ["span_ws_kd", "span_ws_qd", "span_ws_kr", "span_ws_gt", "span_ws_inv", "span_ws_mqk"]),
-                 S, b("cu_seqlens"), b("span_tile_prefix"), N)
-            step(L + "span_state_out", "span_state_store", {"state": kda}, line, i64(line_l), b("span_state_out"),
-                 b("kda_partial"), b("cu_seqlens"))
+                 S, b("cu_seqlens"), b("span_tile_prefix"), N, {"state": kda}, line, i64(line_l), b("kda_partial"),
+                 w("gamma_o"), gated_kda, b("span_at"))
             return
         step(L + "span_gather", "span_gather", b("kda_partial"), w("cw"), {"state": kda}, line, i64(line_l),
              b("wsm_partial"), b("span_q"), b("span_k"), b("span_v"), b("span_beta"), b("span_flow"), b("span_at"), S)
@@ -1246,7 +1241,10 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
              b("span_state_out"), i32(1))
 
     def span_out_gate(L, w, S):
-        """The span rows of the layer's output, finished after K3 wrote the decode rows."""
+        """The span rows of the layer's output, finished after K3 wrote the decode rows
+        (the packed call's recurrence finishes them itself)."""
+        if packed:
+            return
         step(L + "span_out_gate", "kda_out_gate", b("span_out"), b("kda_partial"), w("gamma_o"), gated_kda,
              b("span_at"), S)
 

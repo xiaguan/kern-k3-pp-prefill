@@ -184,26 +184,17 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather(
 // ([nseq][HEADS][128][128]) on the way in and out.
 //
 // `kern_k3_span_gather_packed`: K9's conv + SiLU of every row (each sequence
-// reads its own window, left untouched here), beta / flow transposed, every
-// sequence's state staged, and FlashKDA's tile prefix (16-row tiles per
+// reads its own window, left untouched here: `kern_k3_kda_rec` advances it),
+// beta / flow transposed, and FlashKDA's tile prefix (16-row tiles per
 // sequence, upstream's `_flash_kda_build_tile_prefix`).
 //
 //   kern_k3_span_gather_packed(partial, cw, kda_base, line_index, line_bytes, wsm_partial,
 //                              span_q, span_k, span_v, span_beta, span_flow,
-//                              const long long* cu_seqlens, int nseq, int span,
-//                              float* state_in, int* tile_prefix);
-//   grid (37 * ceil(span / 48) + nseq * HEADS * 4)   block 128
+//                              const long long* cu_seqlens, int nseq, int span, int* tile_prefix);
+//   grid (37 * ceil(span / 48) + 1)   block 128
 //   block b < 37 * ceil(span / 48): rows 48 * (b / 37) ..; b % 37 < 36 is stream (b % 37) / 12,
-//   columns 1024 * (b % 12) + 8 * thread; b % 37 == 36 beta / flow. The rest copy 16 KiB of a
-//   sequence's state each; the first of them also writes the tile prefix.
-//
-// `kern_k3_span_state_out_packed`: every sequence's state back into its line,
-// and its window advanced to its last three inputs (the old window filling in
-// for a sequence shorter than three). Runs after the gather, so no reader of
-// the old window is left.
-//
-//   kern_k3_span_state_out_packed(kda_base, line_index, line_bytes, state_out, partial, cu_seqlens);
-//   grid (nseq * (HEADS * 4 + 36))   block 128
+//   columns 1024 * (b % 12) + 8 * thread; b % 37 == 36 beta / flow. The last block writes
+//   the tile prefix.
 #ifdef PARTIAL_BF16
 #define K9_PROWS 48
 #define K9_PUNROLL 12
@@ -211,7 +202,6 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather(
 #define K9_PCOLS (K9_BLOCK * K9_PVEC)
 #define K9_PCOL_BLOCKS (K9_INNER / K9_PCOLS)
 #define K9_PCONV (3 * K9_PCOL_BLOCKS + 1)
-#define K9_STATE_BLOCKS (HEADS * 4)
 #define K9_TILE 16
 
 __device__ __forceinline__ int k9_seq_of(const long long* cu, int nseq, int i) {
@@ -288,26 +278,6 @@ __device__ __forceinline__ uint4 k9_conv_row(uint4 raw, const float (&wt)[4][K9_
   return o;
 }
 
-// 16 KiB of sequence j's state, line <-> flat buffer, 8 float4 a thread.
-__device__ __forceinline__ void k9_state_copy(void* kda_base, const int* line_index, long long line_bytes, float* flat,
-                                              int b, bool to_line) {
-  const int j = b / K9_STATE_BLOCKS, part = b % K9_STATE_BLOCKS;
-  float4* rec = (float4*)((char*)kda_base + (long long)line_index[j] * line_bytes) + (size_t)part * 1024;
-  float4* buf = (float4*)flat + ((size_t)j * K9_STATE_BLOCKS + part) * 1024;
-  float4 v[8];
-  if (to_line) {
-#pragma unroll
-    for (int k = 0; k < 8; ++k) v[k] = buf[k * K9_BLOCK + threadIdx.x];
-#pragma unroll
-    for (int k = 0; k < 8; ++k) rec[k * K9_BLOCK + threadIdx.x] = v[k];
-  } else {
-#pragma unroll
-    for (int k = 0; k < 8; ++k) v[k] = rec[k * K9_BLOCK + threadIdx.x];
-#pragma unroll
-    for (int k = 0; k < 8; ++k) buf[k * K9_BLOCK + threadIdx.x] = v[k];
-  }
-}
-
 extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_packed(
     const part_t* __restrict__ partial,
     const float* __restrict__ cw,
@@ -321,12 +291,11 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_packe
     const long long* __restrict__ cu_seqlens,
     int nseq,
     int span,
-    float* __restrict__ state_in,
     int* __restrict__ tile_prefix) {
   const int nconv = (span + K9_PROWS - 1) / K9_PROWS * K9_PCONV;
   const int b = blockIdx.x;
   if (b >= nconv) {
-    if (b == nconv && threadIdx.x == 0) {
+    if (threadIdx.x == 0) {
       int acc = 0;
       tile_prefix[0] = 0;
       for (int j = 0; j < nseq; ++j) {
@@ -334,7 +303,6 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_packe
         tile_prefix[j + 1] = acc;
       }
     }
-    k9_state_copy(kda_base, line_index, line_bytes, state_in, b - nconv, false);
     return;
   }
   const int row0 = b / K9_PCONV * K9_PROWS, role = b % K9_PCONV;
@@ -412,26 +380,5 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_packe
     }
     *(uint4*)(dst + (size_t)r * K9_INNER) = k9_conv_row(*(const uint4*)(src + (size_t)r * K9_KDA_FUSED), wt, t0, t1, t2);
   }
-}
-
-extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_state_out_packed(
-    void* __restrict__ kda_base, const int* __restrict__ line_index, long long line_bytes,
-    const float* __restrict__ state_out, const part_t* __restrict__ partial, const long long* __restrict__ cu_seqlens) {
-  const int per_seq = K9_STATE_BLOCKS + 3 * K9_PCOL_BLOCKS;
-  const int j = blockIdx.x / per_seq, part = blockIdx.x % per_seq;
-  if (part < K9_STATE_BLOCKS) {
-    k9_state_copy(kda_base, line_index, line_bytes, (float*)state_out, j * K9_STATE_BLOCKS + part, true);
-    return;
-  }
-  const int s = (part - K9_STATE_BLOCKS) / K9_PCOL_BLOCKS;
-  const int c = (part - K9_STATE_BLOCKS) % K9_PCOL_BLOCKS * K9_PCOLS + threadIdx.x * K9_PVEC;
-  const int bos = (int)cu_seqlens[j], len = (int)(cu_seqlens[j + 1] - cu_seqlens[j]);
-  if (len <= 0) return;
-  bf16* win = k9_win(kda_base, line_index, line_bytes, j, s);
-  uint4 nt[3];
-#pragma unroll
-  for (int t = 0; t < 3; ++t) nt[t] = k9_tap(partial, win, bos, s, c, bos + len - 3 + t);
-#pragma unroll
-  for (int t = 0; t < 3; ++t) *(uint4*)(win + (size_t)t * K9_INNER + c) = nt[t];
 }
 #endif

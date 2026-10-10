@@ -6,22 +6,21 @@ only what the batch changes is spelled here.
 FlashKDA varlen (`flash_kda_d128_varlen`, the same sources built with
 -DKERN_VARLEN): the template's IsVarlen flag flips and nothing else in the
 parameter types, so the TiledCopy packs are the non-varlen ones. Sequence j
-is rows [cu_seqlens[j], cu_seqlens[j + 1]) (int64) of q / k / v / g / beta /
-out and block j of the f32 state in and out ([seqs][heads][128][128]).
+is rows [cu_seqlens[j], cu_seqlens[j + 1]) (int64) of q / k / v / g / beta.
 Kernel 1 runs a tile per 16 rows of a sequence: a sequence adds at most
 one partial tile, so `ceil(rows / 16) + seqs` bounds the grid, the
 workspace and `total_tiles` (the workspace's head stride, the same in both
 kernels); excess CTAs return. The tile prefix kernel 1 searches comes
 filled (upstream's `_flash_kda_build_tile_prefix`, folded into the packed
-gather), kernel 2 runs one CTA per (sequence, head).
+gather). Kernel 2 is replaced by source/k3_kda_rec.cu (one CTA per
+(sequence, head)), which reads its workspace.
 """
 import flash_kda_abi as kda
 import trtllm_fmha_abi as fmha
 
 KDA_MODULE = "flash_kda_d128_varlen"
 PREPARE = kda.PREPARE.replace("Li16ELi128ELi256ELb0EE", "Li16ELi128ELi256ELb1EE")
-RECURRENCE = kda.RECURRENCE.replace("Li192ELb1ELb1ELb1ELb0EE", "Li192ELb1ELb1ELb1ELb1EE")
-assert PREPARE != kda.PREPARE and RECURRENCE != kda.RECURRENCE
+assert PREPARE != kda.PREPARE
 
 
 def tiles_max(rows_max, seqs_max):
@@ -29,7 +28,7 @@ def tiles_max(rows_max, seqs_max):
 
 
 def kda_workspace(hl, rows_max, seqs_max):
-    """The six workspace arrays at the packed tile bound, the tile prefix and the staged states."""
+    """The six workspace arrays at the packed tile bound and the tile prefix."""
     n = tiles_max(rows_max, seqs_max) * hl
     c, d = kda.CHUNK, kda.HEAD_DIM
     return {
@@ -40,16 +39,25 @@ def kda_workspace(hl, rows_max, seqs_max):
         "span_ws_inv": {"dtype": "bf16", "shape": [n, c, c], "kind": "workspace"},
         "span_ws_mqk": {"dtype": "bf16", "shape": [n, c, c], "kind": "workspace"},
         "span_tile_prefix": {"dtype": "i32", "shape": [seqs_max + 1], "kind": "workspace"},
-        "span_state_in": {"dtype": "f32", "shape": [seqs_max * hl, d, d], "kind": "workspace"},
-        "span_state_out": {"dtype": "f32", "shape": [seqs_max * hl, d, d], "kind": "workspace"},
     }
 
 
-def kda_op(hl, rows_max, seqs_max, module, rows, seqs, scale=kda.QSCALE):
-    """Interface: flash_kda_abi.op's seventeen, then cu_seqlens (i64 [seqs + 1]) | tile_prefix (i32
-    [seqs + 1]) | seqs. `rows` / `seqs` are the call's row and sequence vars."""
+# source/k3_kda_rec.cu: sizeof(K12Smem), its block
+REC_SMEM = 215040
+REC_ROWS_MAX = 8192
+REC_BLOCK = 512
+
+
+def kda_op(hl, rows_max, seqs_max, module, rec_module, rows, seqs, scale=kda.QSCALE):
+    """Interface: q | k | v | g (bf16 [rows, hl*128]) | beta (bf16 [hl, rows]) | dt_bias (f32 [hl*128]) |
+    a_log (f32 [hl]) | ws_kd | ws_qd | ws_kr | ws_gt | ws_inv | ws_mqk | rows | cu_seqlens (i64 [seqs + 1]) |
+    tile_prefix (i32 [seqs + 1], filled) | seqs | the KDA state | its line table | line bytes | the q|k|v|gate
+    projections (bf16 [rows, 4*hl*128]) | gamma_o (f32 [128]) | gated (bf16 [rows, hl*128]) | span_at.
+    FlashKDA's kernel 1 fills the workspace; k3_kda_rec runs the recurrence from and to every sequence's
+    line, gates the output rows and advances the conv windows. `rows` / `seqs` are the call's vars."""
+    assert rows_max <= REC_ROWS_MAX, "k3_kda_rec keeps a sequence's betas in shared memory"
     n = tiles_max(rows_max, seqs_max) * hl
-    T, N, cu, tp = {"param": 16}, {"param": 19}, {"param": 17}, {"param": 18}
+    T, N, cu, tp = {"param": 13}, {"param": 16}, {"param": 14}, {"param": 15}
     tiles_expr = {"add": [{"ceil_div": [rows, kda.CHUNK]}, seqs]}
     tiles = {"pack": {"size": 4, "fields": [{"at": 0, "expr": tiles_expr}]}}
     tc = kda.tiled_copy
@@ -59,29 +67,40 @@ def kda_op(hl, rows_max, seqs_max, module, rows, seqs, scale=kda.QSCALE):
     beta = tc(4, "bf16", [hl * rows_max], [], [32])
     dt_bias = tc(5, "f32", [D, hl], [512], [D, 1])
     ws_rows = lambda param: tc(param, "bf16", [D, kda.CHUNK, n], [256, 4096], [8, kda.CHUNK, 1])
-    ws_gt = tc(13, "f32", [D, n], [512], [D, 1])
+    ws_gt = tc(10, "f32", [D, n], [512], [D, 1])
     ws_sq = lambda param: tc(param, "bf16", [kda.CHUNK, kda.CHUNK, n], [32, 512], [8, kda.CHUNK, 1])
-    state = lambda param: tc(param, "f32", [D, D, hl * seqs_max], [512, 65536], [8, D, 1], swizzle=32)
     copies = ["bytes<256>"] * 11
     prepare = {
         **module, "entry": PREPARE, "block": [256, 1, 1], "grid": [tiles_expr, hl, 1], "shared_mem": 21248,
         "params": copies + ["f32", "i32", "i32", "i32", "in buffer<i64>", "bytes<4>", "in buffer<f32>", "f32",
                             "in buffer<i32>"],
-        "args": [r(0, D), r(1, D), beta, r(3, D), dt_bias, ws_rows(10), ws_rows(11), ws_rows(12), ws_gt, ws_sq(14),
-                 ws_sq(15), {"f32": scale}, T, {"i32": hl}, N, cu, tiles, {"param": 6}, {"f32": kda.GATE_SCALE}, tp],
+        "args": [r(0, D), r(1, D), beta, r(3, D), dt_bias, ws_rows(7), ws_rows(8), ws_rows(9), ws_gt, ws_sq(11),
+                 ws_sq(12), {"f32": scale}, T, {"i32": hl}, N, cu, tiles, {"param": 6}, {"f32": kda.GATE_SCALE}, tp],
     }
-    recurrence = {
-        **module, "entry": RECURRENCE, "block": [192, 1, 1], "grid": [seqs, hl, 1], "shared_mem": 98432,
-        "params": copies + ["out buffer<bf16>", "i32", "i32", "i32", "in buffer<i64>", "bytes<4>"],
-        "args": [r(2, 8), beta, ws_rows(10), ws_rows(11), ws_rows(12), ws_gt, ws_sq(14), ws_sq(15),
-                 state(7), state(8), r(9, 8), {"param": 9}, T, {"i32": hl}, N, cu, tiles],
+    tmap = lambda param, dims, strides, box, swizzle: {"pack": {"size": 128, "fields": [{"at": 0, "tensormap": {
+        "param": param, "dtype": "bf16", "dims": dims, "strides": strides, "box": box, "swizzle": swizzle,
+        "l2_promotion": 128}}]}}
+    ws_tile = lambda param: tmap(param, [D, n * kda.CHUNK], [256], [64, kda.CHUNK], 128)
+    ws_tile_sq = lambda param: tmap(param, [kda.CHUNK, n * kda.CHUNK], [32], [kda.CHUNK, kda.CHUNK], 0)
+    rec = {
+        **rec_module, "entry": "kern_k3_kda_rec", "block": [REC_BLOCK, 1, 1], "grid": [seqs, hl, 1],
+        "shared_mem": REC_SMEM,
+        "params": ["bytes<128>"] * 7 + [
+            "in buffer<bf16>", "in buffer<bf16>", "in buffer<f32>", "inout state", "in buffer<i32>", "i64",
+            "in buffer<bf16>", "in buffer<f32>", "out buffer<bf16>", "in buffer<i32>", "in buffer<i64>",
+            "in buffer<i32>", "bytes<4>", "i32"],
+        "args": [ws_tile(7), ws_tile(8), ws_tile(9), tmap(2, [hl * D, rows_max], [hl * D * 2], [64, kda.CHUNK], 128),
+                 tmap(20, [4 * hl * D, rows_max], [8 * hl * D], [D, kda.CHUNK], 0), ws_tile_sq(11), ws_tile_sq(12),
+                 {"param": 2}, {"param": 4}, {"param": 10}, {"param": 17}, {"param": 18}, {"param": 19},
+                 {"param": 20}, {"param": 21}, {"param": 22}, {"param": 23}, cu, tp, tiles, T],
     }
     return {
         "params": ["in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>",
-                   "in buffer<f32>", "in buffer<f32>", "in buffer<f32>", "out buffer<f32>", "out buffer<bf16>",
-                   "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "out buffer<f32>", "out buffer<bf16>",
-                   "out buffer<bf16>", "i32", "in buffer<i64>", "in buffer<i32>", "i32"],
-        "impl": {"launches": [prepare, recurrence]},
+                   "in buffer<f32>", "in buffer<f32>", "out buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>",
+                   "out buffer<f32>", "out buffer<bf16>", "out buffer<bf16>", "i32", "in buffer<i64>",
+                   "in buffer<i32>", "i32", "inout state", "in buffer<i32>", "i64", "in buffer<bf16>",
+                   "in buffer<f32>", "out buffer<bf16>", "in buffer<i32>"],
+        "impl": {"launches": [prepare, rec]},
     }
 
 
