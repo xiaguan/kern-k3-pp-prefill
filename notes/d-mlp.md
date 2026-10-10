@@ -16,3 +16,4 @@ the pool is free). main 2026-10-10: 24.7 launches/layer, 4.562 ms/step.
 | main | 24.7 | 4.562 | |
 | closing `land_add2` + next `attnres_rms` → `kern_k3_land_add2_attnres_rms` (1024-thread row, snapshot layers too) | 23.7 | 4.558 | bit-identical |
 | `router_topk_front` + `land_n3584` + `moe_quant` + `moe_routing` (3) + `situ_front` → `kern_k3_moe_front` (row per block; warp 0 picks while warps 1-20 quantise + situ; the last block builds the tables, deterministic order) | 18.1 | 4.394 | bit-identical |
+| `tp_allreduce_bf16` + `land_add_attnres_rms_bf16` → `kern_k3_ar_attnres_rms`; `moe_finalize` + `tp_allreduce_bf16` + `rms` → `kern_k3_ar_finalize_rms` (source/k3_ar_fused.cu: all 152 blocks push a grid-stride share, block b < B polls row b and runs the epilogue at 1024 threads) | 15.2 | 4.332 | bit-identical |

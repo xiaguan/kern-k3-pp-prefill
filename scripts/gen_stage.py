@@ -343,6 +343,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     # A group of one is the DCP step's own oracle: the same ops on one GPU
     # holding every expert, with nothing to exchange or sum.
     xchg = dcp and tp > 1
+    fused_ar = xchg and peer_ar
     tray = tp > 1 and decode and not dcp
     coll = tp > 1 and chunk
     # The prefill glue's kernels (bf16 partials, any rows) carry the residual
@@ -788,6 +789,21 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
     if dcp:
         ops["nccl_allreduce_bf16"] = nccl("allreduce", "bf16")
     if xchg and peer_ar:
+        # The layer's two sums with their neighbours (source/k3_ar_fused.cu): the attention's with the
+        # landing, mix and norm after it; the MoE's with the combine before it and the latent norm after.
+        lamport_params = ["inout buffer<u8>", "in buffer<u64>", "inout buffer<i32>", "out buffer<i32>", "i32"]
+        ops["ar_attnres_rms"] = {
+            "params": ["in buffer<bf16>", *lamport_params, "in buffer<bf16>", "in buffer<bf16>", "in buffer<f32>",
+                       "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "i32", "i32", "i32", "i64", "i64"],
+            "impl": {"launches": [launch("k3_ar_fused", "kern_k3_ar_attnres_rms", defines={"NRANKS": tp},
+                                         grid=[TP_AR_GRID, 1, 1], block=[1024, 1, 1])]},
+        }
+        ops["ar_finalize_rms"] = {
+            "params": ["in buffer<bf16>", "in buffer<i32>", "in buffer<f32>", "in buffer<bf16>", *lamport_params,
+                       "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "i32", "i64", "i64"],
+            "impl": {"launches": [launch("k3_ar_fused", "kern_k3_ar_finalize_rms", defines={"NRANKS": tp},
+                                         grid=[TP_AR_GRID, 1, 1], block=[1024, 1, 1])]},
+        }
         # `--peer-ar`: one kernel, every rank's partial pushed into every
         # peer's Lamport stage over NVLink (one hop, no ring), summed in f32.
         ops["tp_allreduce_bf16"] = {
@@ -1178,6 +1194,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
              b("tp_blocks"), {"rank": "tp"}, {"var": R}, i32(H), i64(ar_stage), i32(0), i64(TP_TIMEOUT_NS))
         return whole
 
+    def lamport():
+        return b("tp_ar_lamport"), b("tp_ar_lamport_peers"), b("tp_ar_state"), b("tp_err"), {"rank": "tp"}
+
     def summed(label, partial, whole, count, second=None):
         """A DCP group's bf16 sum of `partial` in `whole` by NCCL or the Lamport one-shot; `partial` itself in
         a group of one. `second` (at, count): a second run of elements, summed by the one-shot in the same
@@ -1374,7 +1393,13 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                 attn_in, attn_k = (b("gated"), gate_l) if is_mla(i) else (gated_kda, inner_l)
                 o = b("o_partial" if xchg else "hidden_partial")
                 proj(L + "o_proj", attn_in, w("w_o"), o, H, attn_k)
-                attn_out = summed(L + "reduce_attn", o, b("hidden_partial"), {"mul": [T, H]})
+                if fused_ar:
+                    attn_out = None
+                    step(L + "res_mlp", "ar_attnres_rms", o, *lamport(), b("hidden"), b("blocks"), w("sw_mlp"),
+                         w("gamma_post"), b("prefix2"), b("normed"), i32(nb_mlp), i32(int(snapshot)), RB,
+                         i64(ar_stage), i64(TP_TIMEOUT_NS))
+                else:
+                    attn_out = summed(L + "reduce_attn", o, b("hidden_partial"), {"mul": [T, H]})
                 landing = "land_add_attnres_rms_bf16"
             elif is_mla(i) or tp == 1:
                 gemm(L + "o_proj", b("gated"), w("w_o"), b("hidden_partial"), H, INNER)
@@ -1386,8 +1411,9 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                 attn_out = reduced(L + "reduce_attn", b("o_partial"), b("hidden_partial_all"))
                 landing = "land_add_attnres_rms"
             # attn_out landing + residual (or snapshot replace) + mix + norm → prefix2, normed
-            step(L + "res_mlp", landing, attn_out, b("hidden"), b("blocks"), w("sw_mlp"),
-                 w("gamma_post"), b("prefix2"), b("normed"), i32(nb_mlp), i32(int(snapshot)), RB)
+            if attn_out:
+                step(L + "res_mlp", landing, attn_out, b("hidden"), b("blocks"), w("sw_mlp"),
+                     w("gamma_post"), b("prefix2"), b("normed"), i32(nb_mlp), i32(int(snapshot)), RB)
 
             # The MLP on this rank's rows. A decode tray batch column-shards the
             # dense FFN and the shared expert (gate/up rows, down columns) over
@@ -1437,16 +1463,23 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=32, span_max=0, 
                     prog.extend(bp["steps"](b("latent_q"), b("latent_sf"), b("topk_idx"), b("topk_weight"),
                                             w("moe.w13s"), w("moe.w13_sfs"), w("moe.w2s"), w("moe.w2_sfs"),
                                             w("moe.alpha"), w("moe.beta"), b("moe_flat"), {"rank": "tp"}, label=L,
-                                            routed=bool(front)))
+                                            routed=bool(front), combined=not fused_ar))
                     shared_at = seqs_max * LATENT * 2
                     if not front:
                         proj(L + "wsh", b("normed"), w("wsh"), b("shared_partial"), 2 * sh_l, H, m=RB)
                         land_situ(L + "shared_situ", b("shared_partial"), b("shared_act"), sh_l, RB)
                     proj(L + "sh_down", b("shared_act"), w("sh_down"), b("moe_flat", shared_at), H, sh_l, m=RB)
-                    # the routed latent's `tokens` rows, then the shared expert's
-                    moe = summed(L + "reduce_mlp", b("moe_flat"), b("moe_sum"), {"mul": [T, LATENT]},
-                                 (seqs_max * LATENT, {"mul": [T, H]}))["buf"]
-                    step(L + "lat_norm", "rms", b(moe), w("gamma_lat"), b("routed_latent_norm"), i32(LATENT), RB)
+                    if fused_ar:
+                        # the combine, the sum of both and the latent norm in one launch
+                        step(L + "reduce_mlp", "ar_finalize_rms", b("moe.fc2_out"), b("moe.exp2perm"),
+                             b("topk_weight"), b("moe_flat", shared_at), *lamport(), w("gamma_lat"),
+                             b("routed_latent_norm"), b("moe_sum", shared_at), RB, i64(ar_stage), i64(TP_TIMEOUT_NS))
+                        moe = "moe_sum"
+                    else:
+                        # the routed latent's `tokens` rows, then the shared expert's
+                        moe = summed(L + "reduce_mlp", b("moe_flat"), b("moe_sum"), {"mul": [T, LATENT]},
+                                     (seqs_max * LATENT, {"mul": [T, H]}))["buf"]
+                        step(L + "lat_norm", "rms", b(moe), w("gamma_lat"), b("routed_latent_norm"), i32(LATENT), RB)
                     proj(L + "lat_up", b("routed_latent_norm"), w("w_lat_up"), b("routed_partial"), H, LATENT, m=RB)
                     closing = (L + "hidden", b("routed_partial"), b(moe, shared_at), 1)
                 elif bmm:

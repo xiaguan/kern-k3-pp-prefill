@@ -156,9 +156,10 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
         ]
 
     def steps(q, sf, ids, wts, w13s, w13_sfs, w2s, w2_sfs, alpha, beta, out, rank=None, gamma=None, label="",
-              routed=False):
+              routed=False, combined=True):
         """One layer's calls; with `gamma` the combine's row is normed by it (the latent norm) before `out`;
-        `routed`: the tables are already built (the DCP step's moe_front)."""
+        `routed`: the tables are already built (the DCP step's moe_front); not `combined`: the combine is
+        the caller's (the DCP step's fused all-reduce)."""
         T = dim(tokens)
         combine = ({"label": label + "finalize", "op": "moe_finalize_rms",
                     "args": [b("fc2_out"), b("exp2perm"), wts, gamma, out, T, i32(H)]} if gamma else
@@ -169,7 +170,7 @@ def pieces(local, experts, tokens, tokens_max, rows_max, quant_rows, out_rows, p
             {"label": label + "fc1", "op": "moe_fc1",
              "args": [w13s, w13_sfs, q, sf, b("fc1_out"), b("fc1_sf"), b("route_map"), alpha, beta, *tables]},
             {"label": label + "fc2", "op": "moe_fc2", "args": [w2s, w2_sfs, b("fc1_out"), b("fc1_sf"), b("fc2_out"), *tables]},
-            combine,
+            *([combine] if combined else []),
         ]
 
     return {"buffers": buffers, "ops": ops, "quant_step": quant_step, "steps": steps, "tile": tile,
