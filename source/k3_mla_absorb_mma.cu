@@ -7,15 +7,16 @@
 //       bf16*       q_abs,       // [B, HEADS, 576]  latent 512 | rope 64
 //       int B);                  // B <= 64
 //
-//   grid  (1, HEADS, 8)   block (128, 1, 1)   smem 0 dynamic (35 KB static)
+//   grid  (1, HEADS, LAT / CS = 4)   block (2 * CS = 256, 1, 1)   smem 0 dynamic (52 KB static)
 //
-// Block (h, cs) owns columns cs*64 .. +64 of head h for every row: W_UK's
-// 128 x 64 slice is read once (the scalar kernel re-read it per 8-row group,
+// Block (h, cs) owns columns cs*CS .. +CS of head h for every row: W_UK's
+// 128 x CS slice is read once (the scalar kernel re-read it per 8-row group,
 // and its 16-way smem reduction made a 16-row step ~13 us for 12 MB),
-// staged in shared memory with the batch's bf16 query, and each of the four
+// staged in shared memory with the batch's bf16 query, and each of the CS / 16
 // warps multiplies its 16 columns with wmma 16x16x16 (bf16 in, f32
 // accumulate) over ceil(B/16) row tiles. Rows past B are zero in shared
-// memory and never stored.
+// memory and never stored. Each block also copies its eighth of the rope
+// columns (2 threads x 4 columns per row, loaded with everything else).
 //
 //   q_h     = bf16(q_partial[b, h*192 .. +192])
 //   q_abs   = [ bf16(sum_d q_h[d]*W_UK_h[d,j]) for j<512 | q_h[128..192] ]   f32 acc
@@ -36,38 +37,45 @@ using namespace nvcuda;
 #define ROW 576
 #define QW 192
 #define BMAX 64
-#define CS 64
+#ifndef CS
+#define CS 128     // columns per block
+#endif
+#define THREADS (2 * CS)  // a warp per 16 columns
 #define QP (NOPE + 8)  // padded smem rows keep the wmma loads off one bank
 #define WP (CS + 8)
 
-extern "C" __global__ void __launch_bounds__(128) kern_k3_mla_absorb_mma(const float* __restrict__ q_partial,
+extern "C" __global__ void __launch_bounds__(THREADS) kern_k3_mla_absorb_mma(const float* __restrict__ q_partial,
                                                                         const __nv_bfloat16* __restrict__ w_kv_b,
                                                                         __nv_bfloat16* __restrict__ q_abs, int B) {
   __shared__ __align__(32) __nv_bfloat16 qs[BMAX][QP];
   __shared__ __align__(32) __nv_bfloat16 ws[NOPE][WP];
-  __shared__ __align__(32) float out[4][16][16];
+  __shared__ __align__(32) float out[CS / 16][16][16];
   const int h = blockIdx.y, c0 = blockIdx.z * CS, t = threadIdx.x, warp = t / 32, lane = t % 32;
   const int tiles = (B + 15) / 16;
-  // W slice: 128 rows x 64 columns = 1024 sixteen-byte vectors, 8 per thread, all in flight.
+  // W slice: 128 rows x CS columns = 16 * CS sixteen-byte vectors, 8 per thread, all in flight.
   const __nv_bfloat16* __restrict__ w = w_kv_b + (size_t)h * 256 * LAT + c0;
   uint4 wv[8];
 #pragma unroll
   for (int k = 0; k < 8; ++k) {
-    const int i = t + k * 128, d = i / 8, v = i % 8;
+    const int i = t + k * THREADS, d = i / (CS / 8), v = i % (CS / 8);
     wv[k] = *reinterpret_cast<const uint4*>(w + (size_t)d * LAT + v * 8);
   }
+  // This block's CS / 8 rope columns of every row (ROPE / gridDim.z), a float4 per thread, copied at the end.
+  const int rr = t / (CS / 32), rc = blockIdx.z * (CS / 8) + t % (CS / 32) * 4;
+  const float4 rv = rr < B ? *reinterpret_cast<const float4*>(q_partial + (size_t)rr * (HEADS * QW) + (size_t)h * QW + NOPE + rc)
+                           : make_float4(0.f, 0.f, 0.f, 0.f);
   // The query: up to 64 rows x 128 f32 = 16 float4 per thread, every load in
   // flight before the first store (one after another they cost a round trip each).
-  float4 qv[BMAX * NOPE / 4 / 128];
+  float4 qv[BMAX * NOPE / 4 / THREADS];
 #pragma unroll
-  for (int k = 0; k < BMAX * NOPE / 4 / 128; ++k) {
-    const int i = t + k * 128, r = i / (NOPE / 4), d4 = i % (NOPE / 4);
+  for (int k = 0; k < BMAX * NOPE / 4 / THREADS; ++k) {
+    const int i = t + k * THREADS, r = i / (NOPE / 4), d4 = i % (NOPE / 4);
     qv[k] = r < B ? *reinterpret_cast<const float4*>(q_partial + (size_t)r * (HEADS * QW) + (size_t)h * QW + d4 * 4)
                   : make_float4(0.f, 0.f, 0.f, 0.f);
   }
 #pragma unroll
-  for (int k = 0; k < BMAX * NOPE / 4 / 128; ++k) {
-    const int i = t + k * 128, r = i / (NOPE / 4), d4 = i % (NOPE / 4);
+  for (int k = 0; k < BMAX * NOPE / 4 / THREADS; ++k) {
+    const int i = t + k * THREADS, r = i / (NOPE / 4), d4 = i % (NOPE / 4);
     if (r < tiles * 16) {
       reinterpret_cast<__nv_bfloat162*>(&qs[r][d4 * 4])[0] = __floats2bfloat162_rn(qv[k].x, qv[k].y);
       reinterpret_cast<__nv_bfloat162*>(&qs[r][d4 * 4])[1] = __floats2bfloat162_rn(qv[k].z, qv[k].w);
@@ -75,20 +83,22 @@ extern "C" __global__ void __launch_bounds__(128) kern_k3_mla_absorb_mma(const f
   }
 #pragma unroll
   for (int k = 0; k < 8; ++k) {
-    const int i = t + k * 128, d = i / 8, v = i % 8;
+    const int i = t + k * THREADS, d = i / (CS / 8), v = i % (CS / 8);
     *reinterpret_cast<uint4*>(&ws[d][v * 8]) = wv[k];
   }
   __syncthreads();
+  // The warp's W columns are the same for every row tile: their fragments stay in registers.
+  wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::row_major> wf[NOPE / 16];
+#pragma unroll
+  for (int k = 0; k < NOPE / 16; ++k) wmma::load_matrix_sync(wf[k], &ws[k * 16][warp * 16], WP);
   for (int m = 0; m < tiles; ++m) {
     wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc;
     wmma::fill_fragment(acc, 0.f);
 #pragma unroll
     for (int k = 0; k < NOPE / 16; ++k) {
       wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> a;
-      wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::row_major> b;
       wmma::load_matrix_sync(a, &qs[m * 16][k * 16], QP);
-      wmma::load_matrix_sync(b, &ws[k * 16][warp * 16], WP);
-      wmma::mma_sync(acc, a, b, acc);
+      wmma::mma_sync(acc, a, wf[k], acc);
     }
     wmma::store_matrix_sync(&out[warp][0][0], acc, 16, wmma::mem_row_major);
     __syncwarp();
@@ -103,11 +113,9 @@ extern "C" __global__ void __launch_bounds__(128) kern_k3_mla_absorb_mma(const f
     }
     __syncwarp();
   }
-  if (blockIdx.z == 0) {
-    for (int i = t; i < B * ROPE; i += 128) {
-      const int r = i / ROPE, k = i - r * ROPE;
-      q_abs[((size_t)r * HEADS + h) * ROW + LAT + k] =
-          __float2bfloat16_rn(q_partial[(size_t)r * (HEADS * QW) + (size_t)h * QW + NOPE + k]);
-    }
+  if (rr < B) {
+    __nv_bfloat162* o = reinterpret_cast<__nv_bfloat162*>(q_abs + ((size_t)rr * HEADS + h) * ROW + LAT + rc);
+    o[0] = __floats2bfloat162_rn(rv.x, rv.y);
+    o[1] = __floats2bfloat162_rn(rv.z, rv.w);
   }
 }

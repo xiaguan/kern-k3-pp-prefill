@@ -177,7 +177,7 @@ source = "source/k3_conv_silu.cu"
 defines = { HEADS = 12, LDS = 6400 }
 
 [kernels."k3_mla_absorb_mma"]
-sha256 = "9612d4dab1ad4584414211f8ecffd778f747a32ff057b128971f0765ad634d7c"
+sha256 = "d32425ed89d772e25970c9a648873dca2a7060edb1ba1f3e6b508ddc581982b1"
 source = "source/k3_mla_absorb_mma.cu"
 
 [kernels."k3_kda_core+KDA_CONV=1"]
