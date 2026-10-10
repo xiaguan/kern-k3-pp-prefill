@@ -7,11 +7,13 @@ Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check l
 - **P stage 1's bench does not run the MLA attention.** `fmha_lens` (the FMHA's seq_lens_kv |
   cum_q | cum_kv tables) is computed by stage 0's `fmha_lens` call; `kern cut` makes it an `input`
   of stage 1 with no `fill`, so the bench hands stage 1 a table of zeros: `mla_fmha` attends to
-  nothing (≈20 us a call at every context, 0.06% of the cost) and the context gather copies no
-  cached rows (it writes zeros). The expand GEMM is sized by the `ctx` var and does run. A real
-  8192-row chunk over a 131k prefix would spend ~66 TFLOP a layer in the FMHA (~30 ms); the P
-  score does not see it. (loop/p/check's p-l12 has stage 0's `fmha_lens` call, so numerics are
-  checked on real tables.) Fix proposal: a `fill` for the cut table (or computing it per stage).
+  nothing (≈20 us a call at every context) and the context gather copies no cached rows. Measured
+  (work/lensx: the same stage 1 recomputing `fmha_lens` from `seq_lens` / `cu_seqlens` at its
+  first layer, +1 launch): **97.79 ms/item weighted instead of 52.48**; mla_fmha per call 1.26 ms
+  (8192 rows, no prefix), 20.3 / 39.7 / 59.1 ms (8192 rows over 64k / 131k / 197k), 10.5 ms (4096
+  over 64k), 2.29 ms (10 rows over 131k), 4.11 ms (354 over 131k). The real P stage spends ~45% of
+  its time in the MLA FMHA. loop/p/check's p-l12 has stage 0's call, so numerics are checked on
+  real tables. Fix: recompute the tables per stage (as work/lensx) or a `fill` for the cut table.
 - **Proposal (touches the expand GEMM, so not done): absorbed MLA for short chunks.** The expand
   re-derives k | v for the whole context every chunk: 131k × 576 × 30720 × 2 = 4.6 TFLOP, 2.3 ms a
   layer, 6.9 ms of the 10.9 ms 10-row item and of the 13.8 ms 354-row item (both over 131k). The
