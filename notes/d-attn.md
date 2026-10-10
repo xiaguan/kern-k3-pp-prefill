@@ -232,7 +232,9 @@ deadline as well (a member's data never came: fail loudly, not garbage).
   had to live in a `__noinline__` helper to keep 128 regs (inline it
   pushed ptxas to 152: a trick worth remembering). Bit-identical, but D
   4.025 (main ad97493, same pool, same hour) → 4.050: the early blocks
-  waiting on the SMs slow the GEMM ahead of them. Dropped.
+  waiting on the SMs slow the GEMM ahead of them. Dropped. The same L2
+  prefetch at entry without pdl (noinline helper, 128 regs): 4.047 vs
+  4.025, no gain either.
 
 ## Where the half stands (16 rows @128k, nsys, after the commits above)
 
