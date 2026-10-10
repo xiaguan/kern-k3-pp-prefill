@@ -13,7 +13,7 @@ sha256 = "9de645ab4053412ee0832c633510308f4cd3c3fa5d25812924d9a799689f5fc9"
 source = "source/copy_rows.cu"
 
 [kernels."embedding"]
-sha256 = "868e93ae6e46e36a11c56af1fae49aeff9fcdfdc79f64ca99475a309e721e9e7"
+sha256 = "e60b9fe71d5fed7a7fdbaa40cc12924ed30533741327b45980c1e4571ce408de"
 source = "source/embedding.cu"
 
 [kernels."flash_kda_d128"]
