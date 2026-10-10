@@ -223,37 +223,27 @@ __device__ __forceinline__ float lg2(float x) {
   return y;
 }
 
-// The decode attention's latent output of row b, head h, columns c .. c + 8: its KV splits merged as
-// the DSL's reduction kernel merges them (k3_dcp.cu's kern_k3_dcp_exchange): row b ran
-// S = ceil(t / ceil(t / bsk[b])) splits of its t = ceil(len / 128) tiles, l = m + log2(sum_s
-// exp2(l_s - m)), o = bf16(sum_s acc_o[s] * exp2(l_s - l)).
+// The decode attention's KV splits of row b, head h merged as the DSL's reduction kernel merges them
+// (its SASS: lane s holds split s, the max and the sum of exp2(l_s - m) by xor butterflies 16 .. 1,
+// l = m + lg2(sum), split s scaled by exp2(l_s - l)): row b ran S = ceil(t / ceil(t / bsk[b])) splits of
+// its t = ceil(len / 128) tiles. One warp a (row, head); scale[s] for s < S.
 #define M_TILE 128
-__device__ __forceinline__ uint4 merged_lat(const float* __restrict__ acc_o, const float* __restrict__ acc_lse,
-                                            const int* __restrict__ row_lens, const int* __restrict__ bsk,
-                                            int split_max, int b, int h, int c) {
+__device__ __forceinline__ int splits_of(const int* __restrict__ row_lens, const int* __restrict__ bsk, int b) {
   const int tiles = (row_lens[b] + M_TILE - 1) / M_TILE, per = (tiles + bsk[b] - 1) / bsk[b];
-  const int splits = (tiles + per - 1) / per;
-  const long long rec = (long long)b * M_TILE + h;
-  const float* ls = acc_lse + rec * split_max;
-  float m = -__int_as_float(0x7f800000);
-  for (int i = 0; i < splits; ++i) m = fmaxf(m, ls[i]);
-  if (m == -__int_as_float(0x7f800000)) m = 0.f;
-  float sum = 0.f;
-  for (int i = 0; i < splits; ++i) sum += ex2(ls[i] - m);
-  const float l = m + lg2(sum);
-  float a[8] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
-  const float4* src = reinterpret_cast<const float4*>(acc_o + rec * split_max * LAT + c);
-  for (int i = 0; i < splits; ++i, src += LAT / 4) {
-    const float w = ex2(ls[i] - l);
-    const float4 x = src[0], y = src[1];
-    a[0] = fmaf(x.x, w, a[0]), a[1] = fmaf(x.y, w, a[1]), a[2] = fmaf(x.z, w, a[2]), a[3] = fmaf(x.w, w, a[3]);
-    a[4] = fmaf(y.x, w, a[4]), a[5] = fmaf(y.y, w, a[5]), a[6] = fmaf(y.z, w, a[6]), a[7] = fmaf(y.w, w, a[7]);
-  }
-  uint4 v;
-  __nv_bfloat162* v2 = reinterpret_cast<__nv_bfloat162*>(&v);
+  return (tiles + per - 1) / per;
+}
+__device__ __forceinline__ void split_scales(const float* __restrict__ acc_lse, int split_max, int splits, int b, int h,
+                                             int lane, float* __restrict__ scale) {
+  const float l = lane < splits ? acc_lse[((long long)b * M_TILE + h) * split_max + lane] : -__int_as_float(0x7f800000);
+  float m = l;
 #pragma unroll
-  for (int k = 0; k < 4; ++k) v2[k] = __floats2bfloat162_rn(a[2 * k], a[2 * k + 1]);
-  return v;
+  for (int o = 16; o > 0; o >>= 1) m = fmaxf(m, __shfl_xor_sync(0xffffffffu, m, o));
+  if (m == -__int_as_float(0x7f800000)) m = 0.f;
+  float sum = 0.f + ex2(l - m);
+#pragma unroll
+  for (int o = 16; o > 0; o >>= 1) sum += __shfl_xor_sync(0xffffffffu, sum, o);
+  const float g = m + lg2(sum);
+  if (lane < splits) scale[lane] = ex2(l - g);
 }
 
 __device__ __forceinline__ void vup_gate_block(const float* __restrict__ acc_o, const float* __restrict__ acc_lse,
@@ -263,6 +253,7 @@ __device__ __forceinline__ void vup_gate_block(const float* __restrict__ acc_o, 
                                                int B, int bx, int h, int dz) {
   __shared__ __align__(16) __nv_bfloat16 lat[RB][LAT];
   __shared__ float red[JS][RB][DS];
+  __shared__ float scale[RB][32];
   const int dv0 = dz * DS, t = threadIdx.x;
   const int js = t / DS, dl = t - js * DS, dv = dv0 + dl, j0 = js * JW;
   const uint4* __restrict__ w = reinterpret_cast<const uint4*>(w_kv_b + ((size_t)h * 256 + NOPE + dv) * LAT + j0);
@@ -273,14 +264,31 @@ __device__ __forceinline__ void vup_gate_block(const float* __restrict__ acc_o, 
     const int b0 = (bx * GROUPS + g) * RB;
     const int nr = min(RB, B - b0);
     if (nr <= 0) break;
-    // RB*LAT/8 / 256 = 2 vectors per thread, the splits merged here
+    if (g) __syncthreads();  // the previous group is done reading lat / red / scale
+    // warp r: row r's split scales
+    if ((t >> 5) < RB) {
+      const int b = min(b0 + (t >> 5), B - 1);
+      split_scales(acc_lse, split_max, splits_of(row_lens, bsk, b), b, h, t & 31, scale[t >> 5]);
+    }
+    __syncthreads();
+    // RB*LAT/8 / 256 = 2 vectors per thread: the splits' sum in split order, as the reduction runs it
     uint4 lv[RB * (LAT / 8) / 256];
 #pragma unroll
     for (int k = 0; k < RB * (LAT / 8) / 256; ++k) {
-      const int i = t + k * 256, r = i / (LAT / 8), c = i - r * (LAT / 8);
-      lv[k] = merged_lat(acc_o, acc_lse, row_lens, bsk, split_max, min(b0 + r, B - 1), h, c * 8);
+      const int i = t + k * 256, r = i / (LAT / 8), c = i - r * (LAT / 8), b = min(b0 + r, B - 1);
+      const int splits = splits_of(row_lens, bsk, b);
+      float a[8] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+      const float4* src = reinterpret_cast<const float4*>(acc_o + ((long long)b * M_TILE + h) * split_max * LAT + c * 8);
+      for (int sp = 0; sp < splits; ++sp, src += LAT / 4) {
+        const float w = scale[r][sp];
+        const float4 x = src[0], y = src[1];
+        a[0] = fmaf(x.x, w, a[0]), a[1] = fmaf(x.y, w, a[1]), a[2] = fmaf(x.z, w, a[2]), a[3] = fmaf(x.w, w, a[3]);
+        a[4] = fmaf(y.x, w, a[4]), a[5] = fmaf(y.y, w, a[5]), a[6] = fmaf(y.z, w, a[6]), a[7] = fmaf(y.w, w, a[7]);
+      }
+      __nv_bfloat162* v2 = reinterpret_cast<__nv_bfloat162*>(&lv[k]);
+#pragma unroll
+      for (int q = 0; q < 4; ++q) v2[q] = __floats2bfloat162_rn(a[2 * q], a[2 * q + 1]);
     }
-    if (g) __syncthreads();  // the previous group is done reading lat / red
 #pragma unroll
     for (int k = 0; k < RB * (LAT / 8) / 256; ++k) {
       const int i = t + k * 256, r = i / (LAT / 8), c = i - r * (LAT / 8);
