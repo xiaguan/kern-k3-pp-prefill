@@ -307,6 +307,14 @@ per-op times out of a report.
 |---|---|---|
 | main 9850876 | 123.47 / 124.08 ms/item | 17.7 |
 | fmha split for 129-512-row calls | 122.63 / 123.52 (-0.57%) | 18.0 (+1 exclusive `when` launch a MLA layer) |
+| main dcf6ec0 (p-glue's stage setup in the first launch) | 126.80 (slow GPU) / 123.14 | 17.5 |
+| + split (plan ported into embed_rms), expand +512, gate | 121.30 / 122.12 (-0.83% vs 123.14) | 17.8 |
+
+354 rows @128k in that A/B: 48.49 / 47.57 -> 44.39 / 44.83 ms; 10 rows
++0.03-0.06 ms (q_b's fixed +1024 rows); 8192-row items within noise.
+A main copy for A/B: `git archive main | tar -x -C work/p/main`, copy
+loop/local.env, `loop/build`, `loop/gen` inside it, bench its p-stage0
+with its own loop/p/bench.
 
 ## What the kernel is and what it reaches
 
@@ -353,6 +361,23 @@ per-op times out of a report.
   Bench FMHA at 354 @128k 4.47 -> 3.24 ms a layer. Overheads: q_b +27-33
   us a call at every size (fixed +1024 rows: kern's expressions cannot
   shrink it for big calls), expand +130 us at 354 rows.
+  On main dcf6ec0 a lone chunk's stage 0 makes the tables in block 0 of
+  kern_k3g_embed_rms (p-glue): the plan is k3_fmha_plan.cuh, called from
+  both places.
+- **Expansion +512 rows, not +1024** (the shared keys are Lq - 1 < 512):
+  354 rows -0.6 ms in both pairs.
+- **mla_gate: bf16 fused projection, 8 rows a thread.** The gate shares its
+  kernel with the absorbed form's v-up blocks (127 regs, 17 KB smem: 2
+  blocks an SM) and each thread had one 48-byte load chain: latency-bound,
+  260 us at 8192 rows (one GPU, work/p/gate.cu), 2.3 TB/s. 8 rows a thread
+  with every load first: 140 us (4 rows 154, 16 rows 236). wfu's output is
+  bf16 now (cublasLt epilogue; every reader landed it first): check logits
+  bit-identical at the check's 2048 rows. Stage bench gate 345 -> 195 us a
+  call at 8192 rows.
+- ncu of the FMHA (one GPU, 8192 @64k): 5.51 GB of DRAM reads against 4.83
+  GB of unique Q + K/V (1.14x), L2 hit 85%, ~260 GB/s: K/V reuse across a
+  head's 32 q tiles works; nothing to win in memory. It is MMA-bound at the
+  power cap.
 
 ## Ideas / not done
 
@@ -362,6 +387,12 @@ per-op times out of a report.
   per-head strided (batched) GEMM to leave the 64 k_pe columns of each
   320-column head alone; kern's cublaslt extern has row strides but no
   batch. Runtime proposal: a batched/strided-C GEMM extern.
+- q_b's fixed +1024 rows (~0.07% of the score) could go: run the q copies
+  in mla_absorb_short's launch (its `when` widened to 512 rows, a copy
+  branch for 129-512) and keep q_b at T. Below the bench's resolution.
+- D's MLA decode (the DSL split kernel; d-mlp asked): at 48 rows a rank
+  does 164 GFLOP on 906 MB (181 FLOP/B), so 8 TB/s would need ~1.45 PF of
+  MMA; it runs ~0.86 PF in 190 us. Not a bandwidth kernel to rewrite.
 - Packed multi-sequence calls run grid z = seqs with x = ceil(tokens / 256)
   each, so most CTAs are empty; the harness shows empty FMHA sequences cost
   3-5% at long contexts. The bench has one sequence a call; real traffic
