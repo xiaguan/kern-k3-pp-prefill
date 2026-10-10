@@ -118,6 +118,12 @@ Per call at 8192 rows (bracketed): residual ~195 us (floor ~100 us at 8 TB/s), f
   - What remains is half issue (≈ 890 warp-instr a row a warp: unpacking, 7 butterflies of 2
     groups, the scoring and the mix) and half DRAM at 58% of peak.
 
+## GEMM merges, offered again (322c829, 5faa214) after the absorbed MLA was taken
+
+Ported onto the stage-0 era: stage 0 231 -> 209 launches (17.4/layer), A/B in one lease -0.12 /
+-0.58 / -0.22% (8192@0 / 10@131k / 354@131k); KL <= 2.28e-3 against the branch before them, 4
+near-tie flips. The measurements below are the first round's (stage 1).
+
 ## Out of scope (measured, kept on branch `wip/gemm-merge`, not in main)
 
 The orchestrator ruled GEMM merges out of scope (18:13). Measured before that:
