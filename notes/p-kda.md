@@ -11,10 +11,35 @@
 | 26f8f07 gate on idle SMs | 230 (19.2/layer) | 52.40 ms/item | 96.61 ms |
 | 64d3f13 one TMA box an array | 230 (19.2/layer) | 52.07 ms/item | 95.85 ms |
 
-Stage 0 now (main dcf6ec0, 2026-10-10 22:10): 17.2 launches/layer, ~125
-ms/item weighted. A KDA layer's non-GEMM launches: span_gather, FlashKDA
-prepare, k3_kda_rec (3; the floor while the prepare stays FlashKDA's
-prebuilt cubin). At 8192@0 per layer: span_gather ~283 us, flash_kda ~880 us.
+Stage 0 now (main 96fb15b + 53e41ef, 2026-10-11 00:30): 17.4 launches/layer,
+~122 ms/item weighted on a normal GPU (p/ab). A KDA layer's non-GEMM
+launches: span_gather, FlashKDA prepare, k3_kda_rec. That is 3, the floor
+(see "Closed" below). In isolation (ncu, 8192 rows, one layer): gather 211
+us, FlashKDA prepare 276 us, k3_kda_rec ~400 us (recurrence end ~490 in
+the bench, the gate CTAs ~10 us after).
+
+## Closed: why the KDA half stays at 3 launches and this time
+
+- The recurrence is mma.sync-bound for chunk 16, and UMMA doesn't help at
+  N=16..64 (below). Every reorder / pack / ring / publisher variant was flat.
+- The gather and FlashKDA's prepare are each issue/MUFU-bound, not
+  memory-bound (ncu: gather 154M warp-instr + 19M MUFU, prepare 209M +
+  11M). Fusing them saves only DRAM traffic. A bit-exact fused prepare
+  (work/prep2: conv + SiLU + FlashKDA kernel 1 in one kernel, the gather
+  reduced to beta / flow, launch-neutral because extern:cublaslt_bf16_tn has
+  lda = k, so f_b can't read the flow in place; bit-identical logits and
+  states) ran 1194 -> 872 us after fixing its load indexing, against 487
+  for the pair. Conv + exact SiLU alone is ~220M instructions there; the
+  floor is ~400 us. Dropped.
+- Stage 0 is power-capped: kernel speedups in this half don't reach the item
+  time. A tanh-based SiLU made the gather 26% faster (2.52 -> 1.86 ms an
+  8192 item) with the weighted item flat (-0.1%), and the check went
+  INCONCLUSIVE (KL 1.18e-2): rejected. The f32 state (-3% flash_kda) was flat
+  on the item too.
+- What did move the score: 53e41ef (counters on their own lines), -0.65%
+  on a GPU whose placement made the recurrence 2x slower. Anything in the
+  P stage that many CTAs poll / release on one line is suspect (moe_route's
+  grid barrier? p-glue's lane).
 
 Stage 0 (scored from 2026-10-10 19:48; real data): flash_kda 6.9% -> 6.6%
 of 8192@0 with 64d3f13; per layer at 8192@0 span_gather ~334 us (~283 after
@@ -82,6 +107,16 @@ cubins next to `build/`, pass it as the check's reference, vary `--seed`).
 - `work/ncu.sh MANIFEST OUT REGEX COUNT [ncu args]`: ncu a kernel inside a
   kern bench (`WL=w8192`), report on the shared fs.
 - `work/calls.py A.json B.json [scenario] [layer]`: per-call p50 diff.
+- `work/ab.sh A B OUT [WL]`: A B A B in one lease over a work/ workload,
+  prints the GPU (`WITHGPU_GPUS=3` pins one). loop/p/ab is the number of record.
+- `work/sassprof.sh MANIFEST OUT REGEX`: ncu SourceCounters of one launch,
+  executed SASS instructions by 40-instruction region (where the
+  instructions go).
+- `work/slowsm.py LOG`: per-CTA end times / slow SMs from a k3_kda_rec
+  build that prints `K12END cta smid start end` (globaltimer; the
+  instrumentation is in the 53e41ef message's history, re-add as needed).
+- `work/mb/umma.cu` (tcgen05 phase-1 cost), `work/mb/smspeed.cu` (per-SM
+  FMA / MMA / L2 / LDS speed, all GPUs of a tray).
 
 ## Tried
 
@@ -164,6 +199,40 @@ cubins next to `build/`, pass it as the check's reference, vary `--seed`).
     movs, 8 B of stack). f32x2 paid off in the gather (eaf2849), not here.
   - The loader / store warps sleeping (nanosleep 128) between failed
     barrier tries instead of spinning: +100 us an item (late refills).
+- f32 state between tiles (22a1f9b, in main): phase 6 is 32 FFMA2, no
+  unpacks; per-phase cycles a tile after it (clock64, instrumented): full
+  wait ~110, phase 1 ~765 (it now packs the bf16 A fragments), phases 2-4
+  ~185, phase 6 ~490, output-ring wait ~245-318, rest ~130.
+- tcgen05 (UMMA) for the recurrence: no (work/mb/umma.cu, checked against
+  the CPU). M128 x N16 x K16 costs ~50 cycles an instruction, the same at
+  N=32 and ~54 at N=64, and a round trip (issue, commit, mbarrier,
+  tcgen05.ld) adds ~140. Phase 1 (8 K-steps, kd|qd as N=32) comes to ~550
+  cycles, which is the mma.sync time. Phase 6 (one M128 x N128 x K16) would
+  only break even with its 256 HMMA cycles. Chunk 16 is too narrow for
+  UMMA; KDA^2 gets its speed from chunk 64.
+- Phase 4 (out = Mqk U + qS, off the state chain) moved after phase 6:
+  flat to slightly worse (7.56 -> 7.66 ms flash_kda an item).
+- The store warp's st.release.gpu every 4 tiles is a membar of 1.6k-9.3k
+  cycles (it varies by SM), paid inline. With the 4-deep output ring
+  backing up, the MMA warps waited ~245-318 cycles a tile. An 8-deep ring
+  alone: -1% flash_kda. A publisher warp (warp 11, idle in recurrence CTAs)
+  that st.release.gpu's whatever the store warp has copied (smem counter,
+  release/acquire at cta scope, cumulative) drops the ring wait to ~82
+  cycles (the barrier itself), about -7% on the tile loop.
+  On a normal GPU the publisher was flat; on GPU 3 (pre-53e41ef) it was +12%
+  flash_kda. Not kept; the real cause of the ring stalls was the next item.
+- Placement / lease sensitivity, solved by 53e41ef. d-attn saw span_kda
+  770 -> 1180 us from an unrelated buffer resize, and I saw flash_kda 7.8
+  vs 8.9-10.4 ms an 8192 item for the same manifest on different GPUs.
+  Per-CTA %smid + globaltimer (instrumented build, work/slowsm.py): on GPU 3
+  of the tray, the recurrence CTAs on 34 fixed SMs (17 TPC pairs) ran at
+  half speed (rec end 983 vs median ~500 us) in every call. ncu with
+  --clock-control none: rec 846 us there vs 404 on GPU 1, same clocks. SMs
+  uniform in isolation (work/mb/smspeed.cu). Gate CTAs exiting at once: no
+  slow SMs (428 us). Gate CTAs that only poll: slow again (570). Dropping
+  the gate's DRAM loads, stores, raw re-reads, discard, or polling 8x less
+  often: still slow. Cause: the 96 progress counters on 3 L2 lines. Fix:
+  one 128-byte line each.
 - Short items: at 10 rows a KDA layer costs ~20 us flash_kda + ~13 us
   gather, at 354 rows ~63 + 24 us; next to the 8192-row items' weight in
   the score this is noise.
@@ -177,11 +246,12 @@ cubins next to `build/`, pass it as the check's reference, vary `--seed`).
 
 ## Next
 
-1. Own recurrence kernel replacing FlashKDA kernel 2 (reads kernel 1's
-   workspace): state straight from / to the KDA line (no staging), the
-   output gate (rms, gamma_o, sigmoid gate) in its epilogue, the window
-   update, more CTAs than 96 (FlashKDA runs one CTA per (seq, head) on
-   152 SMs; each warp owns 32 dv columns independently -> split dv over
-   CTAs; the per-row rms over 128 dv then needs a cluster / DSMEM sum).
-2. Own prepare with the conv in its load (q/k never written).
-3. KDA^2: done, rejected on precision (above).
+1. Own recurrence (done: k3_kda_rec). Own prepare with the conv in its load:
+   done and dropped (work/prep2; above).
+2. KDA^2: done, rejected on precision (above).
+3. What is left needs a different algorithm: a chunk-64 recurrence (UMMA at
+   N=64, a quarter of the serial steps) with FlashKDA-level precision. That
+   means FLA-style 16-row sub-blocks with relative decays inside the chunk,
+   which is where KDA^2 lost precision. Days, not a session.
+4. Short items (10 / 354 rows, 13% of the weight) cost ~33 / ~87 us a KDA
+   layer: <0.2% of the score.
