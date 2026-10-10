@@ -96,6 +96,41 @@
   blocks are resident before a GEMM block takes an SM. 4.120 → 4.101.
   (absorb is followed by the DSL kernel, which has no PDL: no trigger.)
 
+## Open: intermittent check failure (orchestrator, 20:00 UTC)
+
+main + my 1a53ac8 56d8cf6 05d3ad6 (exchange loads-in-flight, absorb, clock64
+deadline) failed 1 of 3 d/checks with ~2-3 s of extra step time (one
+Lamport deadline). Analysis so far:
+- No concurrent kernels during a step (k3_step: one stream, no NCCL per
+  step), and the exchange has no PDL wait, so it starts on drained SMs;
+  even without full residency it cannot deadlock (every block sends before
+  it waits, non-merging blocks exit).
+- Stage reuse: each call re-poisons exactly the previous call's footprint
+  (NRANKS * R * HL * REC vectors, R of that call); a member can be at most
+  one call ahead of another, and the one-ahead member writes the stage the
+  other is not clearing. Partial 16-byte arrivals: every 16-bit half is
+  checked.
+- **Startup race (not mine, affects the all-reduces):** each rank poisons
+  its Lamport stages in the once-program right after the handle exchange,
+  and step/'s handles() polls the files every 200 ms with no barrier
+  after; a rank that finishes polling early can write its layer-0
+  all-reduce partial into a peer that has not run its init yet, which then
+  poisons it and waits until the deadline. The exchange is behind three
+  all-reduces at layer 3, so its first write cannot precede a peer's init.
+- main's k3_ar_fused.cu still times out on %globaltimer.
+Diagnostic tree (work/out-dbg, not committed): every Lamport timeout
+prints kernel, block, missing member and the elapsed cycles; work/rep.sh
+runs the check N times. **Result, 6 checks of main 9b1cce0 + this branch:
+4 PASS, 2 FAIL (9.5 and 7.0 ms/step). Every timeout was in k3_ar_fused
+(run 1: ranks 0-6 x 3584 waiting on rank 7, rank 7 none; run 6: rank 2 x
+3584 waiting on rank 0); zero dcp_exchange timeouts.** That is the startup
+race above: the early rank's first all-reduce push is poisoned by its
+peers' late init. d-mlp is adding a one-time ready handshake to its
+all-reduce (and a trap on its deadline); it covers dcp_lamport too, since
+tp_init poisons both before a rank's first all-reduce and the first
+exchange sits behind three of them. The exchange now traps on its
+deadline as well (a member's data never came: fail loudly, not garbage).
+
 ## Tried and dropped
 
 - **MLA split plan for a full GPU** (work/k3_mla_split_plan.cu): at 39-48

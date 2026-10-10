@@ -65,7 +65,7 @@
 //       bf16* gated,                           // [R, HL*128]
 //       uint8_t* lamport,                      // 3 stages of `stage_bytes`
 //       const unsigned long long* peers,       // [NRANKS] every member's `lamport`
-//       int* state, int* err,                  // [8] zeroed carry; sticky 1 + the late member
+//       int* state, int* err,                  // [8] zeroed carry; 1 + a member that never showed
 //       int rank, int R, long long stage_bytes, long long timeout_ns);
 //   grid: any grid whose blocks are all resident at once   block 256
 //   dynamic smem 64 KB: a merge item's half of W_UV, staged by cp.async while it sends and waits
@@ -94,6 +94,7 @@
 #include <cuda_bf16.h>
 #include <math_constants.h>
 #include <cstdint>
+#include <cstdio>
 
 #ifndef HEADS
 #define HEADS 96
@@ -463,7 +464,12 @@ extern "C" __global__ void __launch_bounds__(256, 1) kern_k3_dcp_exchange(
     const int next = it + gridDim.x;
     if (next < items) stage_w(sw, w_kv_b, next / 2 % HL, next % 2 * 2), stage_w(sw, w_kv_b, next / 2 % HL, next % 2 * 2 + 1);
   }
-  if (fail) atomicMax(err, fail);
+  if (fail) {
+    // A member's data never came: whatever this step computes from here is wrong, so stop it loudly.
+    atomicMax(err, fail);
+    if (threadIdx.x % 32 == 0) printf("kern_k3_dcp_exchange: rank %d gave up on member %d (block %d)\n", rank, fail - 1, blockIdx.x);
+    __trap();
+  }
 
   if (blockIdx.x == 0 && threadIdx.x == 0) {
     while (*reinterpret_cast<volatile int*>(state) != (int)gridDim.x) {
