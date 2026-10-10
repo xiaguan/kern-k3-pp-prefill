@@ -21,6 +21,7 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 | (main after merges with d-attn: 13.2/layer, 4.175) | 13.2 | 4.175 | |
 | Lamport hang detector on clock64 instead of %globaltimer (fix, below) | 13.2 | 4.174 | bit-identical, 3/3 runs |
 | moe_front top-k in two levels (8 warps x 112 experts, then warp 0 over the 128 candidates); 10.5 -> 6.5 us | 13.2 | 4.122 | bit-identical |
+| the residual rows (ar_attnres_rms, land_add2_attnres_rms) cp.async their snapshot rows into smem up front, sw/gamma in registers; the all-reduce scores the snapshots before polling | 13.2 | 4.098 | bit-identical |
 
 ## Findings
 

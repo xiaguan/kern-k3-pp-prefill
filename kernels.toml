@@ -107,11 +107,11 @@ source = "source/k3_prefill_glue.cu"
 defines = { EXPERTS = 896 }
 
 [kernels."k3_residual"]
-sha256 = "cdc1df02479635f35e4e004d84fc38da65cef05a8b4b7fabd318c5ee44983593"
+sha256 = "d5d5d1fb3dda907822d99520b611fa77cab05bf11f165a1aa0d5e43d07cca8c8"
 source = "source/k3_residual.cu"
 
 [kernels."k3_residual+LAND_BF16=1"]
-sha256 = "84d42d210cb2fb11ebae3f5e00da02dba0d13b7e826b3276b56d9143a3d71dbc"
+sha256 = "1bb60d2f33b04d70d6866b50d12a67340e33cf0f1c555c9da92494dd5c98f254"
 source = "source/k3_residual.cu"
 defines = { LAND_BF16 = 1 }
 
@@ -164,8 +164,6 @@ sha256 = "9c1aef3502974d3a14a5614d172f3e7e3596163faedf637e99ffe0a226703813"
 source = "source/k3_mla_absorb.cu"
 defines = { GROUPS = 1 }
 
-
-
 [kernels."k3_kda_core+HEADS=12+LDS=6400+WSM_FA=12+WSM_LDS=6400"]
 sha256 = "6e0ef3d6b86268d40efaef4a2ba8d3c4686f4f09b0b6d23f4739211e295d4d90"
 source = "source/k3_kda_core.cu"
@@ -196,7 +194,7 @@ source = "source/k3_moe_front.cu"
 defines = { EXPERTS = 896, LDS = 6016, SH = 768, STRIDE = 8 }
 
 [kernels."k3_ar_fused+NRANKS=8"]
-sha256 = "94e98d1aa231989c686f47d1193daa38dd676dd7b0f0d84fc47afc073472fe26"
+sha256 = "d64603d4872c785deffa926842e42d383cf1abf2e15e6909673abb7cc2bd4730"
 source = "source/k3_ar_fused.cu"
 defines = { NRANKS = 8 }
 
@@ -212,3 +210,7 @@ source = "source/k3_mla_glue.cu"
 sha256 = "e255c187107128eefdba22cd7639ae5e0cb33bcb1be12ca3c4f1c9497f3570e9"
 source = "source/k3_mla_absorb.cu"
 defines = { QBF16 = 1 }
+
+[kernels."k3_ar_fused"]
+sha256 = "d64603d4872c785deffa926842e42d383cf1abf2e15e6909673abb7cc2bd4730"
+source = "source/k3_ar_fused.cu"

@@ -79,7 +79,7 @@ __device__ __forceinline__ uint32_t round_bf16(float f) {
 __device__ __forceinline__ uint32_t pack2(float a, float b) { return round_bf16(a) | (round_bf16(b) << 16); }
 
 struct Lamport {
-  uint4* slot[NRANKS];  // this rank's slot in every peer's stage
+  uint4* const* slot;   // this rank's slot in every peer's stage (shared memory)
   const uint4* mine;    // this rank's stage
   uint4* clear_buf;
   long long clear_count, tot;
@@ -117,14 +117,15 @@ __device__ __forceinline__ void lamport_handshake(uint8_t* lamport, const unsign
 
 __device__ __forceinline__ Lamport lamport_open(uint8_t* lamport, const unsigned long long* peers, int* state, int* err,
                                                 int rank, long long tot, long long stage_bytes, long long timeout_ns) {
+  __shared__ uint4* s_slot[NRANKS];
   Lamport l;
+  l.slot = s_slot;
   l.flag = state[2];
   l.clear_count = *reinterpret_cast<long long*>(state + 4);
   l.tot = tot;
-#pragma unroll
-  for (int q = 0; q < NRANKS; ++q)
-    l.slot[q] = reinterpret_cast<uint4*>(reinterpret_cast<uint8_t*>(peers[q]) + (l.flag % 3) * stage_bytes) +
-                (long long)rank * tot;
+  if (threadIdx.x < NRANKS)
+    s_slot[threadIdx.x] = reinterpret_cast<uint4*>(reinterpret_cast<uint8_t*>(peers[threadIdx.x]) +
+                                                   (l.flag % 3) * stage_bytes) + (long long)rank * tot;
   l.mine = reinterpret_cast<const uint4*>(lamport + (l.flag % 3) * stage_bytes);
   l.clear_buf = reinterpret_cast<uint4*>(lamport + ((l.flag + 2) % 3) * stage_bytes);
   lamport_handshake(lamport, peers, state, err, rank, stage_bytes, timeout_ns);
@@ -222,80 +223,95 @@ __device__ __forceinline__ float warp_sum(float v) {
   return v;
 }
 
-// k3_residual.cu's attnres_rms_row, verbatim.
-__device__ __forceinline__ void attnres_rms_row(const bf16_t* __restrict__ blk_row, const V8 pv,
-                                                const float* __restrict__ sw, const bf16_t* __restrict__ gamma,
-                                                bf16_t* __restrict__ normed_row, int nb, int t) {
+// k3_residual.cu's attnres_rms_row with its snapshot rows prefetched: thread t < KVEC
+// starts the copies of its vector of candidates 0..nb-1 into shared memory (`cand`,
+// [KNB_MAX][KVEC] sixteen-byte vectors) and its sw / gamma into registers first, so the
+// row's loads are one round trip instead of one per candidate pair; the snapshots' half
+// of pass 1 (`row_snapshots`) needs no prefix, so the all-reduce runs it before polling.
+// Every sum, tree and landing is attnres_rms_row's.
+#define KCAND_BYTES (KNB_MAX * KVEC * 16)
+
+struct RowSmem {
+  float red[(KNB_MAX + 1) * 2 * 32];
+  float val[(KNB_MAX + 1) * 2];
+  float red2[32];
+};
+
+struct RowRegs {
+  float swv[8];
+  V8 g;
+};
+
+__device__ __forceinline__ RowRegs row_prefetch(const bf16_t* __restrict__ blk_row, const float* __restrict__ sw,
+                                                const bf16_t* __restrict__ gamma, uint4* cand, int nb, int t) {
+  RowRegs r;
+#pragma unroll
+  for (int j = 0; j < 8; ++j) r.swv[j] = 0.f;
+  r.g.w[0] = 0u, r.g.w[1] = 0u, r.g.w[2] = 0u, r.g.w[3] = 0u;
+  if (t < KVEC) {
+    for (int c = 0; c < nb; ++c) {
+      const unsigned dst = (unsigned)__cvta_generic_to_shared(cand + c * KVEC + t);
+      asm volatile("cp.async.cg.shared.global [%0], [%1], 16;" ::"r"(dst), "l"(blk_row + (size_t)c * KH + t * 8));
+    }
+    if (nb > 0) {
+      const float4* sp4 = (const float4*)(sw + t * 8);
+      const float4 a = sp4[0], b = sp4[1];
+      r.swv[0] = a.x; r.swv[1] = a.y; r.swv[2] = a.z; r.swv[3] = a.w;
+      r.swv[4] = b.x; r.swv[5] = b.y; r.swv[6] = b.z; r.swv[7] = b.w;
+    }
+    r.g = ldv(gamma + t * 8);
+  }
+  asm volatile("cp.async.commit_group;");
+  return r;
+}
+
+__device__ __forceinline__ void score(const V8& x, const float* swv, int c, int t, RowSmem& s) {
+  const int lane = t & 31, warp = t >> 5;
+  float sq = 0.f, dp = 0.f;
+  if (t < KVEC) {
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+      const float2 f = bf2f(x.w[j]);
+      sq += f.x * f.x; sq += f.y * f.y;
+      dp += f.x * swv[2 * j]; dp += f.y * swv[2 * j + 1];
+    }
+  }
+  sq = warp_sum(sq);
+  dp = warp_sum(dp);
+  if (lane == 0) { s.red[(c * 2) * 32 + warp] = sq; s.red[(c * 2 + 1) * 32 + warp] = dp; }
+}
+
+// pass 1 over the snapshots, once their copies landed
+__device__ __forceinline__ void row_snapshots(const uint4* cand, const RowRegs& r, int nb, int t, RowSmem& s) {
+  asm volatile("cp.async.wait_all;" ::: "memory");
+  for (int c = 0; c < nb; ++c) {
+    V8 x;
+    x.w[0] = 0u, x.w[1] = 0u, x.w[2] = 0u, x.w[3] = 0u;
+    if (t < KVEC) x = asv(cand[c * KVEC + t]);
+    score(x, r.swv, c, t, s);
+  }
+}
+
+// the prefix candidate, the softmax, the mix, the rms
+__device__ __forceinline__ void row_finish(const uint4* cand, const RowRegs& r, const V8 pv,
+                                           bf16_t* __restrict__ normed_row, int nb, int t, RowSmem& s) {
   const int lane = t & 31, warp = t >> 5;
   const bool act = (t < KVEC);
-
-  __shared__ float s_red[(KNB_MAX + 1) * 2 * 32];
-  __shared__ float s_val[(KNB_MAX + 1) * 2];
-  __shared__ float s_red2[32];
-
   const int ncand = nb + 1;
   V8 mixed;
-
   if (nb == 0) {
     mixed = pv;
   } else {
-    float swv[8];
-    if (act) {
-      const float4* sp4 = (const float4*)(sw + t * 8);
-      const float4 a = sp4[0], b = sp4[1];
-      swv[0] = a.x; swv[1] = a.y; swv[2] = a.z; swv[3] = a.w;
-      swv[4] = b.x; swv[5] = b.y; swv[6] = b.z; swv[7] = b.w;
-    } else {
-#pragma unroll
-      for (int j = 0; j < 8; ++j) swv[j] = 0.f;
-    }
-#pragma unroll
-    for (int c0 = 0; c0 < KNB_MAX; c0 += 2) {
-      V8 xx[2];
-#pragma unroll
-      for (int g = 0; g < 2; ++g)
-        if (act && c0 + g < nb) xx[g] = ldv(blk_row + (size_t)(c0 + g) * KH + t * 8);
-#pragma unroll
-      for (int g = 0; g < 2; ++g) {
-        const int c = c0 + g;
-        if (c >= nb) continue;
-        float sq = 0.f, dp = 0.f;
-        if (act) {
-#pragma unroll
-          for (int j = 0; j < 4; ++j) {
-            const float2 f = bf2f(xx[g].w[j]);
-            sq += f.x * f.x; sq += f.y * f.y;
-            dp += f.x * swv[2 * j]; dp += f.y * swv[2 * j + 1];
-          }
-        }
-        sq = warp_sum(sq);
-        dp = warp_sum(dp);
-        if (lane == 0) { s_red[(c * 2) * 32 + warp] = sq; s_red[(c * 2 + 1) * 32 + warp] = dp; }
-      }
-    }
-    {
-      float sq = 0.f, dp = 0.f;
-      if (act) {
-#pragma unroll
-        for (int j = 0; j < 4; ++j) {
-          const float2 f = bf2f(pv.w[j]);
-          sq += f.x * f.x; sq += f.y * f.y;
-          dp += f.x * swv[2 * j]; dp += f.y * swv[2 * j + 1];
-        }
-      }
-      sq = warp_sum(sq);
-      dp = warp_sum(dp);
-      if (lane == 0) { s_red[(nb * 2) * 32 + warp] = sq; s_red[(nb * 2 + 1) * 32 + warp] = dp; }
-    }
+    score(pv, r.swv, nb, t, s);
     __syncthreads();
     if (warp < 2 * ncand) {
-      const float v = warp_sum(s_red[warp * 32 + lane]);
-      if (lane == 0) s_val[warp] = v;
+      const float v = warp_sum(s.red[warp * 32 + lane]);
+      if (lane == 0) s.val[warp] = v;
     }
     __syncthreads();
     float sc = -3.0e38f;
     if (lane < ncand) {
-      const float sqv = s_val[2 * lane], dpv = s_val[2 * lane + 1];
+      const float sqv = s.val[2 * lane], dpv = s.val[2 * lane + 1];
       sc = dpv * rsqrtf(sqv * (1.0f / (float)KH) + KEPS);
     }
     float mx = sc;
@@ -310,12 +326,10 @@ __device__ __forceinline__ void attnres_rms_row(const bf16_t* __restrict__ blk_r
     float acc[8];
 #pragma unroll
     for (int j = 0; j < 8; ++j) acc[j] = 0.f;
-    if (act) {
-#pragma unroll
-      for (int c = 0; c < KNB_MAX; ++c) {
-        if (c >= nb) continue;
-        const V8 x = ldv(blk_row + (size_t)c * KH + t * 8);
-        const float p = __shfl_sync(0xffffffffu, pmine, c);
+    for (int c = 0; c < nb; ++c) {
+      const float p = __shfl_sync(0xffffffffu, pmine, c);
+      if (act) {
+        const V8 x = asv(cand[c * KVEC + t]);
 #pragma unroll
         for (int j = 0; j < 4; ++j) {
           const float2 f = bf2f(x.w[j]);
@@ -323,7 +337,9 @@ __device__ __forceinline__ void attnres_rms_row(const bf16_t* __restrict__ blk_r
           acc[2 * j + 1] += p * f.y;
         }
       }
-      const float p = __shfl_sync(0xffffffffu, pmine, nb);
+    }
+    const float p = __shfl_sync(0xffffffffu, pmine, nb);
+    if (act) {
 #pragma unroll
       for (int j = 0; j < 4; ++j) {
         const float2 f = bf2f(pv.w[j]);
@@ -344,18 +360,17 @@ __device__ __forceinline__ void attnres_rms_row(const bf16_t* __restrict__ blk_r
     }
   }
   sq = warp_sum(sq);
-  if (lane == 0) s_red2[warp] = sq;
+  if (lane == 0) s.red2[warp] = sq;
   __syncthreads();
-  const float tot = warp_sum(s_red2[lane]);
-  const float r = rsqrtf(tot * (1.0f / (float)KH) + KEPS);
+  const float tot = warp_sum(s.red2[lane]);
+  const float rr = rsqrtf(tot * (1.0f / (float)KH) + KEPS);
   if (act) {
-    const V8 g = ldv(gamma + t * 8);
     V8 o;
 #pragma unroll
     for (int j = 0; j < 4; ++j) {
       float2 f = bf2f(mixed.w[j]);
-      f.x *= r; f.y *= r;
-      o.w[j] = from_bf162(__hmul2(__float22bfloat162_rn(f), as_bf162(g.w[j])));
+      f.x *= rr; f.y *= rr;
+      o.w[j] = from_bf162(__hmul2(__float22bfloat162_rn(f), as_bf162(r.g.w[j])));
     }
     stv(normed_row + t * 8, o);
   }
@@ -367,24 +382,33 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_attnres_rms
     int rank, const bf16_t* __restrict__ prefix, const bf16_t* __restrict__ blocks, const float* __restrict__ sw,
     const bf16_t* __restrict__ gamma, bf16_t* __restrict__ prefix2, bf16_t* __restrict__ normed, int nb, int snapshot,
     int B, long long stage_bytes, long long timeout_ns) {
+  extern __shared__ uint4 cand[];
+  __shared__ RowSmem s;
   const int t = threadIdx.x, b = blockIdx.x;
+  const bool row = b < B, act = t < KVEC;
+  const size_t off = (size_t)b * KH + t * 8;
+  RowRegs r;
+  V8 pr;
+  pr.w[0] = 0u, pr.w[1] = 0u, pr.w[2] = 0u, pr.w[3] = 0u;
+  if (row) {
+    r = row_prefetch(blocks + (size_t)b * KNB_MAX * KH, sw, gamma, cand, nb, t);
+    if (act && !snapshot) pr = ldv(prefix + off);
+  }
   const long long tot = (long long)B * KVEC;
   const Lamport l = lamport_open(lamport, lamport_peers, state, err, rank, tot, stage_bytes, timeout_ns);
   for (long long i = (long long)b * KTHREADS + t; i < tot; i += (long long)gridDim.x * KTHREADS) lamport_push(l, i, x[i]);
   lamport_clear(l);
 
   int fail = 0;
-  if (b < B) {
-    const bool act = t < KVEC;
+  if (row) {
+    row_snapshots(cand, r, nb, t, s);
     V8 pv;
     pv.w[0] = 0u, pv.w[1] = 0u, pv.w[2] = 0u, pv.w[3] = 0u;
     if (act) {
-      const size_t off = (size_t)b * KH + t * 8;
       const V8 lp = asv(lamport_sum(l, (long long)b * KVEC + t, timeout_ns, fail));
       if (snapshot) {
         pv = lp;
       } else {
-        const V8 pr = ldv(prefix + off);
 #pragma unroll
         for (int j = 0; j < 4; ++j) {
           const float2 rf = bf2f(pr.w[j]), lf = bf2f(lp.w[j]);
@@ -393,9 +417,47 @@ extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_ar_attnres_rms
       }
       stv(prefix2 + off, pv);
     }
-    attnres_rms_row(blocks + (size_t)b * KNB_MAX * KH, pv, sw, gamma, normed + (size_t)b * KH, nb, t);
+    row_finish(cand, r, pv, normed + (size_t)b * KH, nb, t, s);
   }
   lamport_close(l, state, err, fail);
+}
+
+// ---------------------------------------------------------------- K1d
+// k3_residual.cu's K1c on bf16 partials then K1a: hidden = bf16(prefix2 + p1 + (two ? p2 : 0))
+// written (and snapshotted into blocks[b, nb] when `snapshot`), then normed = rms(attnres(
+// blocks, hidden, nb), gamma): a layer's closing add fused into the next layer's mix.
+extern "C" __global__ void __launch_bounds__(KTHREADS, 1) kern_k3_land_add2_attnres_rms(
+    const bf16_t* __restrict__ p1, const bf16_t* __restrict__ p2, const bf16_t* __restrict__ prefix2,
+    bf16_t* __restrict__ hidden, int two, bf16_t* __restrict__ blocks, const float* __restrict__ sw,
+    const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int nb, int snapshot, int B) {
+  extern __shared__ uint4 cand[];
+  __shared__ RowSmem s;
+  const int b = blockIdx.x, t = threadIdx.x;
+  if (b >= B) return;
+  const RowRegs r = row_prefetch(blocks + (size_t)b * KNB_MAX * KH, sw, gamma, cand, nb, t);
+  V8 pv;
+  pv.w[0] = 0u, pv.w[1] = 0u, pv.w[2] = 0u, pv.w[3] = 0u;
+  if (t < KVEC) {
+    const size_t off = (size_t)b * KH + t * 8;
+    const V8 a = ldv(p1 + off), pr = ldv(prefix2 + off);
+    V8 c;
+    if (two) c = ldv(p2 + off);
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+      const float2 rf = bf2f(pr.w[j]), l1 = bf2f(a.w[j]);
+      float x = rf.x + l1.x, y = rf.y + l1.y;
+      if (two) {
+        const float2 l2 = bf2f(c.w[j]);
+        x += l2.x;
+        y += l2.y;
+      }
+      pv.w[j] = f2bf(make_float2(x, y));
+    }
+    stv(hidden + off, pv);
+    if (snapshot && nb < KNB_MAX) stv(blocks + ((size_t)b * KNB_MAX + nb) * KH + t * 8, pv);
+  }
+  row_snapshots(cand, r, nb, t, s);
+  row_finish(cand, r, pv, normed + (size_t)b * KH, nb, t, s);
 }
 
 // ---------------------------------------------------------------- MoE finalize + all-reduce + latent rms

@@ -188,6 +188,7 @@ TP_GRID = 256
 TP_AR_GRID = 152  # the GB300's SM count, a multiple of the cluster of 8 and under the 256-row flag table
 TP_TIMEOUT_NS = 30_000_000_000  # a deadline that passes traps: long enough for any start skew
 DCP_GRID = 256  # two exchange blocks fit an SM: every block resident with room to spare
+CAND_SMEM = NB_MAX * H * 2  # k3_ar_fused.cu: a row's snapshots prefetched into shared memory
 ONESHOT_MAX_ROWS = 192  # peer_allreduce.cu: wider batches go two-shot, the Lamport stages hold this many rows
 
 # Launch geometry per entry, as the kernel headers document it
@@ -539,8 +540,8 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             "params": ["in buffer<bf16>", "in buffer<bf16>", "in buffer<bf16>", "out buffer<bf16>", "i32",
                        "inout buffer<bf16>", "in buffer<f32>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32",
                        "i32"],
-            "impl": {"launches": [launch("k3_residual", "kern_k3_land_add2_attnres_rms", grid=[RV, 1, 1],
-                                         block=[1024, 1, 1])]},
+            "impl": {"launches": [launch("k3_ar_fused", "kern_k3_land_add2_attnres_rms", grid=[RV, 1, 1],
+                                         block=[1024, 1, 1], smem=CAND_SMEM)]},
         }} if dcp else {}),
         "land_add2": {
             "params": [f"in buffer<{part}>", f"in buffer<{part}>", "in buffer<bf16>", "out buffer<bf16>", "i32", "i32"],
@@ -835,7 +836,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
             "params": ["in buffer<bf16>", *lamport_params, "in buffer<bf16>", "in buffer<bf16>", "in buffer<f32>",
                        "in buffer<bf16>", "out buffer<bf16>", "out buffer<bf16>", "i32", "i32", "i32", "i64", "i64"],
             "impl": {"launches": [launch("k3_ar_fused", "kern_k3_ar_attnres_rms", defines={"NRANKS": tp},
-                                         grid=[TP_AR_GRID, 1, 1], block=[1024, 1, 1])]},
+                                         grid=[TP_AR_GRID, 1, 1], block=[1024, 1, 1], smem=CAND_SMEM)]},
         }
         ops["ar_finalize_rms"] = {
             "params": ["in buffer<bf16>", "in buffer<i32>", "in buffer<f32>", "in buffer<bf16>", *lamport_params,
