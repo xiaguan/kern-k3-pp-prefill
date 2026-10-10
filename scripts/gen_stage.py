@@ -1174,7 +1174,7 @@ def build(layers, ranks, max_ctx, seqs_max, tp=1, mla_split_max=16, span_max=0, 
         for n in ["span_q", "span_k", "span_v"] + ([] if packed else ["span_out"]):
             work(n, inner_l, var=run_max)
         if packed:
-            buffers["span_progress"] = {"dtype": "i32", "shape": [pack * hl], "kind": "workspace"}
+            buffers["span_progress"] = {"dtype": "i32", "shape": [pack * hl * 32], "kind": "workspace"}  # a 128-byte line each
         work("span_flow", HEAD_DIM, var=run_max)
         work("span_g", inner_l, var=run_max)
         for n in [] if packed else ["span_state_in", "span_state_out"]:

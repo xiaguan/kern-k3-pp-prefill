@@ -195,7 +195,7 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather(
 //   grid (37 * ceil(span / 48) + 1)   block 128
 //   block b < 37 * ceil(span / 48): rows 48 * (b / 37) ..; b % 37 < 36 is stream (b % 37) / 12,
 //   columns 1024 * (b % 12) + 8 * thread; b % 37 == 36 beta / flow. The last block writes
-//   the tile prefix and zeroes k3_kda_rec's progress counters ([nseq][HEADS]).
+//   the tile prefix and zeroes k3_kda_rec's progress counters ([nseq][HEADS], one a 128-byte line).
 #ifdef PARTIAL_BF16
 #define K9_PROWS 48
 #define K9_PUNROLL 12
@@ -204,6 +204,7 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather(
 #define K9_PCOL_BLOCKS (K9_INNER / K9_PCOLS)
 #define K9_PCONV (3 * K9_PCOL_BLOCKS + 1)
 #define K9_TILE 16
+#define K9_PROGRESS_STRIDE 32  // k3_kda_rec.cu K12_PROGRESS_STRIDE
 
 __device__ __forceinline__ int k9_seq_of(const long long* cu, int nseq, int i) {
   int j = 0;
@@ -307,7 +308,7 @@ extern "C" __global__ __launch_bounds__(K9_BLOCK) void kern_k3_span_gather_packe
   const int nconv = (span + K9_PROWS - 1) / K9_PROWS * K9_PCONV;
   const int b = blockIdx.x;
   if (b >= nconv) {
-    for (int i = threadIdx.x; i < nseq * HEADS; i += K9_BLOCK) progress[i] = 0;
+    for (int i = threadIdx.x; i < nseq * HEADS; i += K9_BLOCK) progress[K9_PROGRESS_STRIDE * i] = 0;
     if (threadIdx.x == 0) {
       int acc = 0;
       tile_prefix[0] = 0;

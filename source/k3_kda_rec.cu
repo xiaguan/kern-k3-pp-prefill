@@ -19,7 +19,7 @@
 //       bf16* gated,            // [rows, INNER]  rows span_at[0] + i
 //       const int* span_at,
 //       const long long* cu_seqlens, const int* tile_prefix,  // sequence j: rows cu[j]..cu[j+1], tiles from prefix[j]
-//       int* progress,          // [nseq][HEADS]  zero (the gather zeroes it)
+//       int* progress,          // [nseq][HEADS][32]  element 0 zero (the gather zeroes it)
 //       int tiles,              // the workspace's head stride (kernel 1's total_tiles)
 //       int span,               // rows of the call (beta's row stride)
 //       int nseq);
@@ -59,6 +59,7 @@
 #define K12_THREADS 512  // a recurrence CTA's 8 MMA warps, loader and store; a gate CTA's 16 gate warps
 #define K12_GATE_CTAS 56 // the GB300's 152 SMs less one sequence's 96 heads
 #define K12_RMS_EPS 1e-5f
+#define K12_PROGRESS_STRIDE 32  // ints: each (sequence, head)'s counter on its own 128-byte line
 
 typedef __nv_bfloat16 bf16;
 
@@ -406,7 +407,7 @@ __device__ __forceinline__ void k12_gate(int e, int nseq, const long long* cu_se
     const int item = u >> 2, h = item % HEADS, i = 4 * (u & 3) + 2 * (warp & 1) + half;
     const long long bos = cu_seqlens[item / HEADS];
     const int len = (int)(cu_seqlens[item / HEADS + 1] - bos), ntiles = (len + 15) >> 4;
-    const int* flag = progress + item;
+    const int* flag = progress + K12_PROGRESS_STRIDE * item;
     const auto gate = [&](int c0, int buf) {
       for (int c = c0; c < min(c0 + 4, ntiles); ++c) {
         const int r = 16 * c + i;
@@ -557,7 +558,7 @@ extern "C" __global__ void __launch_bounds__(K12_THREADS, 1) kern_k3_kda_rec(
       }
     }
     // then every output tile to `raw`, published to the gate CTAs by the item's counter
-    int* flag = progress + j * HEADS + h;
+    int* flag = progress + K12_PROGRESS_STRIDE * (j * HEADS + h);
     for (int c = 0; c < ntiles; ++c) {
       const int o = c % K12_OSTAGES, valid = min(16, len - 16 * c);
       k12_wait(&sm.ofull[o], (c / K12_OSTAGES) & 1);
