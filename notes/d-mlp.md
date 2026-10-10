@@ -119,4 +119,9 @@ routing tables) → fc1* → fc2* → sh_down* → `ar_finalize_rms` (combine + 
 - moe_front top-k by threshold (the 16th largest ord by a 32-step block-wide __syncthreads_count search,
   then the survivors compacted and bitonic-sorted in one warp; quant/situ moved before it): 9.4 vs 6.4 us
   at 8-48 rows (harness). The counting barriers cost more than the two levels of warp rounds. Discarded.
+- K1d over a 4-CTA cluster (a row's snapshots read by 4 SMs, group partials through DSMEM into the leader's
+  slots, the same trees: bit-identical to the one-CTA kernel for nb 0-8, both snapshot flags, 8-48 rows in a
+  harness, and in loop/d/check with every K1d forced onto it). Harness: nb 8 9.1 -> 7.1 us, nb 2-3 ~0.4 us
+  better, nb 0 1 us worse. Used for nb >= 3 (69 calls of the 93-layer step): 19.54 -> 19.52 / 26.42 ->
+  26.40 ms at 24 / 48 rows, nothing. Reverted.
 
