@@ -572,25 +572,53 @@ __device__ __forceinline__ float tanh_approx(float x) {
   return r;
 }
 
-// k3_land.cu's situ_f on operands already landed
+// 1 / d without __frcp_rn's slow-path branch, equal to it for every d in [2^-126, 2^126) (k3_moe_route.cu)
+__device__ __forceinline__ float rcp_fast(float d) {
+  float q;
+  asm("{\n .reg .f32 r, e;\n rcp.approx.ftz.f32 r, %1;\n fma.rn.f32 e, %1, r, 0fBF800000;\n neg.f32 e, e;\n"
+      " fma.rn.f32 %0, r, e, r;\n}"
+      : "=f"(q)
+      : "f"(d));
+  return q;
+}
+
+// k3_land.cu's situ_f on operands already landed; FAST: 1 + e^-g in rcp_fast's range, every g >= -87
+template <bool FAST>
 __device__ __forceinline__ float situ(float g, float u) {
   const float a = 4.0f * tanh_approx(g * 0.25f);
-  const float s = __frcp_rn(1.0f + __expf(-g));
+  const float d = 1.0f + __expf(-g);
+  const float s = FAST ? rcp_fast(d) : __frcp_rn(d);
   const float c = 25.0f * tanh_approx(u * 0.04f);
   return (a * s) * c;
+}
+
+template <bool FAST>
+__device__ __forceinline__ V8 situ8(const V8& g, const V8& u) {
+  V8 o;
+#pragma unroll
+  for (int k = 0; k < 4; ++k) {
+    const float2 gf = bf2f(g.w[k]), uf = bf2f(u.w[k]);
+    o.w[k] = f2bf(make_float2(situ<FAST>(gf.x, uf.x), situ<FAST>(gf.y, uf.y)));
+  }
+  return o;
 }
 
 extern "C" __global__ void __launch_bounds__(256) kern_k3g_situ(const bf16_t* __restrict__ p, bf16_t* __restrict__ act,
                                                                  int n, int B) {
   const int b = blockIdx.x;
   const int j = (blockIdx.y * blockDim.x + threadIdx.x) * 8;
-  if (b >= B || j >= n) return;
-  const V8 g = ldv(p + (size_t)b * 2 * n + j), u = ldv(p + (size_t)b * 2 * n + n + j);
-  V8 o;
+  const bool in = b < B && j < n;
+  V8 g, u;
+  bool ok = true;
+  if (in) {
+    g = ldv(p + (size_t)b * 2 * n + j);
+    u = ldv(p + (size_t)b * 2 * n + n + j);
 #pragma unroll
-  for (int k = 0; k < 4; ++k) {
-    const float2 gf = bf2f(g.w[k]), uf = bf2f(u.w[k]);
-    o.w[k] = f2bf(make_float2(situ(gf.x, uf.x), situ(gf.y, uf.y)));
+    for (int k = 0; k < 4; ++k) {
+      const float2 gf = bf2f(g.w[k]);
+      ok = ok && gf.x >= -87.0f && gf.y >= -87.0f;
+    }
   }
-  stv(act + (size_t)b * n + j, o);
+  const bool fast = __all_sync(0xffffffffu, ok);
+  if (in) stv(act + (size_t)b * n + j, fast ? situ8<true>(g, u) : situ8<false>(g, u));
 }

@@ -98,11 +98,11 @@ sha256 = "7673000effd0d10f37dfdecc66e5a962ee699497d517a837fdd0fb06b177ce4d"
 source = "source/k3_prefill.cu"
 
 [kernels."k3_prefill_glue"]
-sha256 = "35e3b4552fa71d62924043094962f6e135b8baad13a3984e5bcff09d0a2d2783"
+sha256 = "a621e04b73212ae708592f6226a66fe9015bc1823d9cc1c5d47e8e952f79140a"
 source = "source/k3_prefill_glue.cu"
 
 [kernels."k3_prefill_glue+EXPERTS=896"]
-sha256 = "45c5b64e7ca4974d2c2bd02021ade68af702f37be095a897137bf92991a03fdb"
+sha256 = "84fdf9ed9f4b793c8be8cae4a13f4d244d2977be30152e297074e8b85f1d7e4c"
 source = "source/k3_prefill_glue.cu"
 defines = { EXPERTS = 896 }
 
