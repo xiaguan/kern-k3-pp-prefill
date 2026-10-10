@@ -37,6 +37,12 @@ Target: P stage 1 (`loop/p/bench loop/out/p-stage1.json`), check `loop/p/check l
   vs 128): 200 rows over 131k −4.2% absorbed, 354 rows +9%: the real crossover is ~250 rows. The
   threshold stays 128: the decode kernel's split workspace is rows × 16 splits × 256 KB (512 MB at
   128 rows; 256 would be 1 GB of a stage's memory for items the bench does not weigh).
+  (Answer to 20:49: moving the threshold does not pay on the 354-row shape: 354 rows absorbed is +9%
+  (A/B, threshold 512); a threshold of 256 leaves the 354-row shape on the expanded form.)
+- The split merge in the gate kernel is the DSL reduction's own arithmetic (4ccb71c, read off its
+  SASS: lane = split, butterfly max / sum, MUFU ex2 / lg2, FMA accumulation in split order):
+  bit-identical end-to-end logits to the reduction-launch form; +0.2% on the 10-row item (~5 us a
+  gate call for the warp butterflies and a barrier).
 - **Proposal (a GEMM epilogue, so not done): sh_down accumulates onto lat_up's output.** With
   `cublaslt_bf16_tn_acc` (beta 1, D in place) the shared expert's down projection adds into
   `routed_partial`; the next layer's `land_add2_attnres_rms` then reads one partial (two = 0):
