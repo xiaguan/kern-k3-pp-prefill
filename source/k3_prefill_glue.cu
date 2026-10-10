@@ -136,51 +136,33 @@ __device__ __forceinline__ void attnres_rms_row(const bf16_t* __restrict__ blk_r
 #pragma unroll
     for (int k = 0; k < RGROUPS; ++k) mixed[k] = pv[k];  // bf16(1.0f * f32(prefix)) == prefix
   } else {
-    float swv[RGROUPS][8];
-#pragma unroll
-    for (int k = 0; k < RGROUPS; ++k) {
+    // sw from L1 at each use: its 16 registers would cost the SM a row
+    auto swk = [&](int k, float (&w)[8]) {
       const float4* sp4 = (const float4*)(sw + (t + k * RTHREADS) * 8);
       const float4 a = sp4[0], b = sp4[1];
-      swv[k][0] = a.x; swv[k][1] = a.y; swv[k][2] = a.z; swv[k][3] = a.w;
-      swv[k][4] = b.x; swv[k][5] = b.y; swv[k][6] = b.z; swv[k][7] = b.w;
-    }
-#pragma unroll
-    for (int c0 = 0; c0 < KNB_MAX; c0 += 2) {
-      if (c0 >= nb) break;
-      V8 xx[2][RGROUPS];
-#pragma unroll
-      for (int g = 0; g < 2; ++g)
-        if (c0 + g < nb)
-#pragma unroll
-          for (int k = 0; k < RGROUPS; ++k) xx[g][k] = ldv(blk_row + (size_t)(c0 + g) * KH + (t + k * RTHREADS) * 8);
-#pragma unroll
-      for (int g = 0; g < 2; ++g) {
-        const int c = c0 + g;
-        if (c >= nb) continue;
-#pragma unroll
-        for (int k = 0; k < RGROUPS; ++k) {
-          float sq, dp;
-          sq_dot(xx[g][k], swv[k], sq, dp);
-          sq = warp_sum(sq);
-          dp = warp_sum(dp);
-          if (lane == 0) {
-            s.red[c * 2][warp + k * RWARPS] = sq;
-            s.red[c * 2 + 1][warp + k * RWARPS] = dp;
-          }
-        }
-      }
-    }
-#pragma unroll
-    for (int k = 0; k < RGROUPS; ++k) {
-      float sq, dp;
-      sq_dot(pv[k], swv[k], sq, dp);
+      w[0] = a.x; w[1] = a.y; w[2] = a.z; w[3] = a.w;
+      w[4] = b.x; w[5] = b.y; w[6] = b.z; w[7] = b.w;
+    };
+    auto score = [&](int c, const V8& x, int k) {
+      float w[8], sq, dp;
+      swk(k, w);
+      sq_dot(x, w, sq, dp);
       sq = warp_sum(sq);
       dp = warp_sum(dp);
       if (lane == 0) {
-        s.red[nb * 2][warp + k * RWARPS] = sq;
-        s.red[nb * 2 + 1][warp + k * RWARPS] = dp;
+        s.red[c * 2][warp + k * RWARPS] = sq;
+        s.red[c * 2 + 1][warp + k * RWARPS] = dp;
       }
+    };
+    for (int c = 0; c < nb; ++c) {
+      V8 x[RGROUPS];
+#pragma unroll
+      for (int k = 0; k < RGROUPS; ++k) x[k] = ldv(blk_row + (size_t)c * KH + (t + k * RTHREADS) * 8);
+#pragma unroll
+      for (int k = 0; k < RGROUPS; ++k) score(c, x[k], k);
     }
+#pragma unroll
+    for (int k = 0; k < RGROUPS; ++k) score(nb, pv[k], k);
     __syncthreads();
 
     for (int v = warp; v < 2 * ncand; v += RWARPS) {
@@ -270,7 +252,7 @@ __device__ __forceinline__ void attnres_rms_row(const bf16_t* __restrict__ blk_r
 }
 
 // ---------------------------------------------------------------- K1a
-extern "C" __global__ void __launch_bounds__(RTHREADS, 2) kern_k3g_attnres_rms(
+extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_attnres_rms(
     const bf16_t* __restrict__ prefix, bf16_t* __restrict__ blocks, const float* __restrict__ sw,
     const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int nb, int snapshot, int B) {
   __shared__ RowSmem s;
@@ -290,7 +272,7 @@ extern "C" __global__ void __launch_bounds__(RTHREADS, 2) kern_k3g_attnres_rms(
 }
 
 // ---------------------------------------------------------------- K1b
-extern "C" __global__ void __launch_bounds__(RTHREADS, 2) kern_k3g_land_add_attnres_rms(
+extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_land_add_attnres_rms(
     const bf16_t* __restrict__ partial, const bf16_t* __restrict__ prefix, const bf16_t* __restrict__ blocks,
     const float* __restrict__ sw, const bf16_t* __restrict__ gamma, bf16_t* __restrict__ prefix2,
     bf16_t* __restrict__ normed, int nb, int snapshot, int B) {
@@ -353,7 +335,7 @@ extern "C" __global__ void __launch_bounds__(224) kern_k3g_land_add2(
   stv(hidden + off, add2(p1, p2, prefix2, two, off));
 }
 
-extern "C" __global__ void __launch_bounds__(RTHREADS, 2) kern_k3g_land_add2_attnres_rms(
+extern "C" __global__ void __launch_bounds__(RTHREADS, 3) kern_k3g_land_add2_attnres_rms(
     const bf16_t* __restrict__ p1, const bf16_t* __restrict__ p2, const bf16_t* __restrict__ prefix2,
     bf16_t* __restrict__ hidden, int two, const bf16_t* __restrict__ blocks, const float* __restrict__ sw,
     const bf16_t* __restrict__ gamma, bf16_t* __restrict__ normed, int nb, int B) {
