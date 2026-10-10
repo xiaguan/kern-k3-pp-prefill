@@ -65,6 +65,30 @@ __device__ __forceinline__ void st_release(u32* p, u32 v) {
   asm volatile("st.release.gpu.global.u32 [%0], %1;" ::"l"(p), "r"(v) : "memory");
 }
 
+// 1 / d rounded as `1.0f / d` and __frcp_rn round it, without their slow path's branch:
+// equal to both for every d in [2^-126, 2^126) (checked over all of them); the callers
+// take it only when no lane of the warp holds a d outside.
+__device__ __forceinline__ float rcp_fast(float d) {
+  float q;
+  asm("{\n .reg .f32 r, e;\n rcp.approx.ftz.f32 r, %1;\n fma.rn.f32 e, %1, r, 0fBF800000;\n neg.f32 e, e;\n"
+      " fma.rn.f32 %0, r, e, r;\n}"
+      : "=f"(q)
+      : "f"(d));
+  return q;
+}
+__device__ __forceinline__ bool rcp_ok(float d) { return d >= 0x1p-126f && d < 0x1p126f; }
+
+// a / 448.f without its slow path's branch: equal for every bf16 magnitude but infinity.
+__device__ __forceinline__ float div448(float a) {
+  float q;
+  asm("{\n .reg .f32 r, t, q0, m;\n mov.f32 r, 0f3B124925;\n fma.rn.f32 t, r, 0fC3E00000, 0f3F800000;\n"
+      " fma.rn.f32 r, t, r, r;\n fma.rn.f32 q0, %1, r, 0f00000000;\n fma.rn.f32 m, q0, 0fC3E00000, %1;\n"
+      " fma.rn.f32 %0, r, m, q0;\n}"
+      : "=f"(q)
+      : "f"(a));
+  return a == __int_as_float(0x7f800000) ? a : q;
+}
+
 __device__ __forceinline__ float sigmoid(float x) { return 1.0f / (1.0f + expf(-x)); }
 
 // kern_k3g_router_topk's picks: the 16 largest keys sigmoid(S) + bias, ties to
@@ -77,14 +101,31 @@ __device__ __forceinline__ float sigmoid(float x) { return 1.0f / (1.0f + expf(-
 __device__ __forceinline__ void topk_row(const float* __restrict__ row, const float* __restrict__ bias, int lane,
                                          u32* __restrict__ ck, int* __restrict__ ce, int& pick_e, float& pick_w) {
   u32 o[TK_PER];
+  bool ok = true;
 #pragma unroll
   for (int j = 0; j < TK_PER; j += 4) {
     const float4 sv = *reinterpret_cast<const float4*>(row + lane * TK_PER + j);
+    const float s4[4] = {sv.x, sv.y, sv.z, sv.w};
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+      const float d = 1.0f + expf(-s4[i]);
+      ok &= rcp_ok(d);
+      o[j + i] = __float_as_uint(d);
+    }
+  }
+  if (__all_sync(0xffffffffu, ok)) {
+#pragma unroll
+    for (int j = 0; j < TK_PER; ++j) o[j] = __float_as_uint(rcp_fast(__uint_as_float(o[j])));
+  } else {
+#pragma unroll
+    for (int j = 0; j < TK_PER; ++j) o[j] = __float_as_uint(1.0f / __uint_as_float(o[j]));
+  }
+#pragma unroll
+  for (int j = 0; j < TK_PER; j += 4) {
     const float4 bv = *reinterpret_cast<const float4*>(bias + lane * TK_PER + j);
-    o[j] = ord_f32(sigmoid(sv.x) + bv.x);
-    o[j + 1] = ord_f32(sigmoid(sv.y) + bv.y);
-    o[j + 2] = ord_f32(sigmoid(sv.z) + bv.z);
-    o[j + 3] = ord_f32(sigmoid(sv.w) + bv.w);
+    const float b4[4] = {bv.x, bv.y, bv.z, bv.w};
+#pragma unroll
+    for (int i = 0; i < 4; ++i) o[j + i] = ord_f32(__uint_as_float(o[j + i]) + b4[i]);
   }
   u32 v = o[0];
 #pragma unroll
@@ -169,10 +210,12 @@ __device__ __forceinline__ float tanh_approx(float x) {
   return r;
 }
 
-// k3_prefill_glue.cu's kern_k3g_situ: act = situ(gate, up) on 8 columns.
-__device__ __forceinline__ float situ(float g, float u) {
+// k3_prefill_glue.cu's kern_k3g_situ: act = situ(gate, up) on 8 columns; `fast` when every
+// lane's sigmoid denominators are in rcp_fast's range.
+__device__ __forceinline__ float situ(float g, float u, bool fast) {
   const float a = 4.0f * tanh_approx(g * 0.25f);
-  const float s = __frcp_rn(1.0f + __expf(-g));
+  const float d = 1.0f + __expf(-g);
+  const float s = fast ? rcp_fast(d) : __frcp_rn(d);
   const float c = 25.0f * tanh_approx(u * 0.04f);
   return (a * s) * c;
 }
@@ -184,10 +227,24 @@ __device__ __forceinline__ void situ8(const bf16_t* __restrict__ gate, const bf1
   const __nv_bfloat162* upp = reinterpret_cast<const __nv_bfloat162*>(&u);
   uint4 o;
   __nv_bfloat162* op = reinterpret_cast<__nv_bfloat162*>(&o);
+  bool ok = true;
 #pragma unroll
   for (int l = 0; l < 4; ++l) {
-    const float2 gf = __bfloat1622float2(gp[l]), uf = __bfloat1622float2(upp[l]);
-    op[l] = __float22bfloat162_rn(make_float2(situ(gf.x, uf.x), situ(gf.y, uf.y)));
+    const float2 gf = __bfloat1622float2(gp[l]);
+    ok &= rcp_ok(1.0f + __expf(-gf.x)) & rcp_ok(1.0f + __expf(-gf.y));
+  }
+  if (__all_sync(0xffffffffu, ok)) {
+#pragma unroll
+    for (int l = 0; l < 4; ++l) {
+      const float2 gf = __bfloat1622float2(gp[l]), uf = __bfloat1622float2(upp[l]);
+      op[l] = __float22bfloat162_rn(make_float2(situ(gf.x, uf.x, true), situ(gf.y, uf.y, true)));
+    }
+  } else {
+#pragma unroll
+    for (int l = 0; l < 4; ++l) {
+      const float2 gf = __bfloat1622float2(gp[l]), uf = __bfloat1622float2(upp[l]);
+      op[l] = __float22bfloat162_rn(make_float2(situ(gf.x, uf.x, false), situ(gf.y, uf.y, false)));
+    }
   }
   *reinterpret_cast<uint4*>(act) = o;
 }
@@ -206,7 +263,7 @@ __device__ __forceinline__ void quant8(const bf16_t* __restrict__ x, uint8_t* __
   }
   amax = fmaxf(amax, __shfl_xor_sync(0xffffffffu, amax, 1));
   amax = fmaxf(amax, __shfl_xor_sync(0xffffffffu, amax, 2));
-  int e = amax > 0.f ? (int)ceilf(log2f(amax / 448.f)) : 0;
+  int e = amax > 0.f ? (int)ceilf(log2f(div448(amax))) : 0;
   e = min(max(e, -127), 127);
   const float s = exp2f((float)-e);
   if ((lane & 3) == 0) *sf = (uint8_t)(e + 127);
