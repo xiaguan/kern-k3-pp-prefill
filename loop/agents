@@ -85,7 +85,12 @@ down() {
   for w in $(tmux list-windows -t $session -F '#W' 2>/dev/null | grep -vx main); do
     [[ -z ${1:-} || $w == "$1" ]] && tmux kill-window -t "$session:$w"
   done
-  [[ -n ${1:-} ]] || docker exec $container pkill -u "$(id -u)" -f 'hmz exec|claude' 2>/dev/null || true
+  # Killing a window leaves its docker exec child running, so the agent is stopped in the container too.
+  if [[ -n ${1:-} ]]; then
+    docker exec $container pkill -u "$(id -u)" -f "runs/$1/.budget" 2>/dev/null || true
+  else
+    docker exec $container pkill -u "$(id -u)" -f 'hmz exec|claude' 2>/dev/null || true
+  fi
 }
 
 status() {
