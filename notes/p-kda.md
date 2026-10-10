@@ -6,14 +6,14 @@
 |---|---|---|---|
 | main (2026-10-10) | 325 (27.1/layer) | 56.82 ms/item | 105.9 ms |
 | 6463ad5 packed gather | 298 (24.8/layer) | 54.34 ms/item | 100.6 ms |
+| 6abb2fe k3_kda_rec | 280 (23.3/layer) | 53.37 ms/item | 98.6 ms |
 
-A KDA layer now (non-GEMM launches): `span_gather` (1) → span_g* →
-`flash_kda` (2: FlashKDA prepare / recurrence) → `span_state_store` (1) →
-`kda_out_gate` (1).
+A KDA layer now (non-GEMM launches): `span_gather` (1: conv, beta / flow,
+tile prefix) → span_g* → `flash_kda` (2: FlashKDA prepare, then
+source/k3_kda_rec.cu: recurrence from/to the line + K11 gate + windows).
 
 Per-layer times at 8192 rows (l13, `work/calls.py`): span_gather 263 us,
-FlashKDA prepare 276 us + recurrence 707 us (980 total), out_gate 154 us,
-state store 8 us.
+FlashKDA prepare 276 us + k3_kda_rec 634 us.
 
 ## Tools (work/, not committed)
 
@@ -41,6 +41,29 @@ state store 8 us.
 - Folding the window update into the gather is unsafe (another block may
   still read the old window); it moved to the state store, which runs
   after FlashKDA.
+
+- k3_kda_rec (FlashKDA kernel 2 + K11 + state + windows, bit-exact):
+  first version 2080 us (loader starved: ~112 small cp.async.bulk per
+  chunk + a dependent global beta load per chunk); 8-stage ring + beta
+  of the whole sequence in smem: 1900; 2D TMA tensor copies with 128B
+  swizzle (12 per chunk): 1300; gate epilogue 4 rows at once, no `/`
+  slow path, 4 out stages: 770; 8 epilogue warps (2 rows each, 17 warps
+  -> 96 regs with spills): 686; loader folded into epilogue warp 0 (16
+  warps, 128 regs): 714 (the loader warp lags the others); epilogue with
+  K11's tree by 16 threads a row (6 shuffles), 16B loads/stores: 634.
+  Register budget: 17 warps cap at 96 regs (5 warps on one SMSP share
+  its 16K registers), 16 warps at 128.
+- Own port of FlashKDA's kernel 1 (k3_kda_prep, bit-exact: logits and
+  every state identical; all FTZ ops, FMUL.D2 form of the sigmoid argument,
+  the gate's first FFMA with RZ): 345 us vs FlashKDA's 276. With K9's conv
+  fused in (gather left with the flow copy only): 1490 -> 900 us after
+  cp.async staging + elementwise gate activation; still a loss vs gather
+  263 + prep 276. It is instruction-bound (~550M warp instructions: the
+  bit-exact SiLU alone ~20 instr/element x 3 streams) with __syncthreads
+  phases where 1-4 warps work. Kept in work/k3_kda_prep_fused.cu (and the
+  rec / abi / gen that go with it: work/*_fused.py, k3_kda_rec_wsv.cu).
+  The conv contraction is fma(x,w3, fma(t2,w2, fma(t0,w0, t1*w1))) (nvcc's
+  choice; spelling it out rebuilds the gather to the same cubin).
 
 ## Constraints learned
 
