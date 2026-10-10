@@ -140,6 +140,11 @@ cubins next to `build/`, pass it as the check's reference, vary `--seed`).
   after the recurrence: double-buffered loads (each warp's next 4-tile
   group in flight) and quarter-head units (<= 7/4 heads a CTA) fixed it
   (381c3b5; visible in one lease of five, flat in the others).
+- The MMA loop's instruction budget a warp a tile (ncu, 330): 52 HMMA, 64
+  FFMA + 64 unpacks (SHF / LOP3) + 48 F2FP for FlashKDA's bf16 state update
+  (fma.ftz on f32 then RN), 27 LDSM, 18 LDS. Phase 1 runs at the tensor rate
+  (64 HMMA an SMSP in ~520 cycles); phase 6 is issue-bound on the state
+  update. What is left needs a different formulation, not scheduling.
 - Rejected on k3_kda_rec (all bit-identical, all slower or flat):
   - K11 inside the recurrence CTAs (4 idle warps gating from the output
     ring, the gate's projection by cp.async; no raw round trip, no gate
@@ -152,6 +157,11 @@ cubins next to `build/`, pass it as the check's reference, vary `--seed`).
     u feeds): +250 us an item, 24 B of stack.
   - Phase 6's fma.ftz pairs as fma.rn.ftz.f32x2: +250 us an item (packing
     movs, 8 B of stack). f32x2 paid off in the gather (eaf2849), not here.
+  - The loader / store warps sleeping (nanosleep 128) between failed
+    barrier tries instead of spinning: +100 us an item (late refills).
+- Short items: at 10 rows a KDA layer costs ~20 us flash_kda + ~13 us
+  gather, at 354 rows ~63 + 24 us; next to the 8192-row items' weight in
+  the score this is noise.
 
 ## Constraints learned
 
