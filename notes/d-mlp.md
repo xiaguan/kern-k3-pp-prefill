@@ -91,6 +91,15 @@ the GEMMs hold 3.4 / 4.2 ms, the MoE all-reduce 1.8 / 2.0 ms (of which ~1.5 ms i
 experts, i.e. MoE GEMM time again), MLA attention 0.7 / 1.8 ms, glue 1.0 ms (a latency floor of launches
 that sit between GEMMs), the attention all-reduce 0.65 ms (fabric-bound in fact), KDA 0.4 ms.
 
+**GEMM headroom, for the user** (GEMMs are out of scope; `work/h/gemm_algos.cu`, cuBLASLt 13.0 on one GPU, every
+call streaming its weight from HBM, a graph of 20 calls): cuBLASLt offers 8 algorithms for each D shape and the
+best is within ~5% of the heuristic's first, so pinning algorithms gains nothing. At 24 rows: front 17.4 us
+(4.97 TB/s, split-K 3), qkvg 18.2 (5.05), wfu 12.0 (4.35), q_b 10.3 (5.51), lat_up 9.9 (5.19), o_proj 5.5
+(4.03), sh_down 4.1 (2.70), lm_head 49 (5.96). The MoE kernels stream at 6.2-7.0 TB/s. A small-M GEMM at
+~6.5 TB/s (plus ~1.5 us ramp for the small ones) would save ~13 us a KDA layer at 24 rows, ~1.2 ms of the 19.1
+ms step (~6%): the largest gap left in D, and not reachable by anything outside the GEMMs (the L2 prefetch
+from the all-reduces already takes front and lat_up partway).
+
 MLA attention per tile (from the profile): a 2-CTA cluster runs a 128-token tile in ~1.46 us while <= ~53
 clusters run, and the GPU tops out at ~36 tiles a us (1.29 PF of padded bf16 MMA, ~80% of peak; 96 heads use 75%
 of the 128-row tile). So 24 rows (3 splits, 72 clusters) sits at that limit, and 48 rows ran 1 split on 96 SMs:
@@ -274,6 +283,8 @@ L2 prefetch trials (same-session A/B against the committed one-range per-line fo
   harness, and in loop/d/check with every K1d forced onto it). Harness: nb 8 9.1 -> 7.1 us, nb 2-3 ~0.4 us
   better, nb 0 1 us worse. Used for nb >= 3 (69 calls of the 93-layer step): 19.54 -> 19.52 / 26.42 ->
   26.40 ms at 24 / 48 rows, nothing. Reverted.
+- `mla_absorb` as a programmatic dependent of q_b (W_UK loaded before `griddepcontrol.wait`): starts 1.2 us
+  early, ends no sooner (critical 8.00 vs 7.76 us). Reverted.
 - moe_front routing by slots claimed with atomics in each row's block (the last block then only scans the
   112 counts and places the picks; rows within an expert in arrival order, as FlashInfer's tables had
   them): 6.7 vs 6.4 us (harness), the atomic round trip lands on every row's path. Discarded.
