@@ -121,6 +121,21 @@ bandwidth, fixed EP layout), the residual epilogues sit at two dependent block r
 chain (logit load -> sigmoid -> picks -> last-block tables) at ~6.5 us. Every further trial is in the log
 and findings below with its measurement.
 
+## What would still move D (2026-10-11 00:15 UTC)
+
+Every non-GEMM launch now sits between GEMMs or the prebuilt attention (launch floor), and each is at its
+measured bound: the all-reduces at the fabric (one-shot to 24 rows, two-shot from 33), moe_front / the residual
+rows at their dependent-reduction latency, kda_core at HBM in its loop (prologue latency unmovable without
+registers), the head at member 0's logits ingress. What is left, all outside this run's scope, in step terms
+(93 layers, 128k, 24 rows, 19.1 ms):
+- **Expert-parallel imbalance, ~1.5 ms (~8%)**: every member waits in `ar_finalize` for the one with the most
+  active experts (median ~16 us a layer; real text puts the busiest member at 1.23x the mean, ~6.6 extra
+  experts x 17.5 MB). Needs a layout change (redundant hot experts / EPLB, or token-to-member balancing).
+- **Dense GEMMs at 4.3-5.6 TB/s, ~1.2 ms (~6%)**: a small-M GEMM at ~6.5 TB/s (see GEMM headroom).
+- **MLA attention's head padding, up to ~0.5 ms (~2.6%; more at 48 rows)**: the prebuilt DSL kernel runs 96
+  heads in a 128-row MMA tile, compute-bound at ~80% of bf16 peak counting the padding. Needs a new kernel.
+- **Runtime proposals below**: the head's logits gather (9-50 us a step), concurrent launch groups.
+
 ## Proposals that need the runtime
 
 - **A head without the logits gather in serving.** Member 0's copy of every member's logit slice exists
