@@ -105,6 +105,12 @@ clusters run, and the GPU tops out at ~36 tiles a us (1.29 PF of padded bf16 MMA
 of the 128-row tile). So 24 rows (3 splits, 72 clusters) sits at that limit, and 48 rows ran 1 split on 96 SMs:
 fixed by the plan (log). Past that the kernel needs an unpadded head layout (a new kernel).
 
+**After this round** (branch 52a4446 + notes, same tooling, `work/prof93b_*`): the critical path 19.66 -> 19.20 ms
+at 24 rows and 26.77 -> 25.79 at 48. Dense GEMMs 5.53 -> 5.02 / 5.87 -> 5.32 ms (front and lat_up from L2), MLA
+attention at 48 rows 4.48 -> 4.05 (split plan), glue 1.43 -> 1.35. The all-reduces carry the prefetch: medians
+13.1 -> 13.7 / 28.0 -> 29.2 us at 24 rows (its 51-86 MB stream shares HBM with the exchange), 16.6 -> 17.6 /
+34.7 -> 33.4 us at 48 (two shots). Prefetch cap 64 MB instead of 96 (front only partly): 3.496 vs 3.487, kept 96.
+
 Worked from it: the all-reduces leave HBM idle for 10-30 us while the next cuBLAS GEMM streams its weight cold
 at 4-5 TB/s, so their idle blocks now pull that weight into L2 (log, 3.581 -> 3.522 ms/step).
 
